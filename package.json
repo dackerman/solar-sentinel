@@ -1,7 +1,7 @@
 {
-  "name": "uv-index-app",
+  "name": "solar-sentinel",
   "version": "1.0.0",
-  "description": "Minimal UV index tracker for Summit, NJ",
+  "description": "Solar Sentinel - UV index monitoring for Summit, NJ",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -14,7 +14,7 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["uv-index", "weather", "express", "chart"],
+  "keywords": ["uv-index", "weather", "express", "chart", "solar", "sentinel"],
   "author": "",
   "license": "ISC"
 }

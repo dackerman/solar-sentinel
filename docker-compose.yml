@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  uvapp:
+  solar-sentinel:
     build: .
-    container_name: uv-index-app
+    container_name: solar-sentinel
     ports:
       - "9890:3000"
     restart: unless-stopped
