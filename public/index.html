@@ -20,7 +20,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
+    <div class="container mx-auto px-4 py-8 md:px-4">
         <header class="text-center mb-8">
             <h1 class="text-3xl font-bold text-gray-800 mb-2">Solar Sentinel</h1>
             <p id="location-display" class="text-gray-600">UV Index Monitor - Getting location...</p>
@@ -39,16 +39,21 @@
             </div>
 
             <!-- Weather Chart container -->
-            <div id="weather-chart-container" class="hidden bg-white rounded-lg shadow-lg p-6 mb-6">
-                <h3 class="text-lg font-semibold mb-4">Temperature & Precipitation</h3>
+            <div id="weather-chart-container" class="hidden bg-white rounded-lg shadow-lg p-2 sm:p-6 mb-6 -mx-4 sm:mx-0">
+                <h3 class="text-lg font-semibold mb-2 sm:mb-4">Temperature & Precipitation</h3>
+                <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
+                    <span>🌧️ Precipitation (%)</span>
+                    <span>🌡️ Temperature (°F)</span>
+                </div>
                 <div style="height: 384px; width: 100%; position: relative;">
                     <canvas id="weatherChart" style="height: 384px !important; width: 100% !important;"></canvas>
                 </div>
             </div>
 
             <!-- UV Chart container -->
-            <div id="chart-container" class="hidden bg-white rounded-lg shadow-lg p-6">
-                <h3 class="text-lg font-semibold mb-4">UV Index</h3>
+            <div id="chart-container" class="hidden bg-white rounded-lg shadow-lg p-2 sm:p-6 -mx-4 sm:mx-0">
+                <h3 class="text-lg font-semibold mb-2 sm:mb-4">UV Index</h3>
+                <div class="text-xs text-gray-600 mb-2 sm:hidden">☀️ UV Index Level</div>
                 <div style="height: 384px; width: 100%; position: relative;">
                     <canvas id="uvChart" style="height: 384px !important; width: 100% !important;"></canvas>
                 </div>
@@ -199,13 +204,26 @@
                                 }
                             }
                         },
+                        layout: {
+                            padding: {
+                                left: window.innerWidth < 640 ? 5 : 10,
+                                right: window.innerWidth < 640 ? 5 : 10,
+                                top: 10,
+                                bottom: 10
+                            }
+                        },
                         scales: {
                             y: {
                                 beginAtZero: true,
                                 max: Math.max(12, Math.max(...data.uv) + 1),
                                 title: {
-                                    display: true,
+                                    display: window.innerWidth >= 640,
                                     text: 'UV Index'
+                                },
+                                ticks: {
+                                    font: {
+                                        size: window.innerWidth < 640 ? 10 : 12
+                                    }
                                 },
                                 grid: {
                                     color: 'rgba(0, 0, 0, 0.1)'
@@ -213,8 +231,19 @@
                             },
                             x: {
                                 title: {
-                                    display: true,
-                                    text: 'Hour of Day'
+                                    display: false
+                                },
+                                ticks: {
+                                    maxRotation: window.innerWidth < 640 ? 45 : 0,
+                                    font: {
+                                        size: window.innerWidth < 640 ? 9 : 12
+                                    },
+                                    callback: function(value, index) {
+                                        if (window.innerWidth < 640) {
+                                            return index % 2 === 0 ? this.getLabelForValue(value) : '';
+                                        }
+                                        return this.getLabelForValue(value);
+                                    }
                                 },
                                 grid: {
                                     color: 'rgba(0, 0, 0, 0.1)'
@@ -264,6 +293,14 @@
                                 intersect: false
                             }
                         },
+                        layout: {
+                            padding: {
+                                left: window.innerWidth < 640 ? 5 : 10,
+                                right: window.innerWidth < 640 ? 5 : 10,
+                                top: 10,
+                                bottom: 10
+                            }
+                        },
                         scales: {
                             y: {
                                 type: 'linear',
@@ -272,8 +309,13 @@
                                 beginAtZero: true,
                                 max: 100,
                                 title: {
-                                    display: true,
-                                    text: 'Precipitation Probability (%)'
+                                    display: window.innerWidth >= 640,
+                                    text: 'Precipitation (%)'
+                                },
+                                ticks: {
+                                    font: {
+                                        size: window.innerWidth < 640 ? 10 : 12
+                                    }
                                 },
                                 grid: {
                                     color: 'rgba(59, 130, 246, 0.1)'
@@ -284,8 +326,13 @@
                                 display: true,
                                 position: 'right',
                                 title: {
-                                    display: true,
+                                    display: window.innerWidth >= 640,
                                     text: 'Temperature (°F)'
+                                },
+                                ticks: {
+                                    font: {
+                                        size: window.innerWidth < 640 ? 10 : 12
+                                    }
                                 },
                                 grid: {
                                     drawOnChartArea: false
@@ -293,8 +340,19 @@
                             },
                             x: {
                                 title: {
-                                    display: true,
-                                    text: 'Hour of Day'
+                                    display: false
+                                },
+                                ticks: {
+                                    maxRotation: window.innerWidth < 640 ? 45 : 0,
+                                    font: {
+                                        size: window.innerWidth < 640 ? 9 : 12
+                                    },
+                                    callback: function(value, index) {
+                                        if (window.innerWidth < 640) {
+                                            return index % 2 === 0 ? this.getLabelForValue(value) : '';
+                                        }
+                                        return this.getLabelForValue(value);
+                                    }
                                 },
                                 grid: {
                                     color: 'rgba(0, 0, 0, 0.1)'
