@@ -13,8 +13,8 @@ const uvCache = new Map();
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 
 // Default location (Summit, NJ)
-const DEFAULT_LAT = 40.7206;
-const DEFAULT_LON = -74.3637;
+const DEFAULT_LAT = 40.7162;
+const DEFAULT_LON = -74.3625;
 
 // Serve static files from public directory
 app.use(express.static(join(__dirname, 'public')));
