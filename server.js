@@ -36,8 +36,11 @@ function filterTodayData(hourlyData) {
   });
 
   const labels = todayIndices.map(i => {
-    const hour = new Date(hourlyData.time[i]).getHours();
-    return `${hour}:00`;
+    const date = new Date(hourlyData.time[i]);
+    const hour = date.getHours();
+    const period = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${displayHour}:00 ${period}`;
   });
   
   const values = todayIndices.map(i => hourlyData.uv_index[i]);
