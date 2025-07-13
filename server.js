@@ -8,10 +8,13 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// In-memory cache for UV data
-let uvCache = null;
-let cacheTimestamp = null;
+// In-memory cache for UV data (keyed by location)
+const uvCache = new Map();
 const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+// Default location (Summit, NJ)
+const DEFAULT_LAT = 40.7206;
+const DEFAULT_LON = -74.3637;
 
 // Serve static files from public directory
 app.use(express.static(join(__dirname, 'public')));
@@ -51,14 +54,30 @@ function filterTodayData(hourlyData) {
 // UV API endpoint
 app.get('/api/uv-today', async (req, res) => {
   try {
-    // Check cache
-    if (uvCache && cacheTimestamp && (Date.now() - cacheTimestamp < CACHE_DURATION)) {
-      return res.json(uvCache);
+    // Get coordinates from query params or use defaults
+    const lat = parseFloat(req.query.lat) || DEFAULT_LAT;
+    const lon = parseFloat(req.query.lon) || DEFAULT_LON;
+    
+    // Validate coordinates
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return res.status(400).json({ error: 'Invalid coordinates' });
     }
+
+    // Create cache key
+    const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+    
+    // Check cache
+    const cached = uvCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_DURATION)) {
+      return res.json(cached.data);
+    }
+
+    // Determine timezone (simple heuristic)
+    const timezone = lon >= -130 && lon <= -60 ? 'America/New_York' : 'UTC';
 
     // Fetch fresh data
     const response = await fetch(
-      'https://api.open-meteo.com/v1/forecast?latitude=40.7206&longitude=-74.3637&hourly=uv_index&timezone=America/New_York'
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index&timezone=${timezone}`
     );
 
     if (!response.ok) {
@@ -69,8 +88,10 @@ app.get('/api/uv-today', async (req, res) => {
     const todayData = filterTodayData(data.hourly);
 
     // Update cache
-    uvCache = todayData;
-    cacheTimestamp = Date.now();
+    uvCache.set(cacheKey, {
+      data: todayData,
+      timestamp: Date.now()
+    });
 
     res.json(todayData);
   } catch (error) {
