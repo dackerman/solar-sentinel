@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UV Index - Summit, NJ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">Today's UV Index</h1>
+            <p class="text-gray-600">Summit, NJ (Hourly Forecast)</p>
+        </header>
+
+        <div class="max-w-4xl mx-auto">
+            <!-- Loading state -->
+            <div id="loading" class="text-center py-8">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                <p class="mt-2 text-gray-600">Loading UV data...</p>
+            </div>
+
+            <!-- Error state -->
+            <div id="error" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <p id="error-message"></p>
+            </div>
+
+            <!-- Chart container -->
+            <div id="chart-container" class="hidden bg-white rounded-lg shadow-lg p-6">
+                <canvas id="uvChart" class="w-full h-96"></canvas>
+            </div>
+
+            <!-- UV Index Legend -->
+            <div id="legend" class="hidden mt-6 bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">UV Index Scale</h3>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-green-400 rounded mr-2"></div>
+                        <span>0-2 Low</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-yellow-400 rounded mr-2"></div>
+                        <span>3-5 Moderate</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-orange-400 rounded mr-2"></div>
+                        <span>6-7 High</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-red-500 rounded mr-2"></div>
+                        <span>8-10 Very High</span>
+                    </div>
+                    <div class="flex items-center">
+                        <div class="w-4 h-4 bg-purple-600 rounded mr-2"></div>
+                        <span>11+ Extreme</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadUVData() {
+            try {
+                const response = await fetch('/api/uv-today');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load UV data');
+                }
+
+                // Hide loading, show chart
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('chart-container').classList.remove('hidden');
+                document.getElementById('legend').classList.remove('hidden');
+
+                // Create chart
+                const ctx = document.getElementById('uvChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'UV Index',
+                            data: data.values,
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'UV Index'
+                                },
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Hour of Day'
+                                },
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                }
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                // Hide loading, show error
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').classList.remove('hidden');
+                document.getElementById('error-message').textContent = error.message;
+            }
+        }
+
+        // Load data when page loads
+        loadUVData();
+    </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  uvapp:
+    build: .
+    container_name: uv-index-app
+    ports:
+      - "9890:3000"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/uv-today').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
