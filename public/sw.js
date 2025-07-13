@@ -1,6 +1,6 @@
-const CACHE_NAME = 'solar-sentinel-v1';
-const STATIC_CACHE = 'solar-sentinel-static-v1';
-const RUNTIME_CACHE = 'solar-sentinel-runtime-v1';
+const CACHE_NAME = 'solar-sentinel-v2';
+const STATIC_CACHE = 'solar-sentinel-static-v2';
+const RUNTIME_CACHE = 'solar-sentinel-runtime-v2';
 
 // Files to cache immediately
 const STATIC_FILES = [
@@ -12,7 +12,7 @@ const STATIC_FILES = [
 
 // External resources to cache
 const EXTERNAL_RESOURCES = [
-  'https://cdn.tailwindcss.com',
+  'https://unpkg.com/tailwindcss@3.4.0/dist/tailwind.min.css',
   'https://cdn.jsdelivr.net/npm/chart.js'
 ];
 
