@@ -26,7 +26,7 @@ function getTodayInNewYork() {
   }); // Returns YYYY-MM-DD format
 }
 
-// Filter UV data for today only
+// Filter weather data for today only
 function filterTodayData(hourlyData) {
   const today = getTodayInNewYork();
   const todayIndices = [];
@@ -46,9 +46,16 @@ function filterTodayData(hourlyData) {
     return `${displayHour}:00 ${period}`;
   });
   
-  const values = todayIndices.map(i => hourlyData.uv_index[i]);
+  const uvValues = todayIndices.map(i => hourlyData.uv_index[i]);
+  const precipValues = todayIndices.map(i => hourlyData.precipitation_probability[i]);
+  const tempValues = todayIndices.map(i => hourlyData.apparent_temperature[i]);
   
-  return { labels, values };
+  return { 
+    labels, 
+    uv: uvValues,
+    precipitation: precipValues,
+    temperature: tempValues
+  };
 }
 
 // UV API endpoint
@@ -77,7 +84,7 @@ app.get('/api/uv-today', async (req, res) => {
 
     // Fetch fresh data
     const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index&timezone=${timezone}`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,precipitation_probability,apparent_temperature&timezone=${timezone}`
     );
 
     if (!response.ok) {

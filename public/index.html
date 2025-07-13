@@ -38,9 +38,16 @@
                 <p id="error-message"></p>
             </div>
 
-            <!-- Chart container -->
-            <div id="chart-container" class="hidden bg-white rounded-lg shadow-lg p-6">
+            <!-- UV Chart container -->
+            <div id="chart-container" class="hidden bg-white rounded-lg shadow-lg p-6 mb-6">
+                <h3 class="text-lg font-semibold mb-4">UV Index</h3>
                 <canvas id="uvChart" class="w-full h-96"></canvas>
+            </div>
+
+            <!-- Weather Chart container -->
+            <div id="weather-chart-container" class="hidden bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold mb-4">Temperature & Precipitation</h3>
+                <canvas id="weatherChart" class="w-full h-96"></canvas>
             </div>
 
             <!-- UV Index Legend -->
@@ -135,9 +142,10 @@
                     throw new Error(data.error || 'Failed to load UV data');
                 }
 
-                // Hide loading, show chart
+                // Hide loading, show charts
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('chart-container').classList.remove('hidden');
+                document.getElementById('weather-chart-container').classList.remove('hidden');
                 document.getElementById('legend').classList.remove('hidden');
 
                 // UV Index color mapping
@@ -149,17 +157,17 @@
                     return '#8b5cf6';                         // Purple - Extreme
                 }
 
-                // Create chart
-                const ctx = document.getElementById('uvChart').getContext('2d');
-                new Chart(ctx, {
+                // Create UV chart
+                const uvCtx = document.getElementById('uvChart').getContext('2d');
+                new Chart(uvCtx, {
                     type: 'bar',
                     data: {
                         labels: data.labels,
                         datasets: [{
                             label: 'UV Index',
-                            data: data.values,
-                            backgroundColor: data.values.map(value => getUVColor(value)),
-                            borderColor: data.values.map(value => getUVColor(value)),
+                            data: data.uv,
+                            backgroundColor: data.uv.map(value => getUVColor(value)),
+                            borderColor: data.uv.map(value => getUVColor(value)),
                             borderWidth: 1,
                             borderRadius: 4,
                             borderSkipped: false
@@ -189,13 +197,92 @@
                         scales: {
                             y: {
                                 beginAtZero: true,
-                                max: Math.max(12, Math.max(...data.values) + 1),
+                                max: Math.max(12, Math.max(...data.uv) + 1),
                                 title: {
                                     display: true,
                                     text: 'UV Index'
                                 },
                                 grid: {
                                     color: 'rgba(0, 0, 0, 0.1)'
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Hour of Day'
+                                },
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.1)'
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Create weather chart (Temperature & Precipitation)
+                const weatherCtx = document.getElementById('weatherChart').getContext('2d');
+                new Chart(weatherCtx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Precipitation Probability (%)',
+                            data: data.precipitation,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y'
+                        }, {
+                            label: 'Apparent Temperature (°C)',
+                            data: data.temperature,
+                            borderColor: '#f97316',
+                            backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                            borderWidth: 3,
+                            fill: false,
+                            tension: 0.3,
+                            yAxisID: 'y1'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top'
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                type: 'linear',
+                                display: true,
+                                position: 'left',
+                                beginAtZero: true,
+                                max: 100,
+                                title: {
+                                    display: true,
+                                    text: 'Precipitation Probability (%)'
+                                },
+                                grid: {
+                                    color: 'rgba(59, 130, 246, 0.1)'
+                                }
+                            },
+                            y1: {
+                                type: 'linear',
+                                display: true,
+                                position: 'right',
+                                title: {
+                                    display: true,
+                                    text: 'Temperature (°C)'
+                                },
+                                grid: {
+                                    drawOnChartArea: false
                                 }
                             },
                             x: {
