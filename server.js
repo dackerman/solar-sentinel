@@ -84,7 +84,7 @@ app.get('/api/uv-today', async (req, res) => {
 
     // Fetch fresh data
     const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,precipitation_probability,apparent_temperature&timezone=${timezone}`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,precipitation_probability,apparent_temperature&timezone=${timezone}&temperature_unit=fahrenheit`
     );
 
     if (!response.ok) {
