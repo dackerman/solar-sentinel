@@ -140,22 +140,29 @@
                 document.getElementById('chart-container').classList.remove('hidden');
                 document.getElementById('legend').classList.remove('hidden');
 
+                // UV Index color mapping
+                function getUVColor(uvValue) {
+                    if (uvValue <= 2) return '#22c55e';      // Green - Low
+                    if (uvValue <= 5) return '#eab308';      // Yellow - Moderate  
+                    if (uvValue <= 7) return '#f97316';      // Orange - High
+                    if (uvValue <= 10) return '#ef4444';     // Red - Very High
+                    return '#8b5cf6';                         // Purple - Extreme
+                }
+
                 // Create chart
                 const ctx = document.getElementById('uvChart').getContext('2d');
                 new Chart(ctx, {
-                    type: 'line',
+                    type: 'bar',
                     data: {
                         labels: data.labels,
                         datasets: [{
                             label: 'UV Index',
                             data: data.values,
-                            borderColor: 'rgb(59, 130, 246)',
-                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                            borderWidth: 3,
-                            fill: true,
-                            tension: 0.3,
-                            pointRadius: 4,
-                            pointHoverRadius: 6
+                            backgroundColor: data.values.map(value => getUVColor(value)),
+                            borderColor: data.values.map(value => getUVColor(value)),
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            borderSkipped: false
                         }]
                     },
                     options: {
@@ -164,11 +171,25 @@
                         plugins: {
                             legend: {
                                 display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.parsed.y;
+                                        let level = 'Low';
+                                        if (value > 10) level = 'Extreme';
+                                        else if (value > 7) level = 'Very High';
+                                        else if (value > 5) level = 'High';
+                                        else if (value > 2) level = 'Moderate';
+                                        return `UV Index: ${value} (${level})`;
+                                    }
+                                }
                             }
                         },
                         scales: {
                             y: {
                                 beginAtZero: true,
+                                max: Math.max(12, Math.max(...data.values) + 1),
                                 title: {
                                     display: true,
                                     text: 'UV Index'
