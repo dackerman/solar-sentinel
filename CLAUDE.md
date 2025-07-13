@@ -21,8 +21,12 @@ npm start
 # Docker development (recommended)
 docker compose up -d
 
-# Rebuild Docker container
-docker compose down && docker compose up -d --build
+# IMPORTANT: Always rebuild to see changes
+# Simple restart does NOT apply code changes
+docker compose restart  # ❌ Does not work for code changes
+
+# Rebuild Docker container (required for all code changes)
+docker compose down && docker compose up -d --build  # ✅ Required
 
 # View logs
 docker compose logs -f
@@ -80,6 +84,12 @@ UV color mapping:
 - **Security**: Non-root user (`uvapp:1001`)
 - **Health checks**: Built-in container and API endpoint monitoring
 - **Auto-restart**: `unless-stopped` policy
+
+### Critical Docker Development Note
+**ALWAYS use full rebuild for code changes**. The Docker setup copies files during build, so `docker compose restart` will NOT apply code changes. Always use:
+```bash
+docker compose down && docker compose up -d --build
+```
 
 ## Location Handling
 
