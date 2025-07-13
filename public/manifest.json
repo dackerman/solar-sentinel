@@ -1,13 +1,14 @@
 {
-  "name": "Solar Sentinel - UV Index Monitor",
-  "short_name": "Solar Sentinel",
+  "name": "Solar Sentinel Weather",
+  "short_name": "UV Weather",
   "description": "Real-time UV index monitoring with location detection",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "display": "standalone",
   "background_color": "#f9fafb",
   "theme_color": "#3b82f6",
   "orientation": "portrait-primary",
   "scope": "/",
+  "id": "solar-sentinel-weather-9443",
   "icons": [
     {
       "src": "/icon-192.png",
