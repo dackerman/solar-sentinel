@@ -54,7 +54,8 @@ function filterTodayData(hourlyData) {
     labels, 
     uv: uvValues,
     precipitation: precipValues,
-    temperature: tempValues
+    temperature: tempValues,
+    date: today
   };
 }
 

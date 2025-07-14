@@ -23,7 +23,10 @@
     <div class="container mx-auto max-w-4xl">
         <header class="flex items-center justify-between">
             <img src="/logo.png" alt="Solar Sentinel" class="h-auto w-32 m-1">
-            <p id="location-display" class="text-gray-600 text-sm">📍 Getting location...</p>
+            <div class="text-right">
+                <p id="date-display" class="text-gray-800 text-sm font-medium mb-1"></p>
+                <p id="location-display" class="text-gray-600 text-sm">📍 Getting location...</p>
+            </div>
         </header>
 
         <div class="max-w-4xl mx-auto">
@@ -174,6 +177,15 @@
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to load UV data');
                 }
+
+                // Format and display date
+                const dateObj = new Date(data.date + 'T00:00:00');
+                const dateDisplay = dateObj.toLocaleDateString('en-US', { 
+                    weekday: 'long', 
+                    month: 'long', 
+                    day: 'numeric' 
+                });
+                document.getElementById('date-display').textContent = dateDisplay;
 
                 // Hide loading, show charts
                 document.getElementById('loading').style.display = 'none';
