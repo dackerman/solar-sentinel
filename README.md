@@ -4,7 +4,7 @@
 
 Solar Sentinel is a lightweight web application that displays today's hourly UV index forecast in an interactive chart. Built with modern web technologies and designed for simplicity.
 
-![Solar Sentinel Screenshot](https://via.placeholder.com/800x400/3b82f6/ffffff?text=Solar+Sentinel+Chart)
+![Solar Sentinel Screenshot](screenshot.png)
 
 ## ✨ Features
 
