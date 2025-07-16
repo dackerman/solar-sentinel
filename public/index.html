@@ -24,7 +24,11 @@
         <header class="flex items-center justify-between">
             <img src="/logo.png" alt="Solar Sentinel" class="h-auto w-32 m-1">
             <div class="text-right">
-                <p id="date-display" class="text-gray-800 text-sm font-medium mb-1"></p>
+                <div class="flex items-center justify-end mb-1">
+                    <button id="prev-day" class="text-gray-600 hover:text-gray-800 mr-2 text-lg" title="Previous day">←</button>
+                    <p id="date-display" class="text-gray-800 text-sm font-medium mx-2"></p>
+                    <button id="next-day" class="text-gray-600 hover:text-gray-800 ml-2 text-lg" title="Next day">→</button>
+                </div>
                 <p id="location-display" class="text-gray-600 text-sm">📍 Getting location...</p>
             </div>
         </header>
@@ -100,6 +104,13 @@
             isUserLocation: false
         };
 
+        // Current selected date (defaults to today)
+        let currentDate = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD format
+
+        // Chart instances (need to track for destruction)
+        let weatherChart = null;
+        let uvChart = null;
+
         // Function to get location name from coordinates
         async function getLocationName(lat, lon) {
             try {
@@ -153,7 +164,8 @@
             });
         }
 
-        async function loadUVData() {
+        async function loadUVData(date = currentDate) {
+            console.log('Loading UV data for date:', date);
             try {
                 // Try to get user's location
                 const userLocation = await getCurrentLocation();
@@ -169,8 +181,8 @@
                 document.getElementById('location-display').textContent = 
                     `${locationIcon}${currentLocation.name}`;
 
-                // Fetch UV data for current location
-                const url = `/api/uv-today?lat=${currentLocation.lat}&lon=${currentLocation.lon}`;
+                // Fetch UV data for current location and date
+                const url = `/api/uv-today?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${date}`;
                 const response = await fetch(url);
                 const data = await response.json();
 
@@ -202,9 +214,32 @@
                     return '#8b5cf6';                         // Purple - Extreme
                 }
 
+                // Destroy existing charts if they exist
+                if (uvChart) {
+                    uvChart.destroy();
+                }
+                if (weatherChart) {
+                    weatherChart.destroy();
+                }
+
+                // Reset canvas dimensions to ensure proper rendering
+                const uvCanvas = document.getElementById('uvChart');
+                const weatherCanvas = document.getElementById('weatherChart');
+                
+                // Clear canvas style and reset dimensions
+                uvCanvas.style.width = '100%';
+                uvCanvas.style.height = '384px';
+                uvCanvas.width = uvCanvas.offsetWidth;
+                uvCanvas.height = 384;
+                
+                weatherCanvas.style.width = '100%';
+                weatherCanvas.style.height = '384px';
+                weatherCanvas.width = weatherCanvas.offsetWidth;
+                weatherCanvas.height = 384;
+
                 // Create UV chart
                 const uvCtx = document.getElementById('uvChart').getContext('2d');
-                new Chart(uvCtx, {
+                uvChart = new Chart(uvCtx, {
                     type: 'bar',
                     data: {
                         labels: data.labels,
@@ -291,7 +326,7 @@
 
                 // Create weather chart (Temperature & Precipitation)
                 const weatherCtx = document.getElementById('weatherChart').getContext('2d');
-                new Chart(weatherCtx, {
+                weatherChart = new Chart(weatherCtx, {
                     type: 'line',
                     data: {
                         labels: data.labels,
@@ -419,8 +454,74 @@
             });
         }
 
+        // Date navigation functions
+        function navigateDate(direction) {
+            // Parse date properly to avoid timezone issues
+            const [year, month, day] = currentDate.split('-').map(Number);
+            const date = new Date(year, month - 1, day); // month is 0-indexed
+            date.setDate(date.getDate() + direction);
+            
+            // Check bounds - don't go before today (use local timezone)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Don't go beyond 16 days from today
+            const maxDate = new Date(today);
+            maxDate.setDate(maxDate.getDate() + 16);
+
+            console.log('currentDate:', currentDate);
+            console.log('navigating to date:', date);
+            console.log('today:', today);
+            console.log('maxDate:', maxDate);
+            
+            if (date >= today && date <= maxDate) {
+                currentDate = date.toLocaleDateString('en-CA');
+                updateNavigationButtons();
+                
+                // Show loading state
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('chart-container').classList.add('hidden');
+                document.getElementById('weather-chart-container').classList.add('hidden');
+                document.getElementById('legend').classList.add('hidden');
+                
+                loadUVData(currentDate);
+            }
+        }
+
+        function updateNavigationButtons() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const maxDate = new Date(today);
+            maxDate.setDate(maxDate.getDate() + 16);
+            
+            // Parse current date properly to avoid timezone issues
+            const [year, month, day] = currentDate.split('-').map(Number);
+            const current = new Date(year, month - 1, day);
+            
+            // Disable/enable buttons based on date limits
+            const prevBtn = document.getElementById('prev-day');
+            const nextBtn = document.getElementById('next-day');
+            
+            prevBtn.disabled = current <= today;
+            nextBtn.disabled = current >= maxDate;
+            
+            // Update button styles
+            prevBtn.className = current <= today 
+                ? 'text-gray-300 mr-2 text-lg cursor-not-allowed' 
+                : 'text-gray-600 hover:text-gray-800 mr-2 text-lg cursor-pointer';
+            nextBtn.className = current >= maxDate 
+                ? 'text-gray-300 ml-2 text-lg cursor-not-allowed' 
+                : 'text-gray-600 hover:text-gray-800 ml-2 text-lg cursor-pointer';
+        }
+
+        // Add event listeners for navigation
+        document.getElementById('prev-day').addEventListener('click', () => navigateDate(-1));
+        document.getElementById('next-day').addEventListener('click', () => navigateDate(1));
+
         // Load data when page loads
-        loadUVData();
+        loadUVData().then(() => {
+            updateNavigationButtons();
+        });
     </script>
 </body>
 </html>
