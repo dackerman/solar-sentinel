@@ -1,20 +1,23 @@
 # ☀️ Solar Sentinel
 
-**Real-time UV Index monitoring for Summit, NJ**
+**Real-time UV Index and Weather Monitoring with Location Detection**
 
-Solar Sentinel is a lightweight web application that displays today's hourly UV index forecast in an interactive chart. Built with modern web technologies and designed for simplicity.
+Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather data including UV index, temperature, and precipitation probability. Features automatic location detection with fallback to Summit, NJ, and supports up to 16 days of forecast data navigation.
 
 ![Solar Sentinel Screenshot](screenshot.png)
 
 ## ✨ Features
 
-- **📊 Interactive Charts** - Beautiful line charts with filled areas using Chart.js
-- **📱 Responsive Design** - Works perfectly on desktop, tablet, and mobile
-- **⚡ Real-time Data** - Fetches UV data from Open-Meteo API
-- **💾 Smart Caching** - 10-minute cache to reduce API calls
+- **📊 Dual Interactive Charts** - UV index bar chart and temperature/precipitation line chart using Chart.js
+- **📱 Mobile-Optimized** - Responsive design with mobile-specific chart optimizations
+- **📍 Location Detection** - Automatic geolocation with reverse geocoding for location names
+- **📅 Date Navigation** - Browse up to 16 days of forecast data with arrow controls
+- **⚡ Real-time Data** - Fetches weather data from Open-Meteo API
+- **💾 Smart Caching** - 10-minute location-based cache to reduce API calls
 - **🏥 Health Monitoring** - Built-in health checks and error handling
 - **🐳 Docker Ready** - Complete containerization with auto-restart
-- **🎨 Modern UI** - Clean interface with Tailwind CSS
+- **🎨 Modern UI** - Clean interface with Tailwind CSS and custom logo
+- **📲 PWA Features** - Installable app with offline support and service worker
 
 ## 🚀 Quick Start
 
@@ -48,30 +51,43 @@ npm start
 ## 🏗️ Architecture
 
 ### Backend (`server.js`)
-- **Express.js** server with ESM syntax
-- **Open-Meteo API** integration for UV data
-- **Timezone-aware** filtering for Summit, NJ (America/New_York)
-- **Memory caching** with 10-minute TTL
-- **Error handling** with 502 responses for API failures
+- **Express.js** server with ES modules (`type: "module"`)
+- **Open-Meteo API** integration for UV index, precipitation probability, and apparent temperature
+- **Location-based caching** - Map keyed by coordinates with 10-minute TTL
+- **Date-aware filtering** - Extracts specific day's hourly data in America/New_York timezone
+- **Extended forecast** - Supports up to 16 days of forecast data
+- **Coordinate validation** - Validates lat/lon bounds and date ranges
+- **Error handling** with comprehensive validation and 502 responses
 
 ### Frontend (`public/index.html`)
-- **Chart.js** for interactive line charts
-- **Tailwind CSS** for responsive styling
-- **Vanilla JavaScript** for simplicity
-- **Loading states** and error handling
+- **Self-contained HTML** with inline JavaScript and Tailwind CSS via CDN
+- **Geolocation API** - Auto-detects user location, falls back to Summit, NJ (40.7162, -74.3625)
+- **Two Chart.js visualizations**:
+  1. Weather chart (temperature line + precipitation area, dual Y-axis)
+  2. UV index bar chart (color-coded by danger level)
+- **Date navigation** - Arrow controls for browsing forecast days
+- **PWA features** - Service worker caching, installable, offline support
+- **Mobile optimizations** - Reduced margins, smaller fonts, rotated labels
 
 ### Infrastructure
 - **Docker** containerization with Node 20 Alpine
 - **Health checks** for container monitoring
-- **Non-root user** for security
+- **Non-root user** (`uvapp:1001`) for security
 - **Auto-restart** policy for reliability
+- **PWA manifest** and service worker for offline capability
 
-## 📍 Location Details
+## 📍 Location Handling
 
-**Summit, NJ Coordinates:**
-- Latitude: `40.7206`
-- Longitude: `-74.3637`
+**Default Location (Summit, NJ):**
+- Latitude: `40.7162`
+- Longitude: `-74.3625`
 - Timezone: `America/New_York`
+
+**Geolocation Features:**
+- Browser geolocation API with 5-minute cache
+- Reverse geocoding for location names
+- Timezone detection heuristic (US longitudes use America/New_York, others use UTC)
+- Coordinate validation with lat/lon bounds checking
 
 ## 🔧 Configuration
 
@@ -100,6 +116,15 @@ The app displays UV values with the following standard scale:
 | 8-10 | Very High | 🔴 Red | Extra protection |
 | 11+ | Extreme | 🟣 Purple | Avoid sun exposure |
 
+## 📅 Date Navigation
+
+The app supports browsing forecast data for up to 16 days:
+
+- **← Previous Day** - Navigate to earlier forecast data (disabled for past dates)
+- **→ Next Day** - Navigate to future forecast data (up to 16 days ahead)
+- **Current Date Display** - Shows the selected date (e.g., "Sunday, July 16")
+- **Timezone Handling** - Properly handles local timezone date boundaries
+
 ## 🛠️ Development
 
 ### File Structure
@@ -108,24 +133,36 @@ The app displays UV values with the following standard scale:
 solar-sentinel/
 ├── server.js              # Express backend
 ├── public/
-│   └── index.html         # Frontend application
+│   ├── index.html         # Frontend application
+│   ├── logo.png          # Application logo
+│   ├── manifest.json     # PWA manifest
+│   ├── sw.js            # Service worker
+│   ├── icon-192.png     # PWA icon (192x192)
+│   └── icon-512.png     # PWA icon (512x512)
 ├── package.json           # Node.js dependencies
 ├── Dockerfile             # Container definition
 ├── docker-compose.yml     # Service orchestration
+├── CLAUDE.md             # Development instructions
 └── README.md             # This file
 ```
 
 ### API Endpoints
 
 - `GET /` - Serves the frontend application
-- `GET /api/uv-today` - Returns today's UV data for Summit, NJ
+- `GET /api/uv-today` - Returns weather data with optional parameters:
+  - `lat` - Latitude (defaults to Summit, NJ)
+  - `lon` - Longitude (defaults to Summit, NJ)
+  - `date` - Date in YYYY-MM-DD format (defaults to today)
 
 ### Response Format
 
 ```json
 {
-  "labels": ["0:00", "1:00", "2:00", ...],
-  "values": [0.1, 0.0, 0.0, ...]
+  "labels": ["12:00 AM", "1:00 AM", "2:00 AM", ...],
+  "uv": [0, 0.1, 4.5, ...],
+  "precipitation": [0, 5, 20, ...],
+  "temperature": [25.3, 26.1, ...],
+  "date": "2025-07-16"
 }
 ```
 
@@ -141,8 +178,9 @@ solar-sentinel/
 
 - **Cold start**: ~2-3 seconds
 - **API response**: ~100-200ms (cached)
-- **Bundle size**: ~50KB (excluding CDN resources)
+- **Bundle size**: ~460KB (including optimized logo)
 - **Memory usage**: ~25MB container footprint
+- **Chart rendering**: Optimized for mobile with fixed dimensions and disabled animations
 
 ## 🧪 Health Monitoring
 
@@ -174,4 +212,4 @@ UV data provided by [Open-Meteo](https://open-meteo.com/) - a free, open-source 
 
 ---
 
-**Built with ❤️ for Summit, NJ residents who want to stay sun-safe!**
+**Built with ❤️ for weather-conscious users who want to stay sun-safe and informed!**
