@@ -47,11 +47,12 @@
 
             <!-- Weather Chart container -->
             <div id="weather-chart-container" class="hidden bg-white rounded-lg shadow-lg p-2 sm:p-6 mb-6">
-                <h3 class="text-lg font-semibold mb-2 sm:mb-4">Temperature & Precipitation</h3>
+                <h3 class="text-lg font-semibold mb-2 sm:mb-4">Temperature, Precipitation & Cloud Cover</h3>
                 <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
                     <span>🌧️ Precipitation (%)</span>
                     <span>🌡️ Temperature (°F)</span>
                 </div>
+                <div class="text-xs text-gray-600 mb-2 sm:hidden text-center">☁️ Cloud Cover (%)</div>
                 <div style="height: 384px; width: 100%; position: relative;">
                     <canvas id="weatherChart" style="height: 384px !important; width: 100% !important;"></canvas>
                 </div>
@@ -337,6 +338,15 @@
                             backgroundColor: 'rgba(59, 130, 246, 0.2)',
                             borderWidth: 2,
                             fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y'
+                        }, {
+                            label: 'Cloud Cover (%)',
+                            data: data.cloudCover,
+                            borderColor: '#6b7280',
+                            backgroundColor: 'rgba(107, 114, 128, 0.1)',
+                            borderWidth: 2,
+                            fill: false,
                             tension: 0.3,
                             yAxisID: 'y'
                         }, {
