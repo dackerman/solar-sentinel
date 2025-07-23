@@ -46,16 +46,20 @@ function filterDateData(hourlyData, targetDate) {
   });
   
   const uvValues = todayIndices.map(i => hourlyData.uv_index[i]);
+  const uvClearSkyValues = todayIndices.map(i => hourlyData.uv_index_clear_sky[i]);
   const precipValues = todayIndices.map(i => hourlyData.precipitation_probability[i]);
   const tempValues = todayIndices.map(i => hourlyData.apparent_temperature[i]);
   const cloudValues = todayIndices.map(i => hourlyData.cloud_cover[i]);
+  const humidityValues = todayIndices.map(i => hourlyData.relative_humidity_2m[i]);
   
   return { 
     labels, 
     uv: uvValues,
+    uvClearSky: uvClearSkyValues,
     precipitation: precipValues,
     temperature: tempValues,
     cloudCover: cloudValues,
+    humidity: humidityValues,
     date: targetDate
   };
 }
@@ -103,7 +107,7 @@ app.get('/api/uv-today', async (req, res) => {
 
     // Fetch fresh data with extended forecast range
     const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,precipitation_probability,apparent_temperature,cloud_cover&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,apparent_temperature,cloud_cover,relative_humidity_2m&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
     );
 
     if (!response.ok) {

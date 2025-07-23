@@ -47,12 +47,15 @@
 
             <!-- Weather Chart container -->
             <div id="weather-chart-container" class="hidden bg-white rounded-lg shadow-lg p-2 sm:p-6 mb-6">
-                <h3 class="text-lg font-semibold mb-2 sm:mb-4">Temperature, Precipitation & Cloud Cover</h3>
+                <h3 class="text-lg font-semibold mb-2 sm:mb-4">Weather Conditions</h3>
                 <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
-                    <span>🌧️ Precipitation (%)</span>
-                    <span>🌡️ Temperature (°F)</span>
+                    <span>🌧️ Precip (%)</span>
+                    <span>🌡️ Temp (°F)</span>
                 </div>
-                <div class="text-xs text-gray-600 mb-2 sm:hidden text-center">☁️ Cloud Cover (%)</div>
+                <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
+                    <span>☁️ Cloud (%)</span>
+                    <span>💧 Humidity (%)</span>
+                </div>
                 <div style="height: 384px; width: 100%; position: relative;">
                     <canvas id="weatherChart" style="height: 384px !important; width: 100% !important;"></canvas>
                 </div>
@@ -252,6 +255,17 @@
                             borderWidth: 1,
                             borderRadius: 4,
                             borderSkipped: false
+                        }, {
+                            label: 'UV Index Clear Sky',
+                            data: data.uvClearSky,
+                            type: 'line',
+                            borderColor: '#ef4444',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            fill: false,
+                            pointRadius: 0,
+                            tension: 0.3
                         }]
                     },
                     options: {
@@ -260,7 +274,15 @@
                         animation: false,
                         plugins: {
                             legend: {
-                                display: false
+                                display: true,
+                                position: 'top',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 10,
+                                    font: {
+                                        size: window.innerWidth < 640 ? 10 : 12
+                                    }
+                                }
                             },
                             tooltip: {
                                 callbacks: {
@@ -271,7 +293,8 @@
                                         else if (value > 7) level = 'Very High';
                                         else if (value > 5) level = 'High';
                                         else if (value > 2) level = 'Moderate';
-                                        return `UV Index: ${value} (${level})`;
+                                        const suffix = context.dataset.label.includes('Clear Sky') ? ' (Clear Sky)' : '';
+                                        return `${context.dataset.label}: ${value} (${level})${suffix}`;
                                     }
                                 }
                             }
@@ -357,6 +380,16 @@
                             fill: false,
                             tension: 0.3,
                             yAxisID: 'y1'
+                        }, {
+                            label: 'Humidity (%)',
+                            data: data.humidity,
+                            borderColor: '#10b981',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [2, 2],
+                            fill: false,
+                            tension: 0.3,
+                            yAxisID: 'y'
                         }]
                     },
                     options: {
@@ -390,7 +423,7 @@
                                 max: 100,
                                 title: {
                                     display: window.innerWidth >= 640,
-                                    text: 'Precipitation (%)'
+                                    text: 'Percentage'
                                 },
                                 ticks: {
                                     font: {
