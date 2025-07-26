@@ -93,8 +93,8 @@ app.get('/api/uv-today', async (req, res) => {
       return res.status(400).json({ error: 'Date must be between today and 16 days from today' });
     }
 
-    // Create cache key including date
-    const cacheKey = `${lat.toFixed(4)},${lon.toFixed(4)},${requestedDate}`;
+    // Create cache key including date (2 decimal places = ~1.1 km resolution)
+    const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
     
     // Check cache
     const cached = uvCache.get(cacheKey);
