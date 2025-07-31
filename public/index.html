@@ -114,6 +114,278 @@
         // Chart instances (need to track for destruction)
         let weatherChart = null;
         let uvChart = null;
+        
+        // Current data timestamp for polling
+        let currentDataTimestamp = 0;
+
+        // UV Index color mapping
+        function getUVColor(uvValue) {
+            if (uvValue <= 2) return '#22c55e';      // Green - Low
+            if (uvValue <= 5) return '#eab308';      // Yellow - Moderate  
+            if (uvValue <= 7) return '#f97316';      // Orange - High
+            if (uvValue <= 10) return '#ef4444';     // Red - Very High
+            return '#8b5cf6';                         // Purple - Extreme
+        }
+
+        // Function to render charts with data
+        function renderCharts(data) {
+            // Destroy existing charts if they exist
+            if (uvChart) {
+                uvChart.destroy();
+            }
+            if (weatherChart) {
+                weatherChart.destroy();
+            }
+
+            // Reset canvas dimensions to ensure proper rendering
+            const uvCanvas = document.getElementById('uvChart');
+            const weatherCanvas = document.getElementById('weatherChart');
+            
+            // Clear canvas style and reset dimensions
+            uvCanvas.style.width = '100%';
+            uvCanvas.style.height = '384px';
+            uvCanvas.width = uvCanvas.offsetWidth;
+            uvCanvas.height = 384;
+            
+            weatherCanvas.style.width = '100%';
+            weatherCanvas.style.height = '384px';
+            weatherCanvas.width = weatherCanvas.offsetWidth;
+            weatherCanvas.height = 384;
+
+            // Create UV chart
+            const uvCtx = document.getElementById('uvChart').getContext('2d');
+            uvChart = new Chart(uvCtx, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'UV Index',
+                        data: data.uv,
+                        backgroundColor: data.uv.map(value => getUVColor(value)),
+                        borderColor: data.uv.map(value => getUVColor(value)),
+                        borderWidth: 1,
+                        borderRadius: 4,
+                        borderSkipped: false
+                    }, {
+                        label: 'UV Index Clear Sky',
+                        data: data.uvClearSky,
+                        type: 'line',
+                        borderColor: '#ef4444',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        fill: false,
+                        pointRadius: 0,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 10,
+                                font: {
+                                    size: window.innerWidth < 640 ? 10 : 12
+                                }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y;
+                                    let level = 'Low';
+                                    if (value > 10) level = 'Extreme';
+                                    else if (value > 7) level = 'Very High';
+                                    else if (value > 5) level = 'High';
+                                    else if (value > 2) level = 'Moderate';
+                                    const suffix = context.dataset.label.includes('Clear Sky') ? ' (Clear Sky)' : '';
+                                    return `${context.dataset.label}: ${value} (${level})${suffix}`;
+                                }
+                            }
+                        }
+                    },
+                    layout: {
+                        padding: {
+                            left: window.innerWidth < 640 ? 5 : 10,
+                            right: window.innerWidth < 640 ? 5 : 10,
+                            top: 10,
+                            bottom: 10
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: Math.max(12, Math.max(...data.uv) + 1),
+                            title: {
+                                display: window.innerWidth >= 640,
+                                text: 'UV Index'
+                            },
+                            ticks: {
+                                font: {
+                                    size: window.innerWidth < 640 ? 10 : 12
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: false
+                            },
+                            ticks: {
+                                maxRotation: window.innerWidth < 640 ? 45 : 0,
+                                font: {
+                                    size: window.innerWidth < 640 ? 9 : 12
+                                },
+                                callback: function(value, index) {
+                                    if (window.innerWidth < 640) {
+                                        return index % 2 === 0 ? this.getLabelForValue(value) : '';
+                                    }
+                                    return this.getLabelForValue(value);
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Create weather chart (Temperature & Precipitation)
+            const weatherCtx = document.getElementById('weatherChart').getContext('2d');
+            weatherChart = new Chart(weatherCtx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'Precipitation Probability (%)',
+                        data: data.precipitation,
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Cloud Cover (%)',
+                        data: data.cloudCover,
+                        type: 'bar',
+                        borderColor: '#d1d5db',
+                        backgroundColor: 'rgba(209, 213, 219, 0.6)',
+                        borderWidth: 1,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Apparent Temperature (°F)',
+                        data: data.temperature,
+                        borderColor: '#f97316',
+                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                        borderWidth: 3,
+                        fill: false,
+                        tension: 0.3,
+                        yAxisID: 'y1'
+                    }, {
+                        label: 'Humidity (%)',
+                        data: data.humidity,
+                        borderColor: '#10b981',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [2, 2],
+                        fill: false,
+                        tension: 0.3,
+                        yAxisID: 'y'
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false
+                        }
+                    },
+                    layout: {
+                        padding: {
+                            left: window.innerWidth < 640 ? 5 : 10,
+                            right: window.innerWidth < 640 ? 5 : 10,
+                            top: 10,
+                            bottom: 10
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: window.innerWidth >= 640,
+                                text: 'Percentage'
+                            },
+                            ticks: {
+                                font: {
+                                    size: window.innerWidth < 640 ? 10 : 12
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(59, 130, 246, 0.1)'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: window.innerWidth >= 640,
+                                text: 'Temperature (°F)'
+                            },
+                            ticks: {
+                                font: {
+                                    size: window.innerWidth < 640 ? 10 : 12
+                                }
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: false
+                            },
+                            ticks: {
+                                maxRotation: window.innerWidth < 640 ? 45 : 0,
+                                font: {
+                                    size: window.innerWidth < 640 ? 9 : 12
+                                },
+                                callback: function(value, index) {
+                                    if (window.innerWidth < 640) {
+                                        return index % 2 === 0 ? this.getLabelForValue(value) : '';
+                                    }
+                                    return this.getLabelForValue(value);
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
 
         // Function to get location name from coordinates
         async function getLocationName(lat, lon) {
@@ -168,7 +440,7 @@
             });
         }
 
-        async function loadUVData(date = currentDate) {
+        async function loadUVData(date = currentDate, skipPolling = false) {
             console.log('Loading UV data for date:', date);
             try {
                 // Try to get user's location
@@ -194,8 +466,18 @@
                     throw new Error(data.error || 'Failed to load UV data');
                 }
 
+                // Extract metadata if present
+                const metadata = data.metadata || {};
+                const actualData = metadata.cached !== undefined ? 
+                    { ...data, metadata: undefined } : data;
+                
+                // Update timestamp for polling
+                if (metadata.lastUpdated) {
+                    currentDataTimestamp = new Date(metadata.lastUpdated).getTime();
+                }
+
                 // Format and display date
-                const dateObj = new Date(data.date + 'T00:00:00');
+                const dateObj = new Date(actualData.date + 'T00:00:00');
                 const dateDisplay = dateObj.toLocaleDateString('en-US', { 
                     weekday: 'long', 
                     month: 'long', 
@@ -209,271 +491,21 @@
                 document.getElementById('weather-chart-container').classList.remove('hidden');
                 document.getElementById('legend').classList.remove('hidden');
 
-                // UV Index color mapping
-                function getUVColor(uvValue) {
-                    if (uvValue <= 2) return '#22c55e';      // Green - Low
-                    if (uvValue <= 5) return '#eab308';      // Yellow - Moderate  
-                    if (uvValue <= 7) return '#f97316';      // Orange - High
-                    if (uvValue <= 10) return '#ef4444';     // Red - Very High
-                    return '#8b5cf6';                         // Purple - Extreme
-                }
-
-                // Destroy existing charts if they exist
-                if (uvChart) {
-                    uvChart.destroy();
-                }
-                if (weatherChart) {
-                    weatherChart.destroy();
-                }
-
-                // Reset canvas dimensions to ensure proper rendering
-                const uvCanvas = document.getElementById('uvChart');
-                const weatherCanvas = document.getElementById('weatherChart');
+                // Render charts with data
+                renderCharts(actualData);
                 
-                // Clear canvas style and reset dimensions
-                uvCanvas.style.width = '100%';
-                uvCanvas.style.height = '384px';
-                uvCanvas.width = uvCanvas.offsetWidth;
-                uvCanvas.height = 384;
-                
-                weatherCanvas.style.width = '100%';
-                weatherCanvas.style.height = '384px';
-                weatherCanvas.width = weatherCanvas.offsetWidth;
-                weatherCanvas.height = 384;
-
-                // Create UV chart
-                const uvCtx = document.getElementById('uvChart').getContext('2d');
-                uvChart = new Chart(uvCtx, {
-                    type: 'bar',
-                    data: {
-                        labels: data.labels,
-                        datasets: [{
-                            label: 'UV Index',
-                            data: data.uv,
-                            backgroundColor: data.uv.map(value => getUVColor(value)),
-                            borderColor: data.uv.map(value => getUVColor(value)),
-                            borderWidth: 1,
-                            borderRadius: 4,
-                            borderSkipped: false
-                        }, {
-                            label: 'UV Index Clear Sky',
-                            data: data.uvClearSky,
-                            type: 'line',
-                            borderColor: '#ef4444',
-                            backgroundColor: 'transparent',
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            fill: false,
-                            pointRadius: 0,
-                            tension: 0.3
-                        }]
-                    },
-                    options: {
-                        responsive: false,
-                        maintainAspectRatio: false,
-                        animation: false,
-                        plugins: {
-                            legend: {
-                                display: true,
-                                position: 'top',
-                                labels: {
-                                    usePointStyle: true,
-                                    padding: 10,
-                                    font: {
-                                        size: window.innerWidth < 640 ? 10 : 12
-                                    }
-                                }
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        const value = context.parsed.y;
-                                        let level = 'Low';
-                                        if (value > 10) level = 'Extreme';
-                                        else if (value > 7) level = 'Very High';
-                                        else if (value > 5) level = 'High';
-                                        else if (value > 2) level = 'Moderate';
-                                        const suffix = context.dataset.label.includes('Clear Sky') ? ' (Clear Sky)' : '';
-                                        return `${context.dataset.label}: ${value} (${level})${suffix}`;
-                                    }
-                                }
-                            }
-                        },
-                        layout: {
-                            padding: {
-                                left: window.innerWidth < 640 ? 5 : 10,
-                                right: window.innerWidth < 640 ? 5 : 10,
-                                top: 10,
-                                bottom: 10
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                max: Math.max(12, Math.max(...data.uv) + 1),
-                                title: {
-                                    display: window.innerWidth >= 640,
-                                    text: 'UV Index'
-                                },
-                                ticks: {
-                                    font: {
-                                        size: window.innerWidth < 640 ? 10 : 12
-                                    }
-                                },
-                                grid: {
-                                    color: 'rgba(0, 0, 0, 0.1)'
-                                }
-                            },
-                            x: {
-                                title: {
-                                    display: false
-                                },
-                                ticks: {
-                                    maxRotation: window.innerWidth < 640 ? 45 : 0,
-                                    font: {
-                                        size: window.innerWidth < 640 ? 9 : 12
-                                    },
-                                    callback: function(value, index) {
-                                        if (window.innerWidth < 640) {
-                                            return index % 2 === 0 ? this.getLabelForValue(value) : '';
-                                        }
-                                        return this.getLabelForValue(value);
-                                    }
-                                },
-                                grid: {
-                                    color: 'rgba(0, 0, 0, 0.1)'
-                                }
-                            }
-                        }
+                // Start appropriate polling based on data freshness
+                if (date === currentDate && !skipPolling) {
+                    if (metadata.cached) {
+                        console.log('Data was cached, starting exponential backoff polling...');
+                        startPolling(date, true);
+                    } else {
+                        console.log('Data was fresh, starting hourly polling...');
+                        startPolling(date, false);
                     }
-                });
+                }
 
-                // Create weather chart (Temperature & Precipitation)
-                const weatherCtx = document.getElementById('weatherChart').getContext('2d');
-                weatherChart = new Chart(weatherCtx, {
-                    type: 'line',
-                    data: {
-                        labels: data.labels,
-                        datasets: [{
-                            label: 'Precipitation Probability (%)',
-                            data: data.precipitation,
-                            borderColor: '#3b82f6',
-                            backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                            borderWidth: 2,
-                            fill: true,
-                            tension: 0.3,
-                            yAxisID: 'y'
-                        }, {
-                            label: 'Cloud Cover (%)',
-                            data: data.cloudCover,
-                            type: 'bar',
-                            borderColor: '#d1d5db',
-                            backgroundColor: 'rgba(209, 213, 219, 0.6)',
-                            borderWidth: 1,
-                            yAxisID: 'y'
-                        }, {
-                            label: 'Apparent Temperature (°F)',
-                            data: data.temperature,
-                            borderColor: '#f97316',
-                            backgroundColor: 'rgba(249, 115, 22, 0.1)',
-                            borderWidth: 3,
-                            fill: false,
-                            tension: 0.3,
-                            yAxisID: 'y1'
-                        }, {
-                            label: 'Humidity (%)',
-                            data: data.humidity,
-                            borderColor: '#10b981',
-                            backgroundColor: 'transparent',
-                            borderWidth: 2,
-                            borderDash: [2, 2],
-                            fill: false,
-                            tension: 0.3,
-                            yAxisID: 'y'
-                        }]
-                    },
-                    options: {
-                        responsive: false,
-                        maintainAspectRatio: false,
-                        animation: false,
-                        plugins: {
-                            legend: {
-                                display: true,
-                                position: 'top'
-                            },
-                            tooltip: {
-                                mode: 'index',
-                                intersect: false
-                            }
-                        },
-                        layout: {
-                            padding: {
-                                left: window.innerWidth < 640 ? 5 : 10,
-                                right: window.innerWidth < 640 ? 5 : 10,
-                                top: 10,
-                                bottom: 10
-                            }
-                        },
-                        scales: {
-                            y: {
-                                type: 'linear',
-                                display: true,
-                                position: 'left',
-                                beginAtZero: true,
-                                max: 100,
-                                title: {
-                                    display: window.innerWidth >= 640,
-                                    text: 'Percentage'
-                                },
-                                ticks: {
-                                    font: {
-                                        size: window.innerWidth < 640 ? 10 : 12
-                                    }
-                                },
-                                grid: {
-                                    color: 'rgba(59, 130, 246, 0.1)'
-                                }
-                            },
-                            y1: {
-                                type: 'linear',
-                                display: true,
-                                position: 'right',
-                                title: {
-                                    display: window.innerWidth >= 640,
-                                    text: 'Temperature (°F)'
-                                },
-                                ticks: {
-                                    font: {
-                                        size: window.innerWidth < 640 ? 10 : 12
-                                    }
-                                },
-                                grid: {
-                                    drawOnChartArea: false
-                                }
-                            },
-                            x: {
-                                title: {
-                                    display: false
-                                },
-                                ticks: {
-                                    maxRotation: window.innerWidth < 640 ? 45 : 0,
-                                    font: {
-                                        size: window.innerWidth < 640 ? 9 : 12
-                                    },
-                                    callback: function(value, index) {
-                                        if (window.innerWidth < 640) {
-                                            return index % 2 === 0 ? this.getLabelForValue(value) : '';
-                                        }
-                                        return this.getLabelForValue(value);
-                                    }
-                                },
-                                grid: {
-                                    color: 'rgba(0, 0, 0, 0.1)'
-                                }
-                            }
-                        }
-                    }
-                });
+                // [This entire block removed since it's now handled by renderCharts()]
 
             } catch (error) {
                 // Hide loading, show error
@@ -485,6 +517,76 @@
 
         // PWA features enabled via manifest.json only
         // Service worker removed to prevent aggressive caching during development
+
+        // Polling functionality
+        let pollTimeout = null;
+        let currentPollDelay = 500; // Current delay for this polling session
+        const MAX_POLL_DELAY = 3600000; // 1 hour
+        const HOURLY_POLL_DELAY = 3600000; // 1 hour for fresh data
+        
+        async function startPolling(date, isCachedData = true) {
+            // Clear any existing polling
+            stopPolling();
+            
+            // Set initial delay based on whether data was cached
+            if (!isCachedData) {
+                // If data was fresh, just check hourly
+                currentPollDelay = HOURLY_POLL_DELAY;
+                console.log('Starting hourly polling for fresh data');
+            } else {
+                // If data was cached, start with exponential backoff
+                currentPollDelay = 500; // Reset to 0.5 seconds
+                console.log('Starting exponential backoff polling from 0.5 seconds');
+            }
+            
+            schedulePoll(date, isCachedData);
+        }
+        
+        function schedulePoll(date, isExponentialBackoff) {
+            console.log(`Scheduling next poll in ${currentPollDelay/1000} seconds`);
+            pollTimeout = setTimeout(async () => {
+                try {
+                    const pollUrl = `/api/uv-today/poll?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${date}&timestamp=${currentDataTimestamp}`;
+                    const response = await fetch(pollUrl);
+                    const pollData = await response.json();
+                    
+                    if (pollData.hasUpdate) {
+                        console.log('New data available, fetching update...');
+                        // Stop polling while updating
+                        stopPolling();
+                        
+                        // Fetch fresh data but skip polling restart to avoid reset loop
+                        await loadUVData(date, true);
+                        
+                        // After background update, the data should be fresh, so switch to hourly polling
+                        if (date === currentDate) {
+                            console.log('Update complete, switching to hourly polling');
+                            startPolling(date, false);
+                        }
+                    } else {
+                        // No update, schedule next poll
+                        if (isExponentialBackoff && currentPollDelay < MAX_POLL_DELAY) {
+                            // Double the delay for exponential backoff
+                            currentPollDelay = Math.min(currentPollDelay * 2, MAX_POLL_DELAY);
+                            console.log(`No update yet, backing off to ${currentPollDelay/1000} seconds`);
+                        }
+                        // Schedule next poll
+                        schedulePoll(date, isExponentialBackoff);
+                    }
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    // On error, continue polling but don't change the delay
+                    schedulePoll(date, isExponentialBackoff);
+                }
+            }, currentPollDelay);
+        }
+        
+        function stopPolling() {
+            if (pollTimeout) {
+                clearTimeout(pollTimeout);
+                pollTimeout = null;
+            }
+        }
 
         // Date navigation functions
         function navigateDate(direction) {
@@ -509,6 +611,9 @@
             if (date >= today && date <= maxDate) {
                 currentDate = date.toLocaleDateString('en-CA');
                 updateNavigationButtons();
+                
+                // Stop polling when changing dates
+                stopPolling();
                 
                 // Show loading state
                 document.getElementById('loading').style.display = 'block';

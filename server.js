@@ -10,7 +10,23 @@ const PORT = process.env.PORT || 3000;
 
 // In-memory cache for UV data (keyed by location)
 const uvCache = new Map();
-const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+
+// Cache cleanup function - removes past dates
+function cleanupCache() {
+  const today = getTodayInNewYork();
+  const todayDate = new Date(today);
+  
+  for (const [key, value] of uvCache.entries()) {
+    const keyDate = new Date(value.data.date);
+    if (keyDate < todayDate) {
+      uvCache.delete(key);
+    }
+  }
+}
+
+// Run cleanup on startup and daily at midnight
+cleanupCache();
+setInterval(cleanupCache, 24 * 60 * 60 * 1000); // Daily
 
 // Default location (Summit, NJ)
 const DEFAULT_LAT = 40.7162;
@@ -64,6 +80,33 @@ function filterDateData(hourlyData, targetDate) {
   };
 }
 
+// Background cache update function
+async function updateCacheInBackground(lat, lon, requestedDate, timezone, cacheKey) {
+  try {
+    const response = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,apparent_temperature,cloud_cover,relative_humidity_2m&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
+    );
+
+    if (!response.ok) {
+      console.error(`Background update failed: ${response.status}`);
+      return;
+    }
+
+    const data = await response.json();
+    const dateData = filterDateData(data.hourly, requestedDate);
+
+    // Update cache with fresh data
+    uvCache.set(cacheKey, {
+      data: dateData,
+      timestamp: Date.now()
+    });
+
+    console.log(`Background cache update completed for ${cacheKey}`);
+  } catch (error) {
+    console.error('Background update error:', error.message);
+  }
+}
+
 // UV API endpoint
 app.get('/api/uv-today', async (req, res) => {
   try {
@@ -93,17 +136,32 @@ app.get('/api/uv-today', async (req, res) => {
       return res.status(400).json({ error: 'Date must be between today and 16 days from today' });
     }
 
+    // Determine timezone (simple heuristic)
+    const timezone = lon >= -130 && lon <= -60 ? 'America/New_York' : 'UTC';
+
     // Create cache key including date (2 decimal places = ~1.1 km resolution)
     const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
     
-    // Check cache
+    // Check cache - return immediately if available
     const cached = uvCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp < CACHE_DURATION)) {
-      return res.json(cached.data);
+    if (cached) {
+      // Return cached data with metadata
+      res.set('X-Cache-Status', 'hit');
+      res.json({
+        ...cached.data,
+        metadata: {
+          cached: true,
+          cacheAge: Date.now() - cached.timestamp,
+          lastUpdated: new Date(cached.timestamp).toISOString()
+        }
+      });
+      
+      // For future dates, trigger background update
+      if (reqDate >= today) {
+        updateCacheInBackground(lat, lon, requestedDate, timezone, cacheKey);
+      }
+      return;
     }
-
-    // Determine timezone (simple heuristic)
-    const timezone = lon >= -130 && lon <= -60 ? 'America/New_York' : 'UTC';
 
     // Fetch fresh data with extended forecast range
     const response = await fetch(
@@ -123,12 +181,49 @@ app.get('/api/uv-today', async (req, res) => {
       timestamp: Date.now()
     });
 
-    res.json(dateData);
+    res.set('X-Cache-Status', 'miss');
+    res.json({
+      ...dateData,
+      metadata: {
+        cached: false,
+        cacheAge: 0,
+        lastUpdated: new Date().toISOString()
+      }
+    });
   } catch (error) {
     console.error('UV API error:', error.message);
     res.status(502).json({ 
       error: 'Failed to fetch UV data. Please try again later.' 
     });
+  }
+});
+
+// Polling endpoint to check if newer data is available
+app.get('/api/uv-today/poll', async (req, res) => {
+  try {
+    const lat = parseFloat(req.query.lat) || DEFAULT_LAT;
+    const lon = parseFloat(req.query.lon) || DEFAULT_LON;
+    const requestedDate = req.query.date || getTodayInNewYork();
+    const clientTimestamp = parseInt(req.query.timestamp) || 0;
+    
+    const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
+    const cached = uvCache.get(cacheKey);
+    
+    if (cached && cached.timestamp > clientTimestamp) {
+      res.json({ 
+        hasUpdate: true, 
+        timestamp: cached.timestamp,
+        lastUpdated: new Date(cached.timestamp).toISOString()
+      });
+    } else {
+      res.json({ 
+        hasUpdate: false,
+        timestamp: cached ? cached.timestamp : null
+      });
+    }
+  } catch (error) {
+    console.error('Poll error:', error.message);
+    res.status(500).json({ error: 'Poll failed' });
   }
 });
 
