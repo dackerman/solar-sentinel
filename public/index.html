@@ -178,6 +178,19 @@
             Chart.register(temperatureBandsPlugin);
         }
 
+        // Helper to map a temperature to a line color (matches band hues)
+        function getTempLineColor(t) {
+            if (t <= 32) return '#3b82f6';      // blue
+            if (t <= 50) return '#60a5fa';      // light blue
+            if (t < 74)  return '#10b981';      // green
+            if (t < 85)  return '#f97316';      // orange
+            if (t < 95)  return '#ef4444';      // red
+            return '#dc2626';                   // deep red
+        }
+
+        // Set to true to force a neutral grey temperature line
+        const USE_NEUTRAL_TEMP_LINE = false;
+
         // Function to render charts with data
         function renderCharts(data) {
             // Destroy existing charts if they exist
@@ -336,11 +349,22 @@
                     }, {
                         label: 'Apparent Temperature (°F)',
                         data: data.temperature,
-                        borderColor: '#f97316',
-                        backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                        borderColor: USE_NEUTRAL_TEMP_LINE ? '#6b7280' : '#9ca3af',
+                        backgroundColor: 'transparent',
                         borderWidth: 3,
                         fill: false,
                         tension: 0.3,
+                        pointRadius: 0,
+                        segment: {
+                            borderColor: ctx => {
+                                if (USE_NEUTRAL_TEMP_LINE) return undefined;
+                                const y0 = ctx.p0?.parsed?.y;
+                                const y1 = ctx.p1?.parsed?.y;
+                                if (typeof y0 !== 'number' || typeof y1 !== 'number') return undefined;
+                                const t = (y0 + y1) / 2;
+                                return getTempLineColor(t);
+                            }
+                        },
                         yAxisID: 'y1'
                     }, {
                         label: 'Humidity (%)',
