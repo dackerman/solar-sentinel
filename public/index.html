@@ -34,6 +34,33 @@
         </header>
 
         <div class="max-w-4xl mx-auto">
+            <!-- Current Conditions -->
+            <div id="current-conditions" class="hidden bg-white rounded-lg shadow-lg p-4 mb-6">
+                <h3 class="text-lg font-semibold mb-3">Current Conditions</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-2xl mb-1">🌡️</div>
+                        <div id="current-temp" class="text-xl font-bold text-gray-800">--°F</div>
+                        <div class="text-xs text-gray-600">Temperature</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-2xl mb-1">☀️</div>
+                        <div id="current-uv" class="text-xl font-bold text-gray-800">--</div>
+                        <div class="text-xs text-gray-600">UV Index</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-2xl mb-1">🌧️</div>
+                        <div id="current-precip" class="text-xl font-bold text-gray-800">--%</div>
+                        <div class="text-xs text-gray-600">Precipitation</div>
+                    </div>
+                    <div class="bg-gray-50 rounded-lg p-3">
+                        <div class="text-2xl mb-1">💧</div>
+                        <div id="current-humidity" class="text-xl font-bold text-gray-800">--%</div>
+                        <div class="text-xs text-gray-600">Humidity</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Loading state -->
             <div id="loading" class="text-center py-8">
                 <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
@@ -141,8 +168,55 @@
         // Set to true to force a neutral grey temperature line
         const USE_NEUTRAL_TEMP_LINE = false;
 
+        // Function to update current conditions display
+        function updateCurrentConditions(data) {
+            // Find current hour index (or closest available)
+            const now = new Date();
+            const currentHour = now.getHours();
+            
+            // Find the index that matches current hour, or use the closest one
+            let currentIndex = 0;
+            for (let i = 0; i < data.labels.length; i++) {
+                const label = data.labels[i];
+                const hour = parseInt(label.split(':')[0]);
+                const isPM = label.includes('PM');
+                const hour24 = isPM && hour !== 12 ? hour + 12 : (!isPM && hour === 12 ? 0 : hour);
+                
+                if (hour24 === currentHour) {
+                    currentIndex = i;
+                    break;
+                } else if (hour24 > currentHour) {
+                    // Use previous hour if current hour not found
+                    currentIndex = Math.max(0, i - 1);
+                    break;
+                }
+            }
+            
+            // Update current conditions display
+            const temp = Math.round(data.temperature[currentIndex] || 0);
+            const uv = (data.uv[currentIndex] || 0).toFixed(1);
+            const precip = Math.round(data.precipitation[currentIndex] || 0);
+            const humidity = Math.round(data.humidity[currentIndex] || 0);
+            
+            document.getElementById('current-temp').textContent = `${temp}°F`;
+            document.getElementById('current-uv').textContent = uv;
+            document.getElementById('current-precip').textContent = `${precip}%`;
+            document.getElementById('current-humidity').textContent = `${humidity}%`;
+            
+            // Color the UV value based on level
+            const uvElement = document.getElementById('current-uv');
+            uvElement.style.color = getUVColor(parseFloat(uv));
+            
+            // Color the temperature based on thermal bands
+            const tempElement = document.getElementById('current-temp');
+            tempElement.style.color = getTempLineColor(temp);
+        }
+
         // Function to render charts with data
         function renderCharts(data) {
+            // Update current conditions first
+            updateCurrentConditions(data);
+            
             // Destroy existing charts if they exist
             if (uvChart) {
                 uvChart.destroy();
@@ -510,8 +584,9 @@
                 });
                 document.getElementById('date-display').textContent = dateDisplay;
 
-                // Hide loading, show charts
+                // Hide loading, show charts and current conditions
                 document.getElementById('loading').style.display = 'none';
+                document.getElementById('current-conditions').classList.remove('hidden');
                 document.getElementById('chart-container').classList.remove('hidden');
                 document.getElementById('weather-chart-container').classList.remove('hidden');
                 document.getElementById('legend').classList.remove('hidden');
@@ -642,6 +717,7 @@
                 
                 // Show loading state
                 document.getElementById('loading').style.display = 'block';
+                document.getElementById('current-conditions').classList.add('hidden');
                 document.getElementById('chart-container').classList.add('hidden');
                 document.getElementById('weather-chart-container').classList.add('hidden');
                 document.getElementById('legend').classList.add('hidden');
