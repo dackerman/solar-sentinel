@@ -46,22 +46,22 @@
                     <div class="bg-gray-50 rounded-lg p-3">
                         <div class="text-2xl mb-1">🌡️</div>
                         <div id="current-temp" class="text-xl font-bold text-gray-800">--°F</div>
-                        <div class="text-xs text-gray-600">Temperature</div>
+                        <div id="temp-label" class="text-xs text-gray-600">Temperature</div>
                     </div>
                     <div class="bg-gray-50 rounded-lg p-3">
                         <div class="text-2xl mb-1">☀️</div>
                         <div id="current-uv" class="text-xl font-bold text-gray-800">--</div>
-                        <div class="text-xs text-gray-600">UV Index</div>
+                        <div id="uv-label" class="text-xs text-gray-600">UV Index</div>
                     </div>
                     <div class="bg-gray-50 rounded-lg p-3">
                         <div class="text-2xl mb-1">🌧️</div>
                         <div id="current-precip" class="text-xl font-bold text-gray-800">--%</div>
-                        <div class="text-xs text-gray-600">Precipitation</div>
+                        <div id="precip-label" class="text-xs text-gray-600">Precipitation</div>
                     </div>
                     <div class="bg-gray-50 rounded-lg p-3">
                         <div class="text-2xl mb-1">💧</div>
                         <div id="current-humidity" class="text-xl font-bold text-gray-800">--%</div>
-                        <div class="text-xs text-gray-600">Humidity</div>
+                        <div id="humidity-label" class="text-xs text-gray-600">Humidity</div>
                     </div>
                 </div>
             </div>
@@ -173,21 +173,74 @@
         // Set to true to force a neutral grey temperature line
         const USE_NEUTRAL_TEMP_LINE = false;
 
+        // Function to fetch and update daily summary data
+        async function updateDailySummary() {
+            try {
+                const url = `/api/daily-summary?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${currentDate}`;
+                const response = await fetch(url);
+                const dailyData = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(dailyData.error || 'Failed to load daily summary');
+                }
+
+                // Update conditions display with daily data
+                const tempHigh = Math.round(dailyData.tempMax || 0);
+                const tempLow = Math.round(dailyData.tempMin || 0);
+                const uvMax = (dailyData.uvMax || 0).toFixed(1);
+                const precipMax = Math.round(dailyData.precipMax || 0);
+                const humidityMax = Math.round(dailyData.humidityMax || 0);
+
+                document.getElementById('current-temp').textContent = `${tempHigh}°/${tempLow}°F`;
+                document.getElementById('current-uv').textContent = uvMax;
+                document.getElementById('current-precip').textContent = `${precipMax}%`;
+                document.getElementById('current-humidity').textContent = `${humidityMax}%`;
+
+                // Update labels for daily data
+                document.getElementById('temp-label').textContent = 'High/Low';
+                document.getElementById('uv-label').textContent = 'Peak UV';
+                document.getElementById('precip-label').textContent = 'Max Precip';
+                document.getElementById('humidity-label').textContent = 'Max Humidity';
+
+                // Color the UV value based on level
+                const uvElement = document.getElementById('current-uv');
+                uvElement.style.color = getUVColor(parseFloat(uvMax));
+
+                // Color the temperature based on thermal bands (use high temp)
+                const tempElement = document.getElementById('current-temp');
+                tempElement.style.color = getTempLineColor(tempHigh);
+
+            } catch (error) {
+                console.error('Daily summary error:', error);
+                // Fallback to hourly data if daily fails
+                updateCurrentConditions(lastHourlyData);
+            }
+        }
+
+        // Store last hourly data for fallback
+        let lastHourlyData = null;
+
         // Function to update current conditions display
         function updateCurrentConditions(data) {
+            // Store for potential fallback
+            lastHourlyData = data;
+            
             // Check if we're viewing today's data
             const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD format
             const isToday = currentDate === today;
             
-            // Find appropriate hour index
+            // Update header and time display
+            const headerElement = document.querySelector('#current-conditions h3');
             const now = new Date();
-            const currentHour = now.getHours();
-            
-            let currentIndex = 0;
-            let foundExactMatch = false;
             
             if (isToday) {
-                // For today, find current hour or closest available
+                headerElement.textContent = 'Current Conditions';
+                
+                // Find current hour for time display
+                const currentHour = now.getHours();
+                let currentIndex = 0;
+                let foundExactMatch = false;
+                
                 for (let i = 0; i < data.labels.length; i++) {
                     const label = data.labels[i];
                     const hour = parseInt(label.split(':')[0]);
@@ -199,31 +252,11 @@
                         foundExactMatch = true;
                         break;
                     } else if (hour24 > currentHour) {
-                        // Use previous hour if current hour not found
                         currentIndex = Math.max(0, i - 1);
                         break;
                     }
                 }
-            } else {
-                // For future days, use noon (12 PM) or closest available
-                for (let i = 0; i < data.labels.length; i++) {
-                    const label = data.labels[i];
-                    if (label.includes('12:00 PM')) {
-                        currentIndex = i;
-                        foundExactMatch = true;
-                        break;
-                    }
-                }
-                // If no noon found, use middle of the day
-                if (!foundExactMatch) {
-                    currentIndex = Math.floor(data.labels.length / 2);
-                }
-            }
-            
-            // Update header and time display
-            const headerElement = document.querySelector('#current-conditions h3');
-            if (isToday) {
-                headerElement.textContent = 'Current Conditions';
+                
                 const timeString = now.toLocaleTimeString('en-US', { 
                     hour: 'numeric', 
                     minute: '2-digit',
@@ -234,29 +267,38 @@
                 
                 document.getElementById('current-time').innerHTML = 
                     `${timeString}${isStale ? ` <span class="text-orange-500">(showing ${dataTime})</span>` : ''}`;
+                
+                // For today, show current hour conditions
+                const temp = Math.round(data.temperature[currentIndex] || 0);
+                const uv = (data.uv[currentIndex] || 0).toFixed(1);
+                const precip = Math.round(data.precipitation[currentIndex] || 0);
+                const humidity = Math.round(data.humidity[currentIndex] || 0);
+                
+                document.getElementById('current-temp').textContent = `${temp}°F`;
+                document.getElementById('current-uv').textContent = uv;
+                document.getElementById('current-precip').textContent = `${precip}%`;
+                document.getElementById('current-humidity').textContent = `${humidity}%`;
+                
+                // Update labels for current data
+                document.getElementById('temp-label').textContent = 'Feels Like';
+                document.getElementById('uv-label').textContent = 'UV Index';
+                document.getElementById('precip-label').textContent = 'Precipitation';
+                document.getElementById('humidity-label').textContent = 'Humidity';
+                
+                // Color the values
+                const uvElement = document.getElementById('current-uv');
+                uvElement.style.color = getUVColor(parseFloat(uv));
+                
+                const tempElement = document.getElementById('current-temp');
+                tempElement.style.color = getTempLineColor(temp);
+                
             } else {
-                headerElement.textContent = 'Forecast Conditions';
-                document.getElementById('current-time').textContent = data.labels[currentIndex];
+                headerElement.textContent = 'Daily Forecast';
+                document.getElementById('current-time').textContent = 'High/Low for the day';
+                
+                // For future days, fetch and show daily summary
+                updateDailySummary();
             }
-            
-            // Update conditions display
-            const temp = Math.round(data.temperature[currentIndex] || 0);
-            const uv = (data.uv[currentIndex] || 0).toFixed(1);
-            const precip = Math.round(data.precipitation[currentIndex] || 0);
-            const humidity = Math.round(data.humidity[currentIndex] || 0);
-            
-            document.getElementById('current-temp').textContent = `${temp}°F`;
-            document.getElementById('current-uv').textContent = uv;
-            document.getElementById('current-precip').textContent = `${precip}%`;
-            document.getElementById('current-humidity').textContent = `${humidity}%`;
-            
-            // Color the UV value based on level
-            const uvElement = document.getElementById('current-uv');
-            uvElement.style.color = getUVColor(parseFloat(uv));
-            
-            // Color the temperature based on thermal bands
-            const tempElement = document.getElementById('current-temp');
-            tempElement.style.color = getTempLineColor(temp);
         }
 
         // Function to render charts with data
