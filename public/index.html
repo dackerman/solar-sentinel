@@ -42,7 +42,54 @@
                         <span id="current-time">--:-- --</span>
                     </div>
                 </div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                
+                <!-- Dual Display: Current + Today's Forecast -->
+                <div id="dual-display" class="hidden space-y-3">
+                    <!-- Current Row -->
+                    <div class="flex items-center justify-between bg-blue-50 rounded-lg p-3">
+                        <div class="text-sm font-medium text-blue-800 w-12">Now:</div>
+                        <div class="flex items-center space-x-4 text-sm">
+                            <div class="flex items-center space-x-1">
+                                <span>🌡️</span>
+                                <span id="current-temp-dual" class="font-semibold">--°F</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <span>☀️</span>
+                                <span id="current-uv-dual" class="font-semibold">--</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <span>🌧️</span>
+                                <span id="current-precip-dual" class="font-semibold">--%</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <span>💧</span>
+                                <span id="current-humidity-dual" class="font-semibold">--%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Today's Forecast Row -->
+                    <div class="flex items-center justify-between bg-green-50 rounded-lg p-3">
+                        <div class="text-sm font-medium text-green-800 w-12">Today:</div>
+                        <div class="flex items-center space-x-4 text-sm">
+                            <div class="flex items-center space-x-1">
+                                <span>🌡️</span>
+                                <span id="today-temp-dual" class="font-semibold">--°/--°F</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <span>☀️</span>
+                                <span id="today-uv-dual" class="font-semibold">--</span>
+                            </div>
+                            <div class="flex items-center space-x-1">
+                                <span>🌧️</span>
+                                <span id="today-precip-dual" class="font-semibold">--%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Original Single Display (for future days) -->
+                <div id="single-display" class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                     <div class="bg-gray-50 rounded-lg p-3">
                         <div class="text-2xl mb-1">🌡️</div>
                         <div id="current-temp" class="text-xl font-bold text-gray-800">--°F</div>
@@ -236,6 +283,10 @@
             if (isToday) {
                 headerElement.textContent = 'Current Conditions';
                 
+                // Show dual display for today
+                document.getElementById('dual-display').classList.remove('hidden');
+                document.getElementById('single-display').classList.add('hidden');
+                
                 // Find current hour for time display
                 const currentHour = now.getHours();
                 let currentIndex = 0;
@@ -268,36 +319,74 @@
                 document.getElementById('current-time').innerHTML = 
                     `${timeString}${isStale ? ` <span class="text-orange-500">(showing ${dataTime})</span>` : ''}`;
                 
-                // For today, show current hour conditions
+                // Update current conditions (Now row)
                 const temp = Math.round(data.temperature[currentIndex] || 0);
                 const uv = (data.uv[currentIndex] || 0).toFixed(1);
                 const precip = Math.round(data.precipitation[currentIndex] || 0);
                 const humidity = Math.round(data.humidity[currentIndex] || 0);
                 
-                document.getElementById('current-temp').textContent = `${temp}°F`;
-                document.getElementById('current-uv').textContent = uv;
-                document.getElementById('current-precip').textContent = `${precip}%`;
-                document.getElementById('current-humidity').textContent = `${humidity}%`;
+                document.getElementById('current-temp-dual').textContent = `${temp}°F`;
+                document.getElementById('current-uv-dual').textContent = uv;
+                document.getElementById('current-precip-dual').textContent = `${precip}%`;
+                document.getElementById('current-humidity-dual').textContent = `${humidity}%`;
                 
-                // Update labels for current data
-                document.getElementById('temp-label').textContent = 'Feels Like';
-                document.getElementById('uv-label').textContent = 'UV Index';
-                document.getElementById('precip-label').textContent = 'Precipitation';
-                document.getElementById('humidity-label').textContent = 'Humidity';
+                // Color the dual display values
+                const uvElementDual = document.getElementById('current-uv-dual');
+                uvElementDual.style.color = getUVColor(parseFloat(uv));
                 
-                // Color the values
-                const uvElement = document.getElementById('current-uv');
-                uvElement.style.color = getUVColor(parseFloat(uv));
+                const tempElementDual = document.getElementById('current-temp-dual');
+                tempElementDual.style.color = getTempLineColor(temp);
                 
-                const tempElement = document.getElementById('current-temp');
-                tempElement.style.color = getTempLineColor(temp);
+                // Fetch and update today's forecast (Today row)
+                updateTodaysForecast();
                 
             } else {
                 headerElement.textContent = 'Daily Forecast';
                 document.getElementById('current-time').textContent = 'High/Low for the day';
                 
+                // Show single display for future days
+                document.getElementById('dual-display').classList.add('hidden');
+                document.getElementById('single-display').classList.remove('hidden');
+                
                 // For future days, fetch and show daily summary
                 updateDailySummary();
+            }
+        }
+
+        // Function to update today's forecast in dual display
+        async function updateTodaysForecast() {
+            try {
+                const url = `/api/daily-summary?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${currentDate}`;
+                const response = await fetch(url);
+                const dailyData = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(dailyData.error || 'Failed to load daily summary');
+                }
+
+                // Update today's forecast row
+                const tempHigh = Math.round(dailyData.tempMax || 0);
+                const tempLow = Math.round(dailyData.tempMin || 0);
+                const uvMax = (dailyData.uvMax || 0).toFixed(1);
+                const precipMax = Math.round(dailyData.precipMax || 0);
+
+                document.getElementById('today-temp-dual').textContent = `${tempHigh}°/${tempLow}°F`;
+                document.getElementById('today-uv-dual').textContent = uvMax;
+                document.getElementById('today-precip-dual').textContent = `${precipMax}%`;
+
+                // Color the today's forecast values
+                const todayUvElement = document.getElementById('today-uv-dual');
+                todayUvElement.style.color = getUVColor(parseFloat(uvMax));
+
+                const todayTempElement = document.getElementById('today-temp-dual');
+                todayTempElement.style.color = getTempLineColor(tempHigh);
+
+            } catch (error) {
+                console.error('Today forecast error:', error);
+                // Set fallback values
+                document.getElementById('today-temp-dual').textContent = '--°/--°F';
+                document.getElementById('today-uv-dual').textContent = '--';
+                document.getElementById('today-precip-dual').textContent = '--%';
             }
         }
 
