@@ -4,7 +4,7 @@
 
 Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather data including UV index, temperature, and precipitation probability. Features automatic location detection with fallback to Summit, NJ, and supports up to 16 days of forecast data navigation.
 
-![Solar Sentinel Screenshot](screenshot.png)
+<img width="928" height="1381" alt="image" src="https://github.com/user-attachments/assets/7a3a0162-892d-4cdb-8903-d6e05b44d6b9" />
 
 ## ✨ Features
 
