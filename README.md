@@ -9,15 +9,17 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 ## ✨ Features
 
 - **📊 Dual Interactive Charts** - UV index bar chart and temperature/precipitation line chart using Chart.js
+- **🌡️ Smart Temperature Display** - Color-coded temperature line with thermal comfort bands (blue=cold, green=mild, orange=warm, red=hot)
+- **📋 Current Conditions Card** - Prominent display of current/forecast conditions with contextual data
 - **📱 Mobile-Optimized** - Responsive design with mobile-specific chart optimizations
 - **📍 Location Detection** - Automatic geolocation with reverse geocoding for location names
 - **📅 Date Navigation** - Browse up to 16 days of forecast data with arrow controls
-- **⚡ Real-time Data** - Fetches weather data from Open-Meteo API
+- **⚡ Real-time Data** - Fetches weather data from Open-Meteo API with dual endpoints (hourly + daily)
 - **💾 Smart Caching** - 10-minute location-based cache to reduce API calls
 - **🏥 Health Monitoring** - Built-in health checks and error handling
 - **🐳 Docker Ready** - Complete containerization with auto-restart
 - **🎨 Modern UI** - Clean interface with Tailwind CSS and custom logo
-- **📲 PWA Features** - Installable app with offline support and service worker
+- **📲 PWA Features** - Installable app with offline support
 
 ## 🚀 Quick Start
 
@@ -52,8 +54,9 @@ npm start
 
 ### Backend (`server.js`)
 - **Express.js** server with ES modules (`type: "module"`)
+- **Dual API endpoints** - Hourly data (`/api/uv-today`) and daily summaries (`/api/daily-summary`)
 - **Open-Meteo API** integration for UV index, precipitation probability, and apparent temperature
-- **Location-based caching** - Map keyed by coordinates with 10-minute TTL
+- **Location-based caching** - Map keyed by coordinates with 10-minute TTL (separate caches for hourly/daily)
 - **Date-aware filtering** - Extracts specific day's hourly data in America/New_York timezone
 - **Extended forecast** - Supports up to 16 days of forecast data
 - **Coordinate validation** - Validates lat/lon bounds and date ranges
@@ -62,11 +65,13 @@ npm start
 ### Frontend (`public/index.html`)
 - **Self-contained HTML** with inline JavaScript and Tailwind CSS via CDN
 - **Geolocation API** - Auto-detects user location, falls back to Summit, NJ (40.7162, -74.3625)
+- **Current Conditions Display** - Smart card showing current hour (today) or daily forecast (future days)
 - **Two Chart.js visualizations**:
-  1. Weather chart (temperature line + precipitation area, dual Y-axis)
+  1. Weather chart (color-coded temperature line + precipitation area, dual Y-axis)
   2. UV index bar chart (color-coded by danger level)
+- **Temperature Color Coding** - Line segments colored by thermal comfort (blue/green/orange/red)
 - **Date navigation** - Arrow controls for browsing forecast days
-- **PWA features** - Service worker caching, installable, offline support
+- **PWA features** - Installable app with offline support
 - **Mobile optimizations** - Reduced margins, smaller fonts, rotated labels
 
 ### Infrastructure
@@ -116,14 +121,18 @@ The app displays UV values with the following standard scale:
 | 8-10 | Very High | 🔴 Red | Extra protection |
 | 11+ | Extreme | 🟣 Purple | Avoid sun exposure |
 
-## 📅 Date Navigation
+## 📅 Date Navigation & Current Conditions
 
-The app supports browsing forecast data for up to 16 days:
+The app supports browsing forecast data for up to 16 days with smart condition display:
 
 - **← Previous Day** - Navigate to earlier forecast data (disabled for past dates)
 - **→ Next Day** - Navigate to future forecast data (up to 16 days ahead)
 - **Current Date Display** - Shows the selected date (e.g., "Sunday, July 16")
+- **Smart Conditions Card**:
+  - **Today**: Shows "Current Conditions" with live time and current hour data (feels-like temp, current UV/precip/humidity)
+  - **Future Days**: Shows "Daily Forecast" with daily highs/lows (high/low temps, peak UV, max precip/humidity)
 - **Timezone Handling** - Properly handles local timezone date boundaries
+- **Staleness Indicators** - Shows when current data is from a different hour (e.g., "3:45 PM (showing 3:00 PM)")
 
 ## 🛠️ Development
 
@@ -149,20 +158,38 @@ solar-sentinel/
 ### API Endpoints
 
 - `GET /` - Serves the frontend application
-- `GET /api/uv-today` - Returns weather data with optional parameters:
+- `GET /api/uv-today` - Returns hourly weather data with optional parameters:
   - `lat` - Latitude (defaults to Summit, NJ)
   - `lon` - Longitude (defaults to Summit, NJ)
   - `date` - Date in YYYY-MM-DD format (defaults to today)
+- `GET /api/daily-summary` - Returns daily highs/lows with same parameters
+- `GET /api/uv-today/poll` - Polling endpoint for real-time updates
 
-### Response Format
+### Response Formats
 
+**Hourly Data (`/api/uv-today`):**
 ```json
 {
   "labels": ["12:00 AM", "1:00 AM", "2:00 AM", ...],
   "uv": [0, 0.1, 4.5, ...],
+  "uvClearSky": [0, 0.2, 5.1, ...],
   "precipitation": [0, 5, 20, ...],
   "temperature": [25.3, 26.1, ...],
-  "date": "2025-07-16"
+  "cloudCover": [10, 25, 60, ...],
+  "humidity": [65, 70, 80, ...],
+  "date": "2025-08-12"
+}
+```
+
+**Daily Summary (`/api/daily-summary`):**
+```json
+{
+  "date": "2025-08-12",
+  "tempMax": 90.5,
+  "tempMin": 64.6,
+  "uvMax": 7.3,
+  "precipMax": 0,
+  "humidityMax": 95
 }
 ```
 
@@ -174,6 +201,19 @@ solar-sentinel/
 - No sensitive data exposure
 - CORS protection via same-origin policy
 
+## 🌡️ Temperature Color Coding
+
+The temperature line uses thermal comfort bands for quick visual reference:
+
+| Temperature Range | Color | Comfort Level |
+|-------------------|-------|---------------|
+| ≤32°F | 🔵 Blue | Freezing |
+| 32-50°F | 🔵 Light Blue | Cold |
+| 50-74°F | 🟢 Green | Mild |
+| 74-85°F | 🟠 Orange | Warm |
+| 85-95°F | 🔴 Red | Hot |
+| ≥95°F | 🔴 Deep Red | Very Hot |
+
 ## 📈 Performance
 
 - **Cold start**: ~2-3 seconds
@@ -181,6 +221,7 @@ solar-sentinel/
 - **Bundle size**: ~460KB (including optimized logo)
 - **Memory usage**: ~25MB container footprint
 - **Chart rendering**: Optimized for mobile with fixed dimensions and disabled animations
+- **Dual caching**: Separate caches for hourly and daily data to optimize performance
 
 ## 🧪 Health Monitoring
 
