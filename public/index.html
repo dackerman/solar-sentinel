@@ -175,43 +175,71 @@
 
         // Function to update current conditions display
         function updateCurrentConditions(data) {
-            // Find current hour index (or closest available)
+            // Check if we're viewing today's data
+            const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD format
+            const isToday = currentDate === today;
+            
+            // Find appropriate hour index
             const now = new Date();
             const currentHour = now.getHours();
             
-            // Find the index that matches current hour, or use the closest one
             let currentIndex = 0;
             let foundExactMatch = false;
-            for (let i = 0; i < data.labels.length; i++) {
-                const label = data.labels[i];
-                const hour = parseInt(label.split(':')[0]);
-                const isPM = label.includes('PM');
-                const hour24 = isPM && hour !== 12 ? hour + 12 : (!isPM && hour === 12 ? 0 : hour);
-                
-                if (hour24 === currentHour) {
-                    currentIndex = i;
-                    foundExactMatch = true;
-                    break;
-                } else if (hour24 > currentHour) {
-                    // Use previous hour if current hour not found
-                    currentIndex = Math.max(0, i - 1);
-                    break;
+            
+            if (isToday) {
+                // For today, find current hour or closest available
+                for (let i = 0; i < data.labels.length; i++) {
+                    const label = data.labels[i];
+                    const hour = parseInt(label.split(':')[0]);
+                    const isPM = label.includes('PM');
+                    const hour24 = isPM && hour !== 12 ? hour + 12 : (!isPM && hour === 12 ? 0 : hour);
+                    
+                    if (hour24 === currentHour) {
+                        currentIndex = i;
+                        foundExactMatch = true;
+                        break;
+                    } else if (hour24 > currentHour) {
+                        // Use previous hour if current hour not found
+                        currentIndex = Math.max(0, i - 1);
+                        break;
+                    }
+                }
+            } else {
+                // For future days, use noon (12 PM) or closest available
+                for (let i = 0; i < data.labels.length; i++) {
+                    const label = data.labels[i];
+                    if (label.includes('12:00 PM')) {
+                        currentIndex = i;
+                        foundExactMatch = true;
+                        break;
+                    }
+                }
+                // If no noon found, use middle of the day
+                if (!foundExactMatch) {
+                    currentIndex = Math.floor(data.labels.length / 2);
                 }
             }
             
-            // Update current time display
-            const timeString = now.toLocaleTimeString('en-US', { 
-                hour: 'numeric', 
-                minute: '2-digit',
-                hour12: true 
-            });
-            const dataTime = data.labels[currentIndex];
-            const isStale = !foundExactMatch;
+            // Update header and time display
+            const headerElement = document.querySelector('#current-conditions h3');
+            if (isToday) {
+                headerElement.textContent = 'Current Conditions';
+                const timeString = now.toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit',
+                    hour12: true 
+                });
+                const dataTime = data.labels[currentIndex];
+                const isStale = !foundExactMatch;
+                
+                document.getElementById('current-time').innerHTML = 
+                    `${timeString}${isStale ? ` <span class="text-orange-500">(showing ${dataTime})</span>` : ''}`;
+            } else {
+                headerElement.textContent = 'Forecast Conditions';
+                document.getElementById('current-time').textContent = data.labels[currentIndex];
+            }
             
-            document.getElementById('current-time').innerHTML = 
-                `${timeString}${isStale ? ` <span class="text-orange-500">(showing ${dataTime})</span>` : ''}`;
-            
-            // Update current conditions display
+            // Update conditions display
             const temp = Math.round(data.temperature[currentIndex] || 0);
             const uv = (data.uv[currentIndex] || 0).toFixed(1);
             const precip = Math.round(data.precipitation[currentIndex] || 0);
