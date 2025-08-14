@@ -793,8 +793,79 @@
             }
         }
 
-        // PWA features enabled via manifest.json only
-        // Service worker removed to prevent aggressive caching during development
+        // PWA Service Worker Registration
+        let refreshing = false;
+        
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('SW registered: ', registration);
+                        
+                        // Check for updates
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // New version available
+                                    showUpdateNotification();
+                                }
+                            });
+                        });
+                    })
+                    .catch(registrationError => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+                
+                // Handle controller change (new SW activated)
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    if (refreshing) return;
+                    refreshing = true;
+                    window.location.reload();
+                });
+            });
+        }
+        
+        // Show update notification
+        function showUpdateNotification() {
+            // Check if notification already exists
+            if (document.getElementById('update-notification')) return;
+            
+            const updateBar = document.createElement('div');
+            updateBar.id = 'update-notification';
+            updateBar.className = 'fixed top-0 left-0 right-0 bg-blue-500 text-white p-3 text-center z-50 shadow-lg';
+            updateBar.innerHTML = `
+                <div class="flex items-center justify-center space-x-4">
+                    <span>🚀 New version available!</span>
+                    <button onclick="forceUpdate()" class="bg-white text-blue-500 px-3 py-1 rounded text-sm font-medium hover:bg-gray-100">
+                        Update Now
+                    </button>
+                    <button onclick="dismissUpdate()" class="text-blue-200 hover:text-white text-sm">
+                        Later
+                    </button>
+                </div>
+            `;
+            document.body.insertBefore(updateBar, document.body.firstChild);
+        }
+        
+        // Force update
+        function forceUpdate() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    if (registration.waiting) {
+                        registration.waiting.postMessage({type: 'SKIP_WAITING'});
+                    }
+                });
+            }
+        }
+        
+        // Dismiss update notification
+        function dismissUpdate() {
+            const notification = document.getElementById('update-notification');
+            if (notification) {
+                notification.remove();
+            }
+        }
 
         // Polling functionality
         let pollTimeout = null;

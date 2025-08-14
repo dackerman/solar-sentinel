@@ -1,7 +1,7 @@
 {
-  "name": "Solar Sentinel Weather",
-  "short_name": "UV Weather",
-  "description": "Real-time UV index monitoring with location detection",
+  "name": "Solar Sentinel - UV Weather Monitor",
+  "short_name": "Solar Sentinel",
+  "description": "Real-time UV index and weather monitoring with location detection. Stay sun-safe with hourly forecasts and current conditions.",
   "start_url": "/?source=pwa",
   "display": "standalone",
   "background_color": "#f9fafb",
@@ -21,9 +21,34 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-1024.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable any"
     }
   ],
-  "categories": ["weather", "lifestyle", "health"],
+  "screenshots": [
+    {
+      "src": "/screenshot.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Solar Sentinel main interface showing UV index and weather charts"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Current UV Index",
+      "short_name": "UV Now",
+      "description": "View current UV conditions and forecast",
+      "url": "/?shortcut=uv",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "categories": ["weather", "lifestyle", "health", "utilities"],
   "lang": "en-US",
-  "dir": "ltr"
+  "dir": "ltr",
+  "prefer_related_applications": false
 }

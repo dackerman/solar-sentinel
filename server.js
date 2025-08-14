@@ -32,8 +32,39 @@ setInterval(cleanupCache, 24 * 60 * 60 * 1000); // Daily
 const DEFAULT_LAT = 40.7162;
 const DEFAULT_LON = -74.3625;
 
-// Serve static files from public directory
-app.use(express.static(join(__dirname, 'public')));
+// Serve static files with appropriate cache headers
+app.use(express.static(join(__dirname, 'public'), {
+  setHeaders: (res, path) => {
+    // No cache for HTML files (always get updates)
+    if (path.endsWith('.html') || path.endsWith('/')) {
+      res.set({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
+    }
+    // Short cache for service worker
+    else if (path.endsWith('sw.js')) {
+      res.set({
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
+    }
+    // Longer cache for static assets (icons, images)
+    else if (path.match(/\.(png|jpg|jpeg|gif|ico|svg)$/)) {
+      res.set({
+        'Cache-Control': 'public, max-age=86400' // 1 day
+      });
+    }
+    // Medium cache for manifest and other assets
+    else {
+      res.set({
+        'Cache-Control': 'public, max-age=3600' // 1 hour
+      });
+    }
+  }
+}));
 
 // Get today's date in America/New_York timezone
 function getTodayInNewYork() {
