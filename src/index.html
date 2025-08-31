@@ -30,7 +30,6 @@
                     <button id="next-day" class="text-gray-600 hover:text-gray-800 ml-2 text-lg" title="Next day">→</button>
                 </div>
                 <p id="location-display" class="text-gray-600 text-sm">📍 Getting location...</p>
-                <button id="debug-btn" class="text-xs text-gray-400 hover:text-gray-600 mt-1">🐛 Debug</button>
             </div>
         </header>
 
@@ -177,6 +176,11 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Debug Button - Fixed at bottom -->
+    <div class="fixed bottom-4 right-4 z-50">
+        <button id="debug-btn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-3 py-2 rounded-full shadow-lg transition-colors duration-200 text-sm">🐛 Debug</button>
     </div>
 
     <script type="module" src="./main.ts"></script>
