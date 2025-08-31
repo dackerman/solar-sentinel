@@ -14,6 +14,7 @@ export class LocationService {
       return null;
     }
 
+    const startTime = performance.now();
     return new Promise((resolve) => {
       const options = {
         enableHighAccuracy: true,
@@ -27,6 +28,10 @@ export class LocationService {
             position.coords.latitude,
             position.coords.longitude
           );
+          const endTime = performance.now();
+          const duration = Math.round(endTime - startTime);
+          
+          console.log(`Geolocation obtained in ${duration}ms`);
           resolve({
             lat: position.coords.latitude,
             lon: position.coords.longitude,
@@ -35,7 +40,9 @@ export class LocationService {
           });
         },
         (error) => {
-          console.log('Geolocation error:', error.message);
+          const endTime = performance.now();
+          const duration = Math.round(endTime - startTime);
+          console.log(`Geolocation error after ${duration}ms:`, error.message);
           resolve(null);
         },
         options
@@ -48,11 +55,16 @@ export class LocationService {
   }
 
   private async getLocationName(lat: number, lon: number): Promise<string> {
+    const startTime = performance.now();
     try {
       const response = await fetch(
         `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
       );
+      const endTime = performance.now();
+      const duration = Math.round(endTime - startTime);
+      
       const data = await response.json();
+      console.log(`Geocoding completed in ${duration}ms`);
       
       if (data.city && data.principalSubdivision) {
         return `${data.city}, ${data.principalSubdivision}`;
@@ -63,7 +75,9 @@ export class LocationService {
       }
       return 'Your Location';
     } catch (error) {
-      console.log('Geocoding error:', error);
+      const endTime = performance.now();
+      const duration = Math.round(endTime - startTime);
+      console.log(`Geocoding error after ${duration}ms:`, error);
       return 'Your Location';
     }
   }

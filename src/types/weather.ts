@@ -41,3 +41,13 @@ export interface DebugEntry {
   message: string;
   data?: any;
 }
+
+export interface RequestTiming {
+  duration: number;
+  cacheStatus?: 'hit' | 'miss' | 'unknown';
+}
+
+export interface RequestTiming {
+  duration: number;
+  cacheStatus?: 'hit' | 'miss' | 'unknown';
+}

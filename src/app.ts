@@ -41,9 +41,23 @@ export class SolarSentinelApp {
 
     try {
       // Get user location if available
+      const locationStartTime = performance.now();
       const userLocation = await this.locationService.getCurrentLocation();
+      const locationEndTime = performance.now();
+      const locationDuration = Math.round(locationEndTime - locationStartTime);
+      
       if (userLocation) {
         this.currentLocation = userLocation;
+        this.debugPanel.log(`Location obtained (${locationDuration}ms)`, { 
+          name: userLocation.name,
+          coords: `${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`,
+          duration: locationDuration
+        });
+      } else {
+        this.debugPanel.log(`Location failed (${locationDuration}ms)`, { 
+          fallback: this.currentLocation.name,
+          duration: locationDuration
+        });
       }
 
       // Update location display
@@ -56,12 +70,13 @@ export class SolarSentinelApp {
       // Fetch weather data
       const data = await this.api.fetchWeatherData(this.currentLocation, this.currentDate);
       
-      // Log cache status
-      const cacheStatus = data.metadata?.cached ? 'hit' : 'miss';
-      this.debugPanel.log(`UV API response: ${cacheStatus}`, {
+      // Log cache status with timing
+      const cacheStatus = data.timing?.cacheStatus || (data.metadata?.cached ? 'hit' : 'miss');
+      this.debugPanel.log(`UV API response: ${cacheStatus} (${data.timing?.duration}ms)`, {
         cached: data.metadata?.cached,
         cacheAge: data.metadata?.cacheAge,
-        lastUpdated: data.metadata?.lastUpdated
+        lastUpdated: data.metadata?.lastUpdated,
+        duration: data.timing?.duration
       });
 
       // Show UI elements
@@ -163,9 +178,11 @@ export class SolarSentinelApp {
     try {
       const dailyData = await this.api.fetchDailyData(this.currentLocation, this.currentDate);
       
-      this.debugPanel.log('Daily API response', {
+      const cacheStatus = dailyData.timing?.cacheStatus || (dailyData.metadata?.cached ? 'hit' : 'miss');
+      this.debugPanel.log(`Daily API response: ${cacheStatus} (${dailyData.timing?.duration}ms)`, {
         cached: dailyData.metadata?.cached,
-        cacheAge: dailyData.metadata?.cacheAge
+        cacheAge: dailyData.metadata?.cacheAge,
+        duration: dailyData.timing?.duration
       });
 
       const tempHigh = Math.round(dailyData.tempMax || 0);
@@ -188,9 +205,11 @@ export class SolarSentinelApp {
     try {
       const dailyData = await this.api.fetchDailyData(this.currentLocation, this.currentDate);
       
-      this.debugPanel.log('Daily summary API', {
+      const cacheStatus = dailyData.timing?.cacheStatus || (dailyData.metadata?.cached ? 'hit' : 'miss');
+      this.debugPanel.log(`Daily summary API: ${cacheStatus} (${dailyData.timing?.duration}ms)`, {
         cached: dailyData.metadata?.cached,
-        cacheAge: dailyData.metadata?.cacheAge
+        cacheAge: dailyData.metadata?.cacheAge,
+        duration: dailyData.timing?.duration
       });
 
       const tempHigh = Math.round(dailyData.tempMax || 0);

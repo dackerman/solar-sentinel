@@ -17,7 +17,7 @@ describe('WeatherAPI', () => {
     vi.clearAllMocks();
   });
 
-  it('should fetch weather data successfully', async () => {
+  it('should fetch weather data successfully with timing', async () => {
     const mockData: WeatherData = {
       labels: ['12:00 AM', '1:00 AM'],
       uv: [0, 0.1],
@@ -32,6 +32,7 @@ describe('WeatherAPI', () => {
 
     const mockResponse = {
       ok: true,
+      headers: { get: vi.fn().mockReturnValue('hit') },
       json: vi.fn().mockResolvedValue(mockData)
     };
     vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
@@ -41,7 +42,10 @@ describe('WeatherAPI', () => {
     expect(fetch).toHaveBeenCalledWith(
       '/api/uv-today?lat=40.7162&lon=-74.3625&date=2025-08-31'
     );
-    expect(result).toEqual(mockData);
+    expect(result.timing).toBeDefined();
+    expect(result.timing?.cacheStatus).toBe('hit');
+    expect(typeof result.timing?.duration).toBe('number');
+    expect(result.timing?.duration).toBeGreaterThanOrEqual(0);
   });
 
   it('should throw error when API fails', async () => {
