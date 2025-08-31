@@ -1,26 +1,27 @@
 FROM node:20-alpine
 
+# Create non-root user early
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S uvapp -u 1001
+
+# Create and own the app directory
+RUN mkdir -p /app && chown uvapp:nodejs /app
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Switch to non-root user
+USER uvapp
+
+# Copy package files with correct ownership
+COPY --chown=uvapp:nodejs package*.json ./
 
 # Install all dependencies (needed for build)
 RUN npm ci
 
-# Copy application code
-COPY . .
+# Copy application code with correct ownership
+COPY --chown=uvapp:nodejs . .
 
 # Build the TypeScript application
 RUN npm run build
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S uvapp -u 1001
-
-# Change ownership to non-root user
-RUN chown -R uvapp:nodejs /app
-USER uvapp
 
 # Set production environment
 ENV NODE_ENV=production
