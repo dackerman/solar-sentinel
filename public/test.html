@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head><title>JS Test</title></head>
+<body>
+    <div id="results"></div>
+    <script>
+        const results = document.getElementById('results');
+        
+        // Test 1: Can we call the API?
+        fetch('/api/uv-today')
+            .then(r => r.ok ? r.json() : Promise.reject('API failed'))
+            .then(data => {
+                results.innerHTML += '<div style="color:green">✅ API works, got ' + data.labels.length + ' hours</div>';
+                
+                // Test 2: Do we have required fields?
+                const requiredFields = ['labels', 'uv', 'temperature', 'apparentTemperature'];
+                requiredFields.forEach(field => {
+                    if (data[field]) {
+                        results.innerHTML += '<div style="color:green">✅ Field ' + field + ' exists</div>';
+                    } else {
+                        results.innerHTML += '<div style="color:red">❌ Field ' + field + ' missing</div>';
+                    }
+                });
+            })
+            .catch(e => {
+                results.innerHTML += '<div style="color:red">❌ API test failed: ' + e + '</div>';
+            });
+    </script>
+</body>
+</html>

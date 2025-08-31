@@ -33,7 +33,9 @@ const DEFAULT_LAT = 40.7162;
 const DEFAULT_LON = -74.3625;
 
 // Serve static files with appropriate cache headers
-app.use(express.static(join(__dirname, 'public'), {
+// In production, serve built files; in development, serve public files  
+const staticDir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
+app.use(express.static(join(__dirname, staticDir), {
   setHeaders: (res, path) => {
     // No cache for HTML files (always get updates)
     if (path.endsWith('.html') || path.endsWith('/')) {

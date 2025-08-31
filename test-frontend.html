@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Test</title>
+</head>
+<body>
+    <div id="test-results"></div>
+    <script>
+        // Extract just the JavaScript from the main app to test
+        fetch('/').then(r => r.text()).then(html => {
+            // Find the script block
+            const scriptMatch = html.match(/<script>(.*?)<\/script>/s);
+            if (!scriptMatch) {
+                document.getElementById('test-results').innerHTML = '<div style="color:red">❌ No script block found</div>';
+                return;
+            }
+            
+            const jsCode = scriptMatch[1];
+            
+            // Test for syntax errors
+            try {
+                new Function(jsCode);
+                document.getElementById('test-results').innerHTML += '<div style="color:green">✅ JavaScript syntax is valid</div>';
+            } catch (e) {
+                document.getElementById('test-results').innerHTML += `<div style="color:red">❌ JavaScript syntax error: ${e.message}</div>`;
+                return;
+            }
+            
+            // Check for function definitions
+            const functions = [
+                'loadUVData',
+                'logDebug', 
+                'toggleDebugPanel',
+                'updateCurrentConditions',
+                'renderCharts'
+            ];
+            
+            functions.forEach(func => {
+                if (jsCode.includes(`function ${func}`) || jsCode.includes(`${func} =`) || jsCode.includes(`async function ${func}`)) {
+                    document.getElementById('test-results').innerHTML += `<div style="color:green">✅ ${func} function found</div>`;
+                } else {
+                    document.getElementById('test-results').innerHTML += `<div style="color:red">❌ ${func} function missing</div>`;
+                }
+            });
+            
+            // Check for potential issues
+            const issues = [];
+            
+            if (jsCode.includes('logDebug(') && !jsCode.includes('function logDebug(')) {
+                issues.push('logDebug called but not defined as function');
+            }
+            
+            if (jsCode.includes('loadUVData(') && jsCode.indexOf('function loadUVData') > jsCode.indexOf('loadUVData(')) {
+                issues.push('loadUVData called before definition');
+            }
+            
+            if (issues.length > 0) {
+                issues.forEach(issue => {
+                    document.getElementById('test-results').innerHTML += `<div style="color:orange">⚠️ ${issue}</div>`;
+                });
+            } else {
+                document.getElementById('test-results').innerHTML += '<div style="color:green">✅ No obvious issues found</div>';
+            }
+            
+        }).catch(e => {
+            document.getElementById('test-results').innerHTML = `<div style="color:red">❌ Failed to fetch: ${e.message}</div>`;
+        });
+    </script>
+</body>
+</html>

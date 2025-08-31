@@ -5,11 +5,14 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (needed for build)
+RUN npm ci
 
 # Copy application code
 COPY . .
+
+# Build the TypeScript application
+RUN npm run build
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs
@@ -18,6 +21,9 @@ RUN adduser -S uvapp -u 1001
 # Change ownership to non-root user
 RUN chown -R uvapp:nodejs /app
 USER uvapp
+
+# Set production environment
+ENV NODE_ENV=production
 
 # Expose port
 EXPOSE 3000

@@ -28,11 +28,20 @@
                     <button id="prev-day" class="text-gray-600 hover:text-gray-800 mr-2 text-lg" title="Previous day">←</button>
                     <p id="date-display" class="text-gray-800 text-sm font-medium mx-2"></p>
                     <button id="next-day" class="text-gray-600 hover:text-gray-800 ml-2 text-lg" title="Next day">→</button>
-                    <button id="debug-toggle" class="text-xs text-gray-500 border px-2 py-1 rounded ml-2" title="Show debug logs">Debug</button>
                 </div>
                 <p id="location-display" class="text-gray-600 text-sm">📍 Getting location...</p>
+                <button id="debug-btn" class="text-xs text-gray-400 hover:text-gray-600 mt-1" onclick="toggleDebugPanel()">🐛 Debug</button>
             </div>
         </header>
+
+        <!-- Debug Panel -->
+        <div id="debug-panel" class="hidden bg-gray-900 text-green-400 p-4 mb-4 rounded-lg font-mono text-xs max-h-64 overflow-y-auto">
+            <div class="flex justify-between items-center mb-2">
+                <h4 class="text-green-300 font-semibold">Request Debug Log</h4>
+                <button onclick="clearDebugLog()" class="text-red-400 hover:text-red-300">Clear</button>
+            </div>
+            <div id="debug-log"></div>
+        </div>
 
         <div class="max-w-4xl mx-auto">
             <!-- Current Conditions -->
@@ -204,48 +213,45 @@
         const REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
         // Debug logging
-        const debugLog = [];
-        function logDebug(entry) {
-            debugLog.push({...entry, timestamp: Date.now()});
-            if (debugLog.length > 200) debugLog.shift();
-            renderDebug();
+        let debugLog = [];
+        let debugPanelVisible = false;
+
+        // Debug functions (defined early to avoid hoisting issues)
+        function updateDebugPanel() {
+            if (!debugPanelVisible) return;
+            const logElement = document.getElementById('debug-log');
+            if (!logElement) return; // Element might not exist yet
+            logElement.innerHTML = debugLog.map(entry => {
+                let dataStr = '';
+                if (entry.data) {
+                    if (typeof entry.data === 'object') {
+                        dataStr = ' | ' + JSON.stringify(entry.data, null, 0);
+                    } else {
+                        dataStr = ' | ' + entry.data;
+                    }
+                }
+                return `<div class="mb-1">[${entry.timestamp}] ${entry.message}${dataStr}</div>`;
+            }).join('');
+            logElement.scrollTop = logElement.scrollHeight;
         }
 
-        function renderDebug() {
-            const content = debugLog.map(formatDebugEntry).join('\n');
-            document.getElementById('debug-content').textContent = content;
+        function logDebug(message, data = null) {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = { timestamp, message, data };
+            debugLog.push(entry);
+            if (debugLog.length > 50) debugLog.shift(); // Keep last 50 entries
+            updateDebugPanel();
         }
 
-        function formatDebugEntry(e) {
-            const time = new Date(e.timestamp).toLocaleTimeString();
-            const cache = e.cacheHdr ? `${e.cacheHdr}/${e.cachedField || '-'}` : '-';
-            const status = e.error ? `ERROR: ${e.error}` : `${e.status}`;
-            return `[${time}] ${e.reason} -> ${e.name} ${e.url}\n  Status: ${status} | Cache: ${cache} | ${e.ms}ms`;
+        function toggleDebugPanel() {
+            debugPanelVisible = !debugPanelVisible;
+            const panel = document.getElementById('debug-panel');
+            panel.classList.toggle('hidden', !debugPanelVisible);
         }
 
-        async function fetchWithDebug(name, url, reason) {
-            const t0 = performance.now();
-            let res, body, cacheHdr, status = 0;
-            try {
-                res = await fetch(url);
-                status = res.status;
-                cacheHdr = res.headers.get('X-Cache-Status');
-                body = await res.json();
-                const ms = Math.round(performance.now() - t0);
-                logDebug({
-                    name, url, reason, status, cacheHdr,
-                    cachedField: body && body.metadata && body.metadata.cached,
-                    ms
-                });
-                return { res, json: body };
-            } catch (err) {
-                const ms = Math.round(performance.now() - t0);
-                logDebug({
-                    name, url, reason, status,
-                    error: err.message, ms
-                });
-                throw err;
-            }
+        function clearDebugLog() {
+            debugLog = [];
+            updateDebugPanel();
         }
 
         // UV Index color mapping
@@ -277,6 +283,14 @@
                 const url = `/api/daily-summary?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${currentDate}`;
                 const response = await fetch(url);
                 const dailyData = await response.json();
+
+                // Log daily summary cache status
+                const cacheStatus = response.headers.get('X-Cache-Status') || 'unknown';
+                const dailyMetadata = dailyData.metadata || {};
+                logDebug(`Daily summary API: ${cacheStatus}`, { 
+                    cached: dailyMetadata.cached, 
+                    cacheAge: dailyMetadata.cacheAge 
+                });
 
                 if (!response.ok) {
                     throw new Error(dailyData.error || 'Failed to load daily summary');
@@ -410,6 +424,14 @@
                 const url = `/api/daily-summary?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${currentDate}`;
                 const response = await fetch(url);
                 const dailyData = await response.json();
+
+                // Log daily summary cache status
+                const cacheStatus = response.headers.get('X-Cache-Status') || 'unknown';
+                const forecastMetadata = dailyData.metadata || {};
+                logDebug(`Daily API response: ${cacheStatus}`, { 
+                    cached: forecastMetadata.cached, 
+                    cacheAge: forecastMetadata.cacheAge 
+                });
 
                 if (!response.ok) {
                     throw new Error(dailyData.error || 'Failed to load daily summary');
@@ -790,6 +812,9 @@
         }
 
         async function loadUVData(date = currentDate, skipPolling = false, silent = false) {
+            const reason = silent ? 'auto-refresh' : (skipPolling ? 'background-update' : 'user-initiated');
+            logDebug(`Loading UV data for ${date}`, { reason, skipPolling, silent });
+            console.log('Loading UV data for date:', date);
             try {
                 // Try to get user's location
                 const userLocation = await getCurrentLocation();
@@ -810,18 +835,27 @@
                 const response = await fetch(url);
                 const data = await response.json();
 
+                // Log cache status
+                const cacheStatus = response.headers.get('X-Cache-Status') || 'unknown';
+                const apiMetadata = data.metadata || {};
+                logDebug(`UV API response: ${cacheStatus}`, { 
+                    cached: apiMetadata.cached, 
+                    cacheAge: apiMetadata.cacheAge, 
+                    lastUpdated: apiMetadata.lastUpdated 
+                });
+
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to load UV data');
                 }
 
                 // Extract metadata if present
-                const metadata = data.metadata || {};
-                const actualData = metadata.cached !== undefined ? 
+                const uvMetadata = data.metadata || {};
+                const actualData = uvMetadata.cached !== undefined ? 
                     { ...data, metadata: undefined } : data;
                 
                 // Update timestamp for polling
-                if (metadata.lastUpdated) {
-                    currentDataTimestamp = new Date(metadata.lastUpdated).getTime();
+                if (uvMetadata.lastUpdated) {
+                    currentDataTimestamp = new Date(uvMetadata.lastUpdated).getTime();
                 }
 
                 // Format and display date
@@ -850,7 +884,7 @@
                 
                 // Start appropriate polling based on data freshness
                 if (date === currentDate && !skipPolling) {
-                    if (metadata.cached) {
+                    if (uvMetadata.cached) {
                         console.log('Data was cached, starting exponential backoff polling...');
                         startPolling(date, true);
                     } else {
@@ -981,6 +1015,7 @@
                     
                     if (pollData.hasUpdate) {
                         console.log('New data available, fetching update...');
+                        logDebug('Poll detected update, fetching fresh data');
                         // Stop polling while updating
                         stopPolling();
                         
@@ -993,6 +1028,7 @@
                             startPolling(date, false);
                         }
                     } else {
+                        logDebug(`Poll: no update (delay: ${currentPollDelay/1000}s)`, { hasUpdate: false });
                         // No update, schedule next poll
                         if (isExponentialBackoff && currentPollDelay < MAX_POLL_DELAY) {
                             // Double the delay for exponential backoff
@@ -1004,6 +1040,7 @@
                     }
                 } catch (error) {
                     console.error('Polling error:', error);
+                    logDebug('Poll error', { error: error.message });
                     // On error, continue polling but don't change the delay
                     schedulePoll(date, isExponentialBackoff);
                 }
@@ -1020,6 +1057,7 @@
         // Auto-refresh scheduling
         function scheduleAutoRefresh() {
             if (refreshTimer) clearInterval(refreshTimer);
+            logDebug('Scheduled 30-min auto-refresh timer');
             refreshTimer = setInterval(async () => {
                 // If the local date rolled over and currentDate was today, advance to new today
                 const todayStr = new Date().toLocaleDateString('en-CA');
@@ -1027,6 +1065,19 @@
                     // keep showing today as it rolls
                     currentDate = todayStr;
                 }
+                if (refreshInFlight) {
+                    logDebug('Auto-refresh skipped: request in flight');
+                    return;
+                }
+                refreshInFlight = true;
+                try {
+                    logDebug('30-min auto-refresh triggered');
+                    await loadUVData(currentDate, true, true); // silent, don't reset polling
+                } finally {
+                    refreshInFlight = false;
+                }
+            }, REFRESH_INTERVAL_MS);
+        }
                 if (refreshInFlight) return;
                 refreshInFlight = true;
                 try {
@@ -1058,7 +1109,9 @@
             console.log('maxDate:', maxDate);
             
             if (date >= today && date <= maxDate) {
-                currentDate = date.toLocaleDateString('en-CA');
+                const newDate = date.toLocaleDateString('en-CA');
+                logDebug(`Date navigation: ${currentDate} → ${newDate}`, { direction });
+                currentDate = newDate;
                 updateNavigationButtons();
                 
                 // Stop polling when changing dates
@@ -1104,29 +1157,6 @@
         // Add event listeners for navigation
         document.getElementById('prev-day').addEventListener('click', () => navigateDate(-1));
         document.getElementById('next-day').addEventListener('click', () => navigateDate(1));
-
-        // Debug panel event listeners
-        document.getElementById('debug-toggle').addEventListener('click', () => {
-            document.getElementById('debug-panel').classList.toggle('hidden');
-        });
-        document.getElementById('debug-close').addEventListener('click', () => {
-            document.getElementById('debug-panel').classList.add('hidden');
-        });
-        document.getElementById('debug-clear').addEventListener('click', () => {
-            debugLog.length = 0;
-            renderDebug();
-        });
-        document.getElementById('debug-copy').addEventListener('click', async () => {
-            try {
-                await navigator.clipboard.writeText(document.getElementById('debug-content').textContent);
-                const btn = document.getElementById('debug-copy');
-                const orig = btn.textContent;
-                btn.textContent = 'Copied!';
-                setTimeout(() => btn.textContent = orig, 1000);
-            } catch (err) {
-                console.log('Copy failed:', err);
-            }
-        });
 
         // Load data when page loads
         loadUVData().then(() => {
@@ -1228,19 +1258,6 @@
                 <li>Check expiration dates - sunscreen loses effectiveness over time</li>
             </ul>
         </div>
-    </div>
-
-    <!-- Debug Panel -->
-    <div id="debug-panel" class="hidden fixed bottom-2 right-2 w-96 max-h-80 bg-white border shadow-lg rounded p-2 text-xs overflow-auto z-50">
-        <div class="flex justify-between items-center mb-2">
-            <strong>Network Debug</strong>
-            <div>
-                <button id="debug-clear" class="mr-2 underline text-blue-600 hover:text-blue-800">Clear</button>
-                <button id="debug-copy" class="underline text-blue-600 hover:text-blue-800">Copy</button>
-                <button id="debug-close" class="ml-2 text-gray-500 hover:text-gray-700">✕</button>
-            </div>
-        </div>
-        <pre id="debug-content" class="whitespace-pre-wrap text-[11px] leading-snug bg-gray-50 p-2 rounded max-h-60 overflow-y-auto"></pre>
     </div>
 </body>
 </html>
