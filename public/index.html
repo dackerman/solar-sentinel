@@ -27,11 +27,12 @@
                 <div class="flex items-center justify-end mb-1">
                     <button id="prev-day" class="text-gray-600 hover:text-gray-800 mr-2 text-lg" title="Previous day">←</button>
                     <p id="date-display" class="text-gray-800 text-sm font-medium mx-2"></p>
-                    <button id="next-day" class="text-gray-600 hover:text-gray-800 ml-2 text-lg" title="Next day">→</button>
-                </div>
-                <p id="location-display" class="text-gray-600 text-sm">📍 Getting location...</p>
-            </div>
-        </header>
+                     <button id="next-day" class="text-gray-600 hover:text-gray-800 ml-2 text-lg" title="Next day">→</button>
+                     <button id="debug-toggle" class="ml-3 text-xs text-gray-500 border border-gray-300 px-2 py-1 rounded hover:bg-gray-50" title="Toggle debug">Debug</button>
+                 </div>
+                 <p id="location-display" class="text-gray-600 text-sm">📍 Getting location...</p>
+             </div>
+         </header>
 
         <div class="max-w-4xl mx-auto">
             <!-- Current Conditions -->
@@ -225,12 +226,46 @@
         // Set to true to force a neutral grey temperature line
         const USE_NEUTRAL_TEMP_LINE = false;
 
+        // Debug logging
+        const debugLog = [];
+        function logDebug(entry) {
+            debugLog.push(entry);
+            if (debugLog.length > 200) debugLog.shift();
+            renderDebug();
+        }
+        function renderDebug() {
+            const el = document.getElementById('debug-content');
+            if (!el) return;
+            const fmt = e => {
+                const ts = new Date(e.t).toLocaleTimeString();
+                const cache = `${e.cacheHdr ?? '-'} / ${e.cachedField ?? '-'}`;
+                return `[${ts}] ${e.reason} -> ${e.name} ${e.method || 'GET'} ${e.url} | status:${e.status} cache:${cache} dur:${e.ms}ms${e.error ? ' err:'+e.error : ''}`;
+            };
+            el.textContent = debugLog.map(fmt).join('\n');
+        }
+        async function fetchWithDebug(name, url, reason) {
+            const t0 = performance.now();
+            let res, body, cacheHdr, status = 0;
+            try {
+                res = await fetch(url);
+                status = res.status;
+                cacheHdr = res.headers.get('X-Cache-Status');
+                body = await res.json();
+                const ms = Math.round(performance.now() - t0);
+                logDebug({ t: Date.now(), name, url, reason, status, cacheHdr, cachedField: body?.metadata?.cached, ms });
+                return { res, json: body };
+            } catch (err) {
+                const ms = Math.round(performance.now() - t0);
+                logDebug({ t: Date.now(), name, url, reason, status, error: err.message, ms });
+                throw err;
+            }
+        }
+
         // Function to fetch and update daily summary data
         async function updateDailySummary() {
             try {
                 const url = `/api/daily-summary?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${currentDate}`;
-                const response = await fetch(url);
-                const dailyData = await response.json();
+                 const { json: dailyData } = await fetchWithDebug('daily-summary', url, 'updateTodaysForecast');
 
                 if (!response.ok) {
                     throw new Error(dailyData.error || 'Failed to load daily summary');
@@ -362,8 +397,7 @@
         async function updateTodaysForecast() {
             try {
                 const url = `/api/daily-summary?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${currentDate}`;
-                const response = await fetch(url);
-                const dailyData = await response.json();
+                 const { json: dailyData } = await fetchWithDebug('daily-summary', url, 'updateTodaysForecast');
 
                 if (!response.ok) {
                     throw new Error(dailyData.error || 'Failed to load daily summary');
@@ -762,8 +796,7 @@
 
                 // Fetch UV data for current location and date
                 const url = `/api/uv-today?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${date}`;
-                const response = await fetch(url);
-                const data = await response.json();
+                const { json: data, res } = await fetchWithDebug('uv-today', url, (silent ? 'auto-refresh' : 'loadUVData'));
 
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to load UV data');
@@ -931,8 +964,7 @@
             pollTimeout = setTimeout(async () => {
                 try {
                     const pollUrl = `/api/uv-today/poll?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${date}&timestamp=${currentDataTimestamp}`;
-                    const response = await fetch(pollUrl);
-                    const pollData = await response.json();
+                const { json: pollData } = await fetchWithDebug('poll', pollUrl, 'poll');
                     
                     if (pollData.hasUpdate) {
                         console.log('New data available, fetching update...');
@@ -1059,7 +1091,16 @@
         // Add event listeners for navigation
         document.getElementById('prev-day').addEventListener('click', () => navigateDate(-1));
         document.getElementById('next-day').addEventListener('click', () => navigateDate(1));
-
+        document.getElementById('debug-toggle').addEventListener('click', () => {
+            document.getElementById('debug-panel').classList.toggle('hidden');
+            renderDebug();
+        });
+        document.getElementById('debug-close').addEventListener('click', () => document.getElementById('debug-panel').classList.add('hidden'));
+        document.getElementById('debug-clear').addEventListener('click', () => { debugLog.length = 0; renderDebug(); });
+        document.getElementById('debug-copy').addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(document.getElementById('debug-content').textContent); } catch {}
+        });
+ 
         // Load data when page loads
         loadUVData().then(() => {
             updateNavigationButtons();
@@ -1161,5 +1202,18 @@
             </ul>
         </div>
     </div>
-</body>
-</html>
+ 
+ <!-- Debug Panel -->
+ <div id="debug-panel" class="hidden fixed bottom-2 right-2 w-96 max-h-80 bg-white border border-gray-200 shadow-lg rounded p-2 text-xs overflow-auto z-50">
+   <div class="flex justify-between items-center mb-2">
+     <strong>Network Debug</strong>
+     <div class="space-x-2">
+       <button id="debug-clear" class="underline text-gray-600">Clear</button>
+       <button id="debug-copy" class="underline text-gray-600">Copy</button>
+       <button id="debug-close" class="text-gray-500">✕</button>
+     </div>
+   </div>
+   <pre id="debug-content" class="whitespace-pre-wrap text-[11px] leading-snug"></pre>
+ </div>
+ </body>
+ </html>
