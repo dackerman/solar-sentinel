@@ -275,7 +275,8 @@
         async function updateDailySummary() {
             try {
                 const url = `/api/daily-summary?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${currentDate}`;
-                const { res: response, json: dailyData } = await fetchWithDebug('daily-summary', url, 'update-daily-summary');
+                const response = await fetch(url);
+                const dailyData = await response.json();
 
                 if (!response.ok) {
                     throw new Error(dailyData.error || 'Failed to load daily summary');
@@ -407,7 +408,8 @@
         async function updateTodaysForecast() {
             try {
                 const url = `/api/daily-summary?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${currentDate}`;
-                const { res: response, json: dailyData } = await fetchWithDebug('daily-summary', url, 'update-todays-forecast');
+                const response = await fetch(url);
+                const dailyData = await response.json();
 
                 if (!response.ok) {
                     throw new Error(dailyData.error || 'Failed to load daily summary');
@@ -788,7 +790,6 @@
         }
 
         async function loadUVData(date = currentDate, skipPolling = false, silent = false) {
-            console.log('Loading UV data for date:', date);
             try {
                 // Try to get user's location
                 const userLocation = await getCurrentLocation();
@@ -806,7 +807,8 @@
 
                 // Fetch UV data for current location and date
                 const url = `/api/uv-today?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${date}`;
-                const { res: response, json: data } = await fetchWithDebug('uv-today', url, silent ? 'auto-refresh' : 'initial/nav');
+                const response = await fetch(url);
+                const data = await response.json();
 
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to load UV data');
@@ -974,7 +976,8 @@
             pollTimeout = setTimeout(async () => {
                 try {
                     const pollUrl = `/api/uv-today/poll?lat=${currentLocation.lat}&lon=${currentLocation.lon}&date=${date}&timestamp=${currentDataTimestamp}`;
-                    const { res: response, json: pollData } = await fetchWithDebug('poll', pollUrl, 'polling-check');
+                    const response = await fetch(pollUrl);
+                    const pollData = await response.json();
                     
                     if (pollData.hasUpdate) {
                         console.log('New data available, fetching update...');
