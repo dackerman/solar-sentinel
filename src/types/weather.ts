@@ -46,8 +46,3 @@ export interface RequestTiming {
   duration: number;
   cacheStatus?: 'hit' | 'miss' | 'unknown';
 }
-
-export interface RequestTiming {
-  duration: number;
-  cacheStatus?: 'hit' | 'miss' | 'unknown';
-}
