@@ -15,7 +15,7 @@ const uvCache = new Map();
 function cleanupCache() {
   const today = getTodayInNewYork();
   const todayDate = new Date(today);
-  
+
   for (const [key, value] of uvCache.entries()) {
     const keyDate = new Date(value.data.date);
     if (keyDate < todayDate) {
@@ -33,52 +33,54 @@ const DEFAULT_LAT = 40.7162;
 const DEFAULT_LON = -74.3625;
 
 // Serve static files with appropriate cache headers
-// In production, serve built files; in development, serve public files  
+// In production, serve built files; in development, serve public files
 const staticDir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
-app.use(express.static(join(__dirname, staticDir), {
-  setHeaders: (res, path) => {
-    // No cache for HTML files (always get updates)
-    if (path.endsWith('.html') || path.endsWith('/')) {
-      res.set({
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      });
-    }
-    // Short cache for service worker
-    else if (path.endsWith('sw.js')) {
-      res.set({
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      });
-    }
-    // Longer cache for static assets (icons, images)
-    else if (path.match(/\.(png|jpg|jpeg|gif|ico|svg)$/)) {
-      res.set({
-        'Cache-Control': 'public, max-age=86400' // 1 day
-      });
-    }
-    // Medium cache for manifest and other assets
-    else {
-      res.set({
-        'Cache-Control': 'public, max-age=3600' // 1 hour
-      });
-    }
-  }
-}));
+app.use(
+  express.static(join(__dirname, staticDir), {
+    setHeaders: (res, path) => {
+      // No cache for HTML files (always get updates)
+      if (path.endsWith('.html') || path.endsWith('/')) {
+        res.set({
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        });
+      }
+      // Short cache for service worker
+      else if (path.endsWith('sw.js')) {
+        res.set({
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        });
+      }
+      // Longer cache for static assets (icons, images)
+      else if (path.match(/\.(png|jpg|jpeg|gif|ico|svg)$/)) {
+        res.set({
+          'Cache-Control': 'public, max-age=86400', // 1 day
+        });
+      }
+      // Medium cache for manifest and other assets
+      else {
+        res.set({
+          'Cache-Control': 'public, max-age=3600', // 1 hour
+        });
+      }
+    },
+  })
+);
 
 // Get today's date in America/New_York timezone
 function getTodayInNewYork() {
-  return new Date().toLocaleDateString('en-CA', { 
-    timeZone: 'America/New_York' 
+  return new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/New_York',
   }); // Returns YYYY-MM-DD format
 }
 
 // Filter weather data for specified date
 function filterDateData(hourlyData, targetDate) {
   const todayIndices = [];
-  
+
   hourlyData.time.forEach((timestamp, index) => {
     const date = timestamp.split('T')[0];
     if (date === targetDate) {
@@ -93,7 +95,7 @@ function filterDateData(hourlyData, targetDate) {
     const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
     return `${displayHour}:00 ${period}`;
   });
-  
+
   const uvValues = todayIndices.map(i => hourlyData.uv_index[i]);
   const uvClearSkyValues = todayIndices.map(i => hourlyData.uv_index_clear_sky[i]);
   const precipValues = todayIndices.map(i => hourlyData.precipitation_probability[i]);
@@ -101,9 +103,9 @@ function filterDateData(hourlyData, targetDate) {
   const apparentTempValues = todayIndices.map(i => hourlyData.apparent_temperature[i]);
   const cloudValues = todayIndices.map(i => hourlyData.cloud_cover[i]);
   const humidityValues = todayIndices.map(i => hourlyData.relative_humidity_2m[i]);
-  
-  return { 
-    labels, 
+
+  return {
+    labels,
     uv: uvValues,
     uvClearSky: uvClearSkyValues,
     precipitation: precipValues,
@@ -111,14 +113,14 @@ function filterDateData(hourlyData, targetDate) {
     apparentTemperature: apparentTempValues,
     cloudCover: cloudValues,
     humidity: humidityValues,
-    date: targetDate
+    date: targetDate,
   };
 }
 
 // Extract daily data for a specific date
 function extractDailyData(dailyData, targetDate) {
   const dateIndex = dailyData.time.findIndex(date => date === targetDate);
-  
+
   if (dateIndex === -1) {
     throw new Error(`Date ${targetDate} not found in daily data`);
   }
@@ -129,7 +131,7 @@ function extractDailyData(dailyData, targetDate) {
     tempMin: dailyData.temperature_2m_min[dateIndex],
     uvMax: dailyData.uv_index_max[dateIndex],
     precipMax: dailyData.precipitation_probability_max[dateIndex],
-    humidityMax: dailyData.relative_humidity_2m_max[dateIndex]
+    humidityMax: dailyData.relative_humidity_2m_max[dateIndex],
   };
 }
 
@@ -151,7 +153,7 @@ async function updateCacheInBackground(lat, lon, requestedDate, timezone, cacheK
     // Update cache with fresh data
     uvCache.set(cacheKey, {
       data: dateData,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     console.log(`Background cache update completed for ${cacheKey}`);
@@ -178,7 +180,7 @@ async function updateDailyCacheInBackground(lat, lon, requestedDate, timezone, c
     // Update cache with fresh data
     uvCache.set(cacheKey, {
       data: dailyData,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     console.log(`Daily background cache update completed for ${cacheKey}`);
@@ -194,7 +196,7 @@ app.get('/api/uv-today', async (req, res) => {
     const lat = parseFloat(req.query.lat) || DEFAULT_LAT;
     const lon = parseFloat(req.query.lon) || DEFAULT_LON;
     const requestedDate = req.query.date || getTodayInNewYork();
-    
+
     // Validate coordinates
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
       return res.status(400).json({ error: 'Invalid coordinates' });
@@ -211,7 +213,7 @@ app.get('/api/uv-today', async (req, res) => {
     const maxDate = new Date(today);
     maxDate.setDate(maxDate.getDate() + 16);
     const reqDate = new Date(requestedDate);
-    
+
     if (reqDate < today || reqDate > maxDate) {
       return res.status(400).json({ error: 'Date must be between today and 16 days from today' });
     }
@@ -221,7 +223,7 @@ app.get('/api/uv-today', async (req, res) => {
 
     // Create cache key including date (2 decimal places = ~1.1 km resolution)
     const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
-    
+
     // Check cache - return immediately if available
     const cached = uvCache.get(cacheKey);
     if (cached) {
@@ -232,10 +234,10 @@ app.get('/api/uv-today', async (req, res) => {
         metadata: {
           cached: true,
           cacheAge: Date.now() - cached.timestamp,
-          lastUpdated: new Date(cached.timestamp).toISOString()
-        }
+          lastUpdated: new Date(cached.timestamp).toISOString(),
+        },
       });
-      
+
       // For future dates, trigger background update
       if (reqDate >= today) {
         updateCacheInBackground(lat, lon, requestedDate, timezone, cacheKey);
@@ -258,7 +260,7 @@ app.get('/api/uv-today', async (req, res) => {
     // Update cache
     uvCache.set(cacheKey, {
       data: dateData,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     res.set('X-Cache-Status', 'miss');
@@ -267,13 +269,13 @@ app.get('/api/uv-today', async (req, res) => {
       metadata: {
         cached: false,
         cacheAge: 0,
-        lastUpdated: new Date().toISOString()
-      }
+        lastUpdated: new Date().toISOString(),
+      },
     });
   } catch (error) {
     console.error('UV API error:', error.message);
-    res.status(502).json({ 
-      error: 'Failed to fetch UV data. Please try again later.' 
+    res.status(502).json({
+      error: 'Failed to fetch UV data. Please try again later.',
     });
   }
 });
@@ -285,7 +287,7 @@ app.get('/api/daily-summary', async (req, res) => {
     const lat = parseFloat(req.query.lat) || DEFAULT_LAT;
     const lon = parseFloat(req.query.lon) || DEFAULT_LON;
     const requestedDate = req.query.date || getTodayInNewYork();
-    
+
     // Validate coordinates
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
       return res.status(400).json({ error: 'Invalid coordinates' });
@@ -302,7 +304,7 @@ app.get('/api/daily-summary', async (req, res) => {
     const maxDate = new Date(today);
     maxDate.setDate(maxDate.getDate() + 16);
     const reqDate = new Date(requestedDate);
-    
+
     if (reqDate < today || reqDate > maxDate) {
       return res.status(400).json({ error: 'Date must be between today and 16 days from today' });
     }
@@ -312,7 +314,7 @@ app.get('/api/daily-summary', async (req, res) => {
 
     // Create cache key for daily data
     const cacheKey = `daily_${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
-    
+
     // Check cache - return immediately if available
     const cached = uvCache.get(cacheKey);
     if (cached) {
@@ -323,10 +325,10 @@ app.get('/api/daily-summary', async (req, res) => {
         metadata: {
           cached: true,
           cacheAge: Date.now() - cached.timestamp,
-          lastUpdated: new Date(cached.timestamp).toISOString()
-        }
+          lastUpdated: new Date(cached.timestamp).toISOString(),
+        },
       });
-      
+
       // For future dates, trigger background update
       if (reqDate >= today) {
         updateDailyCacheInBackground(lat, lon, requestedDate, timezone, cacheKey);
@@ -349,7 +351,7 @@ app.get('/api/daily-summary', async (req, res) => {
     // Update cache
     uvCache.set(cacheKey, {
       data: dailyData,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
 
     res.set('X-Cache-Status', 'miss');
@@ -358,13 +360,13 @@ app.get('/api/daily-summary', async (req, res) => {
       metadata: {
         cached: false,
         cacheAge: 0,
-        lastUpdated: new Date().toISOString()
-      }
+        lastUpdated: new Date().toISOString(),
+      },
     });
   } catch (error) {
     console.error('Daily summary API error:', error.message);
-    res.status(502).json({ 
-      error: 'Failed to fetch daily summary data. Please try again later.' 
+    res.status(502).json({
+      error: 'Failed to fetch daily summary data. Please try again later.',
     });
   }
 });
@@ -376,20 +378,20 @@ app.get('/api/uv-today/poll', async (req, res) => {
     const lon = parseFloat(req.query.lon) || DEFAULT_LON;
     const requestedDate = req.query.date || getTodayInNewYork();
     const clientTimestamp = parseInt(req.query.timestamp) || 0;
-    
+
     const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
     const cached = uvCache.get(cacheKey);
-    
+
     if (cached && cached.timestamp > clientTimestamp) {
-      res.json({ 
-        hasUpdate: true, 
+      res.json({
+        hasUpdate: true,
         timestamp: cached.timestamp,
-        lastUpdated: new Date(cached.timestamp).toISOString()
+        lastUpdated: new Date(cached.timestamp).toISOString(),
       });
     } else {
-      res.json({ 
+      res.json({
         hasUpdate: false,
-        timestamp: cached ? cached.timestamp : null
+        timestamp: cached ? cached.timestamp : null,
       });
     }
   } catch (error) {

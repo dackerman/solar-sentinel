@@ -5,7 +5,7 @@ export class LocationService {
     lat: 40.7162,
     lon: -74.3625,
     name: 'Summit, NJ',
-    isUserLocation: false
+    isUserLocation: false,
   };
 
   async getCurrentLocation(): Promise<Location | null> {
@@ -15,31 +15,31 @@ export class LocationService {
     }
 
     const startTime = performance.now();
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const options = {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 300000 // 5 minutes
+        maximumAge: 300000, // 5 minutes
       };
 
       navigator.geolocation.getCurrentPosition(
-        async (position) => {
+        async position => {
           const locationName = await this.getLocationName(
             position.coords.latitude,
             position.coords.longitude
           );
           const endTime = performance.now();
           const duration = Math.round(endTime - startTime);
-          
+
           console.log(`Geolocation obtained in ${duration}ms`);
           resolve({
             lat: position.coords.latitude,
             lon: position.coords.longitude,
             name: locationName,
-            isUserLocation: true
+            isUserLocation: true,
           });
         },
-        (error) => {
+        error => {
           const endTime = performance.now();
           const duration = Math.round(endTime - startTime);
           console.log(`Geolocation error after ${duration}ms:`, error.message);
@@ -62,10 +62,10 @@ export class LocationService {
       );
       const endTime = performance.now();
       const duration = Math.round(endTime - startTime);
-      
+
       const data = await response.json();
       console.log(`Geocoding completed in ${duration}ms`);
-      
+
       if (data.city && data.principalSubdivision) {
         return `${data.city}, ${data.principalSubdivision}`;
       } else if (data.locality && data.principalSubdivision) {

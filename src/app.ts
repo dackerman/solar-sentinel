@@ -8,14 +8,14 @@ export class SolarSentinelApp {
   private api = new WeatherAPI();
   private locationService = new LocationService();
   private debugPanel!: DebugPanel;
-  
+
   private currentLocation: Location = this.locationService.getDefaultLocation();
   private currentDate = new Date().toLocaleDateString('en-CA');
   private uvChart: any = null;
   private weatherChart: any = null;
   private refreshTimer: number | null = null;
   private refreshInFlight = false;
-  
+
   private readonly REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
   async initialize(): Promise<void> {
@@ -45,18 +45,18 @@ export class SolarSentinelApp {
       const userLocation = await this.locationService.getCurrentLocation();
       const locationEndTime = performance.now();
       const locationDuration = Math.round(locationEndTime - locationStartTime);
-      
+
       if (userLocation) {
         this.currentLocation = userLocation;
-        this.debugPanel.log(`Location obtained (${locationDuration}ms)`, { 
+        this.debugPanel.log(`Location obtained (${locationDuration}ms)`, {
           name: userLocation.name,
           coords: `${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`,
-          duration: locationDuration
+          duration: locationDuration,
         });
       } else {
-        this.debugPanel.log(`Location failed (${locationDuration}ms)`, { 
+        this.debugPanel.log(`Location failed (${locationDuration}ms)`, {
           fallback: this.currentLocation.name,
-          duration: locationDuration
+          duration: locationDuration,
         });
       }
 
@@ -69,14 +69,14 @@ export class SolarSentinelApp {
 
       // Fetch weather data
       const data = await this.api.fetchWeatherData(this.currentLocation, this.currentDate);
-      
+
       // Log cache status with timing
       const cacheStatus = data.timing?.cacheStatus || (data.metadata?.cached ? 'hit' : 'miss');
       this.debugPanel.log(`UV API response: ${cacheStatus} (${data.timing?.duration}ms)`, {
         cached: data.metadata?.cached,
         cacheAge: data.metadata?.cacheAge,
         lastUpdated: data.metadata?.lastUpdated,
-        duration: data.timing?.duration
+        duration: data.timing?.duration,
       });
 
       // Show UI elements
@@ -93,7 +93,7 @@ export class SolarSentinelApp {
       const dateDisplay = dateObj.toLocaleDateString('en-US', {
         weekday: 'long',
         month: 'long',
-        day: 'numeric'
+        day: 'numeric',
       });
       const dateElement = document.getElementById('date-display');
       if (dateElement) {
@@ -106,7 +106,7 @@ export class SolarSentinelApp {
         const timeString = lastUpdated.toLocaleTimeString('en-US', {
           hour: 'numeric',
           minute: '2-digit',
-          hour12: true
+          hour12: true,
         });
         this.updateElement('current-time', `Last updated: ${timeString}`);
       }
@@ -116,10 +116,9 @@ export class SolarSentinelApp {
 
       // Render charts
       this.renderCharts(data);
-
     } catch (error) {
       this.debugPanel.log('Load error', { error: (error as Error).message });
-      
+
       if (!silent) {
         document.getElementById('loading')?.style.setProperty('display', 'none');
         document.getElementById('error')?.classList.remove('hidden');
@@ -149,7 +148,7 @@ export class SolarSentinelApp {
         const label = data.labels[i];
         const hour = parseInt(label.split(':')[0]);
         const isPM = label.includes('PM');
-        const hour24 = isPM && hour !== 12 ? hour + 12 : (!isPM && hour === 12 ? 0 : hour);
+        const hour24 = isPM && hour !== 12 ? hour + 12 : !isPM && hour === 12 ? 0 : hour;
 
         if (hour24 === currentHour) {
           currentIndex = i;
@@ -188,12 +187,13 @@ export class SolarSentinelApp {
   private async updateTodaysForecast(): Promise<void> {
     try {
       const dailyData = await this.api.fetchDailyData(this.currentLocation, this.currentDate);
-      
-      const cacheStatus = dailyData.timing?.cacheStatus || (dailyData.metadata?.cached ? 'hit' : 'miss');
+
+      const cacheStatus =
+        dailyData.timing?.cacheStatus || (dailyData.metadata?.cached ? 'hit' : 'miss');
       this.debugPanel.log(`Daily API response: ${cacheStatus} (${dailyData.timing?.duration}ms)`, {
         cached: dailyData.metadata?.cached,
         cacheAge: dailyData.metadata?.cacheAge,
-        duration: dailyData.timing?.duration
+        duration: dailyData.timing?.duration,
       });
 
       const tempHigh = Math.round(dailyData.tempMax || 0);
@@ -215,12 +215,13 @@ export class SolarSentinelApp {
   private async updateDailySummary(): Promise<void> {
     try {
       const dailyData = await this.api.fetchDailyData(this.currentLocation, this.currentDate);
-      
-      const cacheStatus = dailyData.timing?.cacheStatus || (dailyData.metadata?.cached ? 'hit' : 'miss');
+
+      const cacheStatus =
+        dailyData.timing?.cacheStatus || (dailyData.metadata?.cached ? 'hit' : 'miss');
       this.debugPanel.log(`Daily summary API: ${cacheStatus} (${dailyData.timing?.duration}ms)`, {
         cached: dailyData.metadata?.cached,
         cacheAge: dailyData.metadata?.cacheAge,
-        duration: dailyData.timing?.duration
+        duration: dailyData.timing?.duration,
       });
 
       const tempHigh = Math.round(dailyData.tempMax || 0);
@@ -278,7 +279,7 @@ export class SolarSentinelApp {
     }
 
     this.debugPanel.log('Scheduled 30-min auto-refresh timer');
-    
+
     this.refreshTimer = window.setInterval(async () => {
       const todayStr = new Date().toLocaleDateString('en-CA');
       if (this.currentDate === todayStr) {

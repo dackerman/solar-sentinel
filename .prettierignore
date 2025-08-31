@@ -1,0 +1,6 @@
+dist/
+node_modules/
+public/
+*.min.js
+package-lock.json
+*.md

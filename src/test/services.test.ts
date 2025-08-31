@@ -9,7 +9,7 @@ describe('WeatherAPI', () => {
     lat: 40.7162,
     lon: -74.3625,
     name: 'Summit, NJ',
-    isUserLocation: false
+    isUserLocation: false,
   };
 
   beforeEach(() => {
@@ -27,21 +27,19 @@ describe('WeatherAPI', () => {
       apparentTemperature: [58, 57],
       cloudCover: [0, 5],
       humidity: [70, 72],
-      date: '2025-08-31'
+      date: '2025-08-31',
     };
 
     const mockResponse = {
       ok: true,
       headers: { get: vi.fn().mockReturnValue('hit') },
-      json: vi.fn().mockResolvedValue(mockData)
+      json: vi.fn().mockResolvedValue(mockData),
     };
     vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
 
     const result = await api.fetchWeatherData(mockLocation, '2025-08-31');
 
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/uv-today?lat=40.7162&lon=-74.3625&date=2025-08-31'
-    );
+    expect(fetch).toHaveBeenCalledWith('/api/uv-today?lat=40.7162&lon=-74.3625&date=2025-08-31');
     expect(result.timing).toBeDefined();
     expect(result.timing?.cacheStatus).toBe('hit');
     expect(typeof result.timing?.duration).toBe('number');
@@ -51,12 +49,13 @@ describe('WeatherAPI', () => {
   it('should throw error when API fails', async () => {
     const mockResponse = {
       ok: false,
-      status: 500
+      status: 500,
     };
     vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
 
-    await expect(api.fetchWeatherData(mockLocation, '2025-08-31'))
-      .rejects.toThrow('Weather API failed: 500');
+    await expect(api.fetchWeatherData(mockLocation, '2025-08-31')).rejects.toThrow(
+      'Weather API failed: 500'
+    );
   });
 });
 
@@ -74,7 +73,7 @@ describe('LocationService', () => {
       lat: 40.7162,
       lon: -74.3625,
       name: 'Summit, NJ',
-      isUserLocation: false
+      isUserLocation: false,
     });
   });
 
@@ -82,23 +81,21 @@ describe('LocationService', () => {
     const mockPosition = {
       coords: {
         latitude: 40.7589,
-        longitude: -73.9851
-      }
+        longitude: -73.9851,
+      },
     };
 
-    vi.mocked(navigator.geolocation.getCurrentPosition).mockImplementation(
-      (success) => {
-        success(mockPosition as GeolocationPosition);
-      }
-    );
+    vi.mocked(navigator.geolocation.getCurrentPosition).mockImplementation(success => {
+      success(mockPosition as GeolocationPosition);
+    });
 
     // Mock the fetch for geocoding
     const mockGeoResponse = {
       city: 'New York',
-      principalSubdivision: 'NY'
+      principalSubdivision: 'NY',
     };
     vi.mocked(global.fetch).mockResolvedValue({
-      json: vi.fn().mockResolvedValue(mockGeoResponse)
+      json: vi.fn().mockResolvedValue(mockGeoResponse),
     } as any);
 
     const location = await service.getCurrentLocation();
@@ -107,19 +104,17 @@ describe('LocationService', () => {
       lat: 40.7589,
       lon: -73.9851,
       name: 'New York, NY',
-      isUserLocation: true
+      isUserLocation: true,
     });
   });
 
   it('should return null when geolocation fails', async () => {
-    vi.mocked(navigator.geolocation.getCurrentPosition).mockImplementation(
-      (_success, error) => {
-        error!({
-          code: 1,
-          message: 'Permission denied'
-        } as GeolocationPositionError);
-      }
-    );
+    vi.mocked(navigator.geolocation.getCurrentPosition).mockImplementation((_success, error) => {
+      error!({
+        code: 1,
+        message: 'Permission denied',
+      } as GeolocationPositionError);
+    });
 
     const location = await service.getCurrentLocation();
     expect(location).toBeNull();
