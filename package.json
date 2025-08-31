@@ -5,8 +5,9 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "start": "node server.js",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev": "concurrently \"pnpm run dev:server\" \"pnpm run dev:client\"",
     "dev:server": "nodemon server.js",
     "dev:client": "vite",
     "build": "vite build",
@@ -16,6 +17,10 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
   },
   "dependencies": {
     "express": "^4.18.2"

@@ -8,15 +8,29 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 
 ## Development Commands
 
+**Important: This project enforces pnpm usage. npm and yarn are blocked.**
+
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Development server with auto-restart
-npm run dev
+pnpm run dev
 
 # Production server
-npm start
+pnpm start
+
+# Build TypeScript
+pnpm run build
+
+# Run tests
+pnpm test
+
+# Type checking
+pnpm run typecheck
+
+# Format code
+pnpm run format
 
 # Docker development (recommended)
 docker compose up -d
@@ -105,3 +119,12 @@ When working with Chart.js in this app:
 - Use fixed height containers (384px) with explicit canvas styling
 - Weather chart uses dual Y-axes (precipitation left, temperature right)
 - UV chart uses per-bar color mapping based on values
+
+## Package Manager Enforcement
+
+This project enforces pnpm usage:
+- **engines** field requires Node >=18.0.0 and pnpm >=8.0.0
+- **preinstall** script blocks npm/yarn with `only-allow pnpm`
+- **.npmrc** configures strict package management
+- **Docker** uses pnpm with frozen lockfile
+- **pnpm-lock.yaml** is the authoritative lockfile (package-lock.json excluded)
