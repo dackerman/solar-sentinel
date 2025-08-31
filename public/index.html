@@ -197,6 +197,11 @@
         // Current data timestamp for polling
         let currentDataTimestamp = 0;
 
+        // Auto-refresh controls
+        let refreshTimer = null;
+        let refreshInFlight = false;
+        const REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
         // UV Index color mapping
         function getUVColor(uvValue) {
             if (uvValue <= 2) return '#22c55e';      // Green - Low
@@ -738,7 +743,7 @@
             });
         }
 
-        async function loadUVData(date = currentDate, skipPolling = false) {
+        async function loadUVData(date = currentDate, skipPolling = false, silent = false) {
             console.log('Loading UV data for date:', date);
             try {
                 // Try to get user's location
@@ -783,15 +788,20 @@
                 });
                 document.getElementById('date-display').textContent = dateDisplay;
 
-                // Hide loading, show charts and current conditions
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('current-conditions').classList.remove('hidden');
-                document.getElementById('chart-container').classList.remove('hidden');
-                document.getElementById('weather-chart-container').classList.remove('hidden');
-                document.getElementById('legend').classList.remove('hidden');
+                // Hide loading, show charts and current conditions (unless silent refresh)
+                if (!silent) {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('current-conditions').classList.remove('hidden');
+                    document.getElementById('chart-container').classList.remove('hidden');
+                    document.getElementById('weather-chart-container').classList.remove('hidden');
+                    document.getElementById('legend').classList.remove('hidden');
+                }
 
                 // Render charts with data
                 renderCharts(actualData);
+
+                // Ensure 30-min auto refresh is scheduled
+                scheduleAutoRefresh();
                 
                 // Start appropriate polling based on data freshness
                 if (date === currentDate && !skipPolling) {
@@ -807,10 +817,14 @@
                 // [This entire block removed since it's now handled by renderCharts()]
 
             } catch (error) {
-                // Hide loading, show error
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('error').classList.remove('hidden');
-                document.getElementById('error-message').textContent = error.message;
+                // Hide loading, show error unless silent
+                if (!silent) {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('error').classList.remove('hidden');
+                    document.getElementById('error-message').textContent = error.message;
+                } else {
+                    console.warn('Silent refresh failed:', error.message);
+                }
             }
         }
 
@@ -958,6 +972,26 @@
             }
         }
 
+        // Auto-refresh scheduling
+        function scheduleAutoRefresh() {
+            if (refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(async () => {
+                // If the local date rolled over and currentDate was today, advance to new today
+                const todayStr = new Date().toLocaleDateString('en-CA');
+                if (currentDate === todayStr) {
+                    // keep showing today as it rolls
+                    currentDate = todayStr;
+                }
+                if (refreshInFlight) return;
+                refreshInFlight = true;
+                try {
+                    await loadUVData(currentDate, true, true); // silent, don’t reset polling
+                } finally {
+                    refreshInFlight = false;
+                }
+            }, REFRESH_INTERVAL_MS);
+        }
+
         // Date navigation functions
         function navigateDate(direction) {
             // Parse date properly to avoid timezone issues
@@ -992,7 +1026,7 @@
                 document.getElementById('weather-chart-container').classList.add('hidden');
                 document.getElementById('legend').classList.add('hidden');
                 
-                loadUVData(currentDate);
+                loadUVData(currentDate).then(() => scheduleAutoRefresh());
             }
         }
 
@@ -1029,6 +1063,7 @@
         // Load data when page loads
         loadUVData().then(() => {
             updateNavigationButtons();
+            scheduleAutoRefresh();
         });
     </script>
     
