@@ -100,6 +100,17 @@ export class SolarSentinelApp {
         dateElement.textContent = dateDisplay;
       }
 
+      // Update last updated time
+      if (data.metadata?.lastUpdated) {
+        const lastUpdated = new Date(data.metadata.lastUpdated);
+        const timeString = lastUpdated.toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        this.updateElement('current-time', `Last updated: ${timeString}`);
+      }
+
       // Update current conditions
       this.updateCurrentConditions(data);
 
