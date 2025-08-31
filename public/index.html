@@ -218,7 +218,7 @@
 
         function formatDebugEntry(e) {
             const time = new Date(e.timestamp).toLocaleTimeString();
-            const cache = e.cacheHdr ? `${e.cacheHdr}/${e.cachedField ?? '-'}` : '-';
+            const cache = e.cacheHdr ? `${e.cacheHdr}/${e.cachedField || '-'}` : '-';
             const status = e.error ? `ERROR: ${e.error}` : `${e.status}`;
             return `[${time}] ${e.reason} -> ${e.name} ${e.url}\n  Status: ${status} | Cache: ${cache} | ${e.ms}ms`;
         }
@@ -234,7 +234,7 @@
                 const ms = Math.round(performance.now() - t0);
                 logDebug({
                     name, url, reason, status, cacheHdr,
-                    cachedField: body?.metadata?.cached,
+                    cachedField: body && body.metadata && body.metadata.cached,
                     ms
                 });
                 return { res, json: body };
