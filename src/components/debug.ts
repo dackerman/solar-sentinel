@@ -29,7 +29,7 @@ export class DebugPanel {
     document.getElementById('clear-debug')?.addEventListener('click', () => this.clear());
   }
 
-  log(message: string, data?: any): void {
+  log(message: string, data?: unknown): void {
     const timestamp = new Date().toLocaleTimeString();
     const entry: DebugEntry = { timestamp, message, data };
 

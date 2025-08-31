@@ -39,7 +39,7 @@ export interface Location {
 export interface DebugEntry {
   timestamp: string;
   message: string;
-  data?: any;
+  data?: unknown;
 }
 
 export interface RequestTiming {

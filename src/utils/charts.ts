@@ -17,7 +17,9 @@ export function getTempLineColor(temperature: number): string {
   return '#dc2626'; // deep red
 }
 
-export function createUVChart(canvas: HTMLCanvasElement, data: WeatherData): any {
+export type ChartInstance = { destroy: () => void };
+
+export function createUVChart(canvas: HTMLCanvasElement, data: WeatherData): ChartInstance {
   // @ts-ignore - Chart.js will be loaded globally
   return new Chart(canvas.getContext('2d'), {
     type: 'bar',
@@ -65,7 +67,7 @@ export function createUVChart(canvas: HTMLCanvasElement, data: WeatherData): any
         },
         tooltip: {
           callbacks: {
-            label: function (context: any) {
+            label: function (context: { parsed: { y: number }; dataset: { label: string } }) {
               const value = context.parsed.y;
               let level = 'Low';
               if (value > 10) level = 'Extreme';
@@ -93,7 +95,7 @@ export function createUVChart(canvas: HTMLCanvasElement, data: WeatherData): any
           },
           ticks: {
             maxRotation: window.innerWidth < 640 ? 45 : 0,
-            callback: function (value: any, index: number) {
+            callback: function (value: number, index: number) {
               if (window.innerWidth < 640) {
                 return index % 2 === 0 ? (this as any).getLabelForValue(value) : '';
               }
@@ -106,7 +108,7 @@ export function createUVChart(canvas: HTMLCanvasElement, data: WeatherData): any
   });
 }
 
-export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData): any {
+export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData): ChartInstance {
   // @ts-ignore - Chart.js will be loaded globally
   return new Chart(canvas.getContext('2d'), {
     type: 'line',
@@ -142,7 +144,7 @@ export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData)
           tension: 0.3,
           pointRadius: 0,
           segment: {
-            borderColor: (ctx: any) => {
+            borderColor: (ctx: { p0?: { parsed?: { y?: number } }; p1?: { parsed?: { y?: number } } }) => {
               const y0 = ctx.p0?.parsed?.y;
               const y1 = ctx.p1?.parsed?.y;
               if (typeof y0 !== 'number' || typeof y1 !== 'number') return undefined;
@@ -163,7 +165,7 @@ export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData)
           tension: 0.3,
           pointRadius: 0,
           segment: {
-            borderColor: (ctx: any) => {
+            borderColor: (ctx: { p0?: { parsed?: { y?: number } }; p1?: { parsed?: { y?: number } } }) => {
               const y0 = ctx.p0?.parsed?.y;
               const y1 = ctx.p1?.parsed?.y;
               if (typeof y0 !== 'number' || typeof y1 !== 'number') return undefined;
@@ -230,7 +232,7 @@ export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData)
           },
           ticks: {
             maxRotation: window.innerWidth < 640 ? 45 : 0,
-            callback: function (value: any, index: number) {
+            callback: function (value: number, index: number) {
               if (window.innerWidth < 640) {
                 return index % 2 === 0 ? (this as any).getLabelForValue(value) : '';
               }
