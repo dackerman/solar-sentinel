@@ -549,11 +549,32 @@
                         borderWidth: 1,
                         yAxisID: 'y'
                     }, {
-                        label: 'Apparent Temperature (°F)',
+                        label: 'Temperature (°F)',
                         data: data.temperature,
                         borderColor: USE_NEUTRAL_TEMP_LINE ? '#6b7280' : '#9ca3af',
                         backgroundColor: 'transparent',
                         borderWidth: 3,
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 0,
+                        segment: {
+                            borderColor: ctx => {
+                                if (USE_NEUTRAL_TEMP_LINE) return undefined;
+                                const y0 = ctx.p0?.parsed?.y;
+                                const y1 = ctx.p1?.parsed?.y;
+                                if (typeof y0 !== 'number' || typeof y1 !== 'number') return undefined;
+                                const t = (y0 + y1) / 2;
+                                return getTempLineColor(t);
+                            }
+                        },
+                        yAxisID: 'y1'
+                    }, {
+                        label: 'Apparent Temperature (°F)',
+                        data: data.apparentTemperature,
+                        borderColor: USE_NEUTRAL_TEMP_LINE ? '#374151' : '#6b7280',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
                         fill: false,
                         tension: 0.3,
                         pointRadius: 0,
