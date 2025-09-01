@@ -400,6 +400,12 @@ app.get('/api/uv-today/poll', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`UV Index app running on http://localhost:${PORT}`);
-});
+// Export the app for testing
+export default app;
+
+// Only start server if this file is run directly (not imported)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  app.listen(PORT, () => {
+    console.log(`UV Index app running on http://localhost:${PORT}`);
+  });
+}
