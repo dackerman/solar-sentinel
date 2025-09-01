@@ -7,17 +7,17 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 ## 📸 Screenshots
 
 ### 🖥️ Desktop Interface
-![Solar Sentinel Main UI](solar-sentinel-main.png)
+![Solar Sentinel Main UI](screenshots/solar-sentinel-main.png)
 *Live UV monitoring with location caching, interactive charts, and real-time weather data*
 
-![Solar Sentinel Debug Panel](solar-sentinel-debug.png)  
+![Solar Sentinel Debug Panel](screenshots/solar-sentinel-debug.png)  
 *Fixed debug panel showing location cache hits, API timing, and performance metrics*
 
 ### 📱 Mobile Experience
-![Solar Sentinel Mobile UI](solar-sentinel-mobile.png)
+![Solar Sentinel Mobile UI](screenshots/solar-sentinel-mobile.png)
 *Mobile-optimized responsive design with touch-friendly controls and compact layout*
 
-![Solar Sentinel Mobile Debug](solar-sentinel-mobile-debug.png)
+![Solar Sentinel Mobile Debug](screenshots/solar-sentinel-mobile-debug.png)
 *Mobile debug panel with optimized spacing and full-width bottom positioning*
 
 ## ✨ Features
@@ -351,6 +351,7 @@ Automated UI screenshots are generated using Playwright in Docker for both deskt
 
 ```bash
 # Generate desktop screenshots (1920x1080)
+cd screenshots/
 docker build -f Dockerfile.screenshot -t solar-sentinel-screenshot .
 docker run --rm --add-host host.docker.internal:host-gateway \
   -v $(pwd):/screenshots solar-sentinel-screenshot
@@ -360,7 +361,7 @@ docker build -f Dockerfile.mobile -t solar-sentinel-mobile .
 docker run --rm --add-host host.docker.internal:host-gateway \
   -v $(pwd):/screenshots solar-sentinel-mobile
 
-# Generated files:
+# Generated files in screenshots/:
 # - solar-sentinel-main.png (desktop interface)
 # - solar-sentinel-debug.png (desktop with debug panel)
 # - solar-sentinel-mobile.png (mobile interface)
