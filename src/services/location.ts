@@ -8,6 +8,52 @@ export class LocationService {
     isUserLocation: false,
   };
 
+  private readonly LOCATION_CACHE_KEY = 'solar_sentinel_location';
+  private readonly CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+  getCachedLocation(): Location | null {
+    try {
+      const cached = localStorage.getItem(this.LOCATION_CACHE_KEY);
+      if (!cached) return null;
+
+      const data = JSON.parse(cached);
+      const now = Date.now();
+      const age = now - data.timestamp;
+
+      if (age > this.CACHE_DURATION_MS) {
+        console.log(`Location cache expired (${Math.round(age / 1000 / 60 / 60)}h old)`);
+        localStorage.removeItem(this.LOCATION_CACHE_KEY);
+        return null;
+      }
+
+      console.log(`Location cache hit (${Math.round(age / 1000 / 60)}min old)`);
+      return {
+        lat: data.lat,
+        lon: data.lon,
+        name: data.name,
+        isUserLocation: true,
+      };
+    } catch (error) {
+      console.log('Location cache error:', error);
+      return null;
+    }
+  }
+
+  private setCachedLocation(location: Location): void {
+    try {
+      const data = {
+        lat: location.lat,
+        lon: location.lon,
+        name: location.name,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(this.LOCATION_CACHE_KEY, JSON.stringify(data));
+      console.log(`Location cached: ${location.name}`);
+    } catch (error) {
+      console.log('Location cache error:', error);
+    }
+  }
+
   async getCurrentLocation(): Promise<Location | null> {
     if (!navigator.geolocation) {
       console.log('Geolocation not supported');
@@ -32,12 +78,18 @@ export class LocationService {
           const duration = Math.round(endTime - startTime);
 
           console.log(`Geolocation obtained in ${duration}ms`);
-          resolve({
+
+          const location: Location = {
             lat: position.coords.latitude,
             lon: position.coords.longitude,
             name: locationName,
             isUserLocation: true,
-          });
+          };
+
+          // Cache the location
+          this.setCachedLocation(location);
+
+          resolve(location);
         },
         error => {
           const endTime = performance.now();

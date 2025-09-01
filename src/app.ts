@@ -40,25 +40,60 @@ export class SolarSentinelApp {
     this.debugPanel.log(`Loading UV data for ${this.currentDate}`, { reason });
 
     try {
-      // Get user location if available
-      const locationStartTime = performance.now();
-      const userLocation = await this.locationService.getCurrentLocation();
-      const locationEndTime = performance.now();
-      const locationDuration = Math.round(locationEndTime - locationStartTime);
-
-      if (userLocation) {
-        this.currentLocation = userLocation;
-        this.debugPanel.log(`Location obtained (${locationDuration}ms)`, {
-          name: userLocation.name,
-          coords: `${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`,
-          duration: locationDuration,
+      // Check for cached location first and use it immediately
+      const cachedLocation = this.locationService.getCachedLocation();
+      if (cachedLocation) {
+        this.currentLocation = cachedLocation;
+        this.debugPanel.log('Location: cache hit (0ms)', {
+          name: cachedLocation.name,
+          coords: `${cachedLocation.lat.toFixed(4)}, ${cachedLocation.lon.toFixed(4)}`,
+          source: 'localStorage',
         });
       } else {
-        this.debugPanel.log(`Location failed (${locationDuration}ms)`, {
+        this.debugPanel.log('Location: cache miss', {
           fallback: this.currentLocation.name,
-          duration: locationDuration,
+          source: 'default',
         });
       }
+
+      // Start fetching fresh location in background (don't await)
+      const locationStartTime = performance.now();
+      this.locationService.getCurrentLocation().then(userLocation => {
+        const locationEndTime = performance.now();
+        const locationDuration = Math.round(locationEndTime - locationStartTime);
+
+        if (userLocation) {
+          // Check if location changed significantly (more than ~100m)
+          const latDiff = Math.abs(userLocation.lat - this.currentLocation.lat);
+          const lonDiff = Math.abs(userLocation.lon - this.currentLocation.lon);
+          const hasLocationChanged = latDiff > 0.001 || lonDiff > 0.001;
+
+          if (hasLocationChanged) {
+            this.debugPanel.log(`Location updated (${locationDuration}ms)`, {
+              name: userLocation.name,
+              coords: `${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`,
+              duration: locationDuration,
+              changed: true,
+            });
+
+            this.currentLocation = userLocation;
+            // Reload data with new location
+            this.loadData(true);
+          } else {
+            this.debugPanel.log(`Location confirmed (${locationDuration}ms)`, {
+              name: userLocation.name,
+              coords: `${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`,
+              duration: locationDuration,
+              changed: false,
+            });
+          }
+        } else {
+          this.debugPanel.log(`Location failed (${locationDuration}ms)`, {
+            fallback: this.currentLocation.name,
+            duration: locationDuration,
+          });
+        }
+      });
 
       // Update location display
       const locationIcon = this.currentLocation.isUserLocation ? '📍 ' : '';
