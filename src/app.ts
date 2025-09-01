@@ -19,7 +19,7 @@ export class SolarSentinelApp {
   private readonly REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
   async initialize(): Promise<void> {
-    this.debugPanel = new DebugPanel(document.body);
+    this.debugPanel = new DebugPanel();
     this.setupEventListeners();
     await this.loadData();
     this.scheduleAutoRefresh();
