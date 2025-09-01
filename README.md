@@ -6,13 +6,19 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 
 ## 📸 Screenshots
 
-### Main Interface
+### 🖥️ Desktop Interface
 ![Solar Sentinel Main UI](solar-sentinel-main.png)
 *Live UV monitoring with location caching, interactive charts, and real-time weather data*
 
-### Developer Debug Panel  
-![Solar Sentinel Debug Panel](solar-sentinel-debug.png)
+![Solar Sentinel Debug Panel](solar-sentinel-debug.png)  
 *Fixed debug panel showing location cache hits, API timing, and performance metrics*
+
+### 📱 Mobile Experience
+![Solar Sentinel Mobile UI](solar-sentinel-mobile.png)
+*Mobile-optimized responsive design with touch-friendly controls and compact layout*
+
+![Solar Sentinel Mobile Debug](solar-sentinel-mobile-debug.png)
+*Mobile debug panel with optimized spacing and full-width bottom positioning*
 
 ## ✨ Features
 
@@ -64,16 +70,60 @@ open http://localhost:9890
 
 ### Local Development
 
-```bash
-# Install dependencies
-npm install
+**Note: This project uses pnpm for package management**
 
-# Start development server
-npm run dev
+```bash
+# Install pnpm (if not already installed)
+npm install -g pnpm
+
+# Install dependencies  
+pnpm install
+
+# Start development server (with auto-restart)
+pnpm run dev
 
 # Or start production server
-npm start
+pnpm start
+
+# Run tests
+pnpm test
+
+# Build TypeScript
+pnpm run build
+
+# Type checking
+pnpm run typecheck
+
+# Format code
+pnpm run format
 ```
+
+## 🛠️ Technology Stack
+
+### **Frontend**
+- **TypeScript** - Type-safe JavaScript with ES modules
+- **Vite** - Fast build tool and development server  
+- **Chart.js** - Interactive data visualization
+- **Tailwind CSS** - Utility-first CSS framework
+- **PWA APIs** - Service workers, manifest, installable app
+
+### **Backend** 
+- **Node.js 20+** - Runtime environment
+- **Express.js** - Web framework with ES modules
+- **Open-Meteo API** - Weather data source (no API key required)
+
+### **Development & Testing**
+- **Vitest** - Unit testing framework
+- **Playwright** - End-to-end testing and screenshots
+- **Prettier** - Code formatting
+- **TypeScript Compiler** - Type checking and transpilation
+- **pnpm** - Fast, disk space efficient package manager
+
+### **Infrastructure**
+- **Docker** - Containerization with multi-stage builds
+- **Docker Compose** - Service orchestration  
+- **Health Checks** - Container monitoring and reliability
+- **Non-root User** - Security best practices
 
 ## 🏗️ Architecture
 
@@ -165,19 +215,39 @@ The app supports browsing forecast data for up to 16 days with smart condition d
 
 ```
 solar-sentinel/
-├── server.js              # Express backend
-├── public/
-│   ├── index.html         # Frontend application
-│   ├── logo.png          # Application logo
-│   ├── manifest.json     # PWA manifest
-│   ├── sw.js            # Service worker
-│   ├── icon-192.png     # PWA icon (192x192)
-│   └── icon-512.png     # PWA icon (512x512)
-├── package.json           # Node.js dependencies
-├── Dockerfile             # Container definition
-├── docker-compose.yml     # Service orchestration
-├── CLAUDE.md             # Development instructions
-└── README.md             # This file
+├── server.js                    # Express backend
+├── src/                         # TypeScript source code
+│   ├── app.ts                   # Main application class
+│   ├── main.ts                  # Application entry point
+│   ├── components/
+│   │   └── debug.ts             # Debug panel component
+│   ├── services/
+│   │   ├── api.ts               # Weather API client
+│   │   └── location.ts          # Geolocation & caching service
+│   ├── types/
+│   │   └── weather.ts           # TypeScript interfaces
+│   ├── utils/
+│   │   └── charts.ts            # Chart.js utilities
+│   └── test/                    # Test files
+├── public/                      # Static assets
+│   ├── index.html               # Frontend HTML template
+│   ├── logo.png                # Application logo
+│   ├── manifest.json           # PWA manifest
+│   ├── sw.js                   # Service worker
+│   └── icons/                  # PWA icons (192px, 512px, etc.)
+├── dist/                       # Built assets (generated)
+├── screenshots/                # Screenshot generation
+│   ├── Dockerfile.screenshot   # Desktop screenshot container
+│   ├── Dockerfile.mobile       # Mobile screenshot container
+│   ├── screenshot-playwright.js # Desktop capture script
+│   └── screenshot-mobile.js    # Mobile capture script  
+├── package.json                # Dependencies & scripts
+├── tsconfig.json               # TypeScript configuration
+├── vitest.config.ts            # Test configuration
+├── Dockerfile                  # Production container
+├── docker-compose.yml          # Service orchestration
+├── AGENTS.md                   # Development guide for AI
+└── README.md                   # This file
 ```
 
 ### API Endpoints
@@ -277,26 +347,33 @@ curl http://localhost:9890/api/uv-today
 
 ## 📸 Screenshot Generation
 
-Automated UI screenshots are generated using Playwright in Docker:
+Automated UI screenshots are generated using Playwright in Docker for both desktop and mobile views:
 
 ```bash
-# Build screenshot container
+# Generate desktop screenshots (1920x1080)
 docker build -f Dockerfile.screenshot -t solar-sentinel-screenshot .
-
-# Generate screenshots
 docker run --rm --add-host host.docker.internal:host-gateway \
   -v $(pwd):/screenshots solar-sentinel-screenshot
 
+# Generate mobile screenshots (390x844 - iPhone 13 Pro)  
+docker build -f Dockerfile.mobile -t solar-sentinel-mobile .
+docker run --rm --add-host host.docker.internal:host-gateway \
+  -v $(pwd):/screenshots solar-sentinel-mobile
+
 # Generated files:
-# - solar-sentinel-main.png (main interface)
-# - solar-sentinel-debug.png (with debug panel)
+# - solar-sentinel-main.png (desktop interface)
+# - solar-sentinel-debug.png (desktop with debug panel)
+# - solar-sentinel-mobile.png (mobile interface)
+# - solar-sentinel-mobile-debug.png (mobile with debug panel)
 ```
 
-The screenshot system captures:
-- **Live UI state** with real weather data
-- **Location caching in action** (📍 indicates cached user location)
-- **Debug panel functionality** (fixed positioning, minimize/expand)
-- **Interactive elements** (charts, buttons, current conditions)
+### Screenshot Features
+- **Live UI state** with real weather data and current conditions
+- **Location caching demonstration** (📍 pin indicates cached user location)
+- **Debug panel showcase** (fixed positioning, minimize/expand, real logs)
+- **Responsive design verification** (desktop vs mobile layouts)
+- **Interactive elements capture** (charts, buttons, navigation controls)
+- **Performance metrics display** (cache hits, API timing, data age)
 
 ## 🤝 Contributing
 

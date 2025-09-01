@@ -1,0 +1,15 @@
+FROM mcr.microsoft.com/playwright:v1.55.0-jammy
+
+WORKDIR /app
+
+# Create screenshots directory
+RUN mkdir -p /screenshots
+
+# Install playwright for Node.js
+RUN npm install playwright
+
+# Copy mobile screenshot script
+COPY screenshot-mobile.js ./
+
+# Run the mobile screenshot script
+CMD ["node", "screenshot-mobile.js"]
