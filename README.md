@@ -1,25 +1,50 @@
 # ☀️ Solar Sentinel
 
-**Real-time UV Index and Weather Monitoring with Location Detection**
+**Real-time UV Index and Weather Monitoring with Instant Location Loading**
 
-Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather data including UV index, temperature, and precipitation probability. Features automatic location detection with fallback to Summit, NJ, and supports up to 16 days of forecast data navigation.
+Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather data including UV index, temperature, and precipitation probability. Features **instant-loading location caching**, automatic geolocation with reverse geocoding, and comprehensive debugging tools for developers.
 
-<img width="928" height="1381" alt="image" src="https://github.com/user-attachments/assets/7a3a0162-892d-4cdb-8903-d6e05b44d6b9" />
+## 📸 Screenshots
+
+### Main Interface
+![Solar Sentinel Main UI](solar-sentinel-main.png)
+*Live UV monitoring with location caching, interactive charts, and real-time weather data*
+
+### Developer Debug Panel  
+![Solar Sentinel Debug Panel](solar-sentinel-debug.png)
+*Fixed debug panel showing location cache hits, API timing, and performance metrics*
 
 ## ✨ Features
 
-- **📊 Dual Interactive Charts** - UV index bar chart and temperature/precipitation line chart using Chart.js
-- **🌡️ Smart Temperature Display** - Color-coded temperature line with thermal comfort bands (blue=cold, green=mild, orange=warm, red=hot)
-- **📋 Current Conditions Card** - Prominent display of current/forecast conditions with contextual data
-- **📱 Mobile-Optimized** - Responsive design with mobile-specific chart optimizations
-- **📍 Location Detection** - Automatic geolocation with reverse geocoding for location names
-- **📅 Date Navigation** - Browse up to 16 days of forecast data with arrow controls
-- **⚡ Real-time Data** - Fetches weather data from Open-Meteo API with dual endpoints (hourly + daily)
-- **💾 Smart Caching** - 10-minute location-based cache to reduce API calls
-- **🏥 Health Monitoring** - Built-in health checks and error handling
-- **🐳 Docker Ready** - Complete containerization with auto-restart
-- **🎨 Modern UI** - Clean interface with Tailwind CSS and custom logo
+### 🚀 **Performance & Caching**
+- **⚡ Instant Loading** - Location caching eliminates 6+ second geolocation delays 
+- **🗄️ Smart Location Cache** - 24-hour localStorage cache with background updates
+- **💾 API Caching** - 10-minute location-based cache to reduce API calls
+- **🎯 Background Refresh** - Updates location data without blocking UI
+
+### 📊 **Data Visualization** 
+- **📈 Interactive UV Chart** - Color-coded UV index bars with danger level indicators
+- **🌡️ Weather Chart** - Temperature lines with thermal comfort bands + precipitation areas
+- **📋 Smart Conditions Display** - Current hour data (today) or daily forecasts (future days)
+- **🎨 Color Coding** - UV levels (green→purple) and temperature zones (blue→red)
+
+### 📍 **Location & Navigation**
+- **🗺️ Automatic Geolocation** - Browser-based location detection with reverse geocoding
+- **📱 Location Indicator** - 📍 pin shows cached vs default location
+- **📅 Date Navigation** - Browse up to 16 days of forecast data
+- **🕒 Timezone Aware** - Proper local time handling and date boundaries
+
+### 🔧 **Developer Tools**
+- **🐛 Fixed Debug Panel** - Bottom-screen panel with minimize/expand functionality  
+- **📊 Performance Metrics** - Real-time API timing, cache status, and location updates
+- **⚡ Cache Monitoring** - Visual feedback for cache hits/misses and data age
+- **🔍 Request Logging** - Detailed logging of all API calls and responses
+
+### 🎯 **Technical Excellence**
+- **📱 Mobile-Optimized** - Responsive design with mobile-specific optimizations
+- **🐳 Docker Ready** - Complete containerization with health checks
 - **📲 PWA Features** - Installable app with offline support
+- **🔒 Security** - Non-root containers, input validation, error handling
 
 ## 🚀 Quick Start
 
@@ -216,12 +241,27 @@ The temperature line uses thermal comfort bands for quick visual reference:
 
 ## 📈 Performance
 
+### ⚡ **Location Loading**
+- **First visit**: Normal geolocation (~6 seconds) + caching for future
+- **Return visits**: **Instant loading** (0ms) from localStorage cache
+- **Cache duration**: 24 hours with automatic expiration
+- **Background updates**: Fresh location data without blocking UI
+
+### 🎯 **API Performance**  
+- **API response**: ~45ms (cached), ~200ms (fresh)
+- **Cache strategy**: 10-minute TTL for location-based weather data
+- **Request optimization**: Dual endpoints (hourly + daily) with separate caches
+
+### 💻 **Application Metrics**
 - **Cold start**: ~2-3 seconds
-- **API response**: ~100-200ms (cached)
-- **Bundle size**: ~460KB (including optimized logo)
+- **Bundle size**: ~460KB (including optimized logo)  
 - **Memory usage**: ~25MB container footprint
-- **Chart rendering**: Optimized for mobile with fixed dimensions and disabled animations
-- **Dual caching**: Separate caches for hourly and daily data to optimize performance
+- **Chart rendering**: Fixed dimensions, no animations for optimal mobile performance
+
+### 🔧 **Debug Performance**
+- **Debug panel**: Fixed positioning, instant toggle, minimize/expand
+- **Real-time logging**: Location cache status, API timing, response metrics
+- **Performance tracking**: Request duration, cache age, data freshness indicators
 
 ## 🧪 Health Monitoring
 
@@ -234,6 +274,29 @@ docker compose ps
 # Manual health check
 curl http://localhost:9890/api/uv-today
 ```
+
+## 📸 Screenshot Generation
+
+Automated UI screenshots are generated using Playwright in Docker:
+
+```bash
+# Build screenshot container
+docker build -f Dockerfile.screenshot -t solar-sentinel-screenshot .
+
+# Generate screenshots
+docker run --rm --add-host host.docker.internal:host-gateway \
+  -v $(pwd):/screenshots solar-sentinel-screenshot
+
+# Generated files:
+# - solar-sentinel-main.png (main interface)
+# - solar-sentinel-debug.png (with debug panel)
+```
+
+The screenshot system captures:
+- **Live UI state** with real weather data
+- **Location caching in action** (📍 indicates cached user location)
+- **Debug panel functionality** (fixed positioning, minimize/expand)
+- **Interactive elements** (charts, buttons, current conditions)
 
 ## 🤝 Contributing
 
