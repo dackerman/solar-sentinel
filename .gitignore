@@ -1,5 +1,9 @@
 node_modules/
 npm-debug.log*
 .env
+.env.*
+.vite/
+coverage/
+dist/
 .DS_Store
 .claude/

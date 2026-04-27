@@ -1,5 +1,6 @@
 export interface WeatherData {
   labels: string[];
+  timestamps?: string[];
   uv: number[];
   uvClearSky: number[];
   precipitation: number[];
@@ -8,6 +9,7 @@ export interface WeatherData {
   cloudCover: number[];
   humidity: number[];
   date: string;
+  daily?: DailyData;
   metadata?: {
     cached: boolean;
     cacheAge: number;
@@ -44,5 +46,5 @@ export interface DebugEntry {
 
 export interface RequestTiming {
   duration: number;
-  cacheStatus?: 'hit' | 'miss' | 'unknown';
+  cacheStatus?: 'hit' | 'miss' | 'local' | 'unknown';
 }

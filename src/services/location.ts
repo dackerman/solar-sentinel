@@ -2,14 +2,15 @@ import type { Location } from '../types/weather.js';
 
 export class LocationService {
   private readonly DEFAULT_LOCATION: Location = {
-    lat: 40.7162,
-    lon: -74.3625,
-    name: 'Summit, NJ',
+    lat: 42.8006,
+    lon: -71.3048,
+    name: 'Windham, NH',
     isUserLocation: false,
   };
 
   private readonly LOCATION_CACHE_KEY = 'solar_sentinel_location';
   private readonly CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+  private readonly HOME_RADIUS_DEGREES = 0.05; // Roughly 3-4 miles near Windham
 
   getCachedLocation(): Location | null {
     try {
@@ -63,9 +64,9 @@ export class LocationService {
     const startTime = performance.now();
     return new Promise(resolve => {
       const options = {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 300000, // 5 minutes
+        enableHighAccuracy: false,
+        timeout: 3000,
+        maximumAge: 900000, // 15 minutes
       };
 
       navigator.geolocation.getCurrentPosition(
@@ -104,6 +105,13 @@ export class LocationService {
 
   getDefaultLocation(): Location {
     return { ...this.DEFAULT_LOCATION };
+  }
+
+  isHomeLocation(location: Location): boolean {
+    return (
+      Math.abs(location.lat - this.DEFAULT_LOCATION.lat) <= this.HOME_RADIUS_DEGREES &&
+      Math.abs(location.lon - this.DEFAULT_LOCATION.lon) <= this.HOME_RADIUS_DEGREES
+    );
   }
 
   private async getLocationName(lat: number, lon: number): Promise<string> {

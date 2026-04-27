@@ -2,7 +2,7 @@ import { WeatherAPI } from './services/api.js';
 import { LocationService } from './services/location.js';
 import { DebugPanel } from './components/debug.js';
 import { createUVChart, createWeatherChart, getUVColor, getTempLineColor } from './utils/charts.js';
-import type { WeatherData, Location } from './types/weather.js';
+import type { WeatherData, DailyData, Location } from './types/weather.js';
 
 export class SolarSentinelApp {
   private api = new WeatherAPI();
@@ -15,6 +15,7 @@ export class SolarSentinelApp {
   private weatherChart: any = null;
   private refreshTimer: number | null = null;
   private refreshInFlight = false;
+  private chartRenderToken = 0;
 
   private readonly REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -38,68 +39,21 @@ export class SolarSentinelApp {
   private async loadData(silent = false): Promise<void> {
     const reason = silent ? 'auto-refresh' : 'user-initiated';
     this.debugPanel.log(`Loading UV data for ${this.currentDate}`, { reason });
+    let renderedLocalCache = false;
 
     try {
-      // Check for cached location first and use it immediately
-      const cachedLocation = this.locationService.getCachedLocation();
-      if (cachedLocation) {
-        this.currentLocation = cachedLocation;
-        this.debugPanel.log('Location: cache hit (0ms)', {
-          name: cachedLocation.name,
-          coords: `${cachedLocation.lat.toFixed(4)}, ${cachedLocation.lon.toFixed(4)}`,
-          source: 'localStorage',
+      this.prepareHomeFirstLocation();
+      this.refreshLocationInBackground();
+      this.updateLocationDisplay();
+
+      const localData = this.api.getCachedWeatherData(this.currentLocation, this.currentDate);
+      if (localData && !silent) {
+        renderedLocalCache = true;
+        this.debugPanel.log('Local weather cache hit (0ms)', {
+          cacheAge: localData.metadata?.cacheAge,
+          lastUpdated: localData.metadata?.lastUpdated,
         });
-      } else {
-        this.debugPanel.log('Location: cache miss', {
-          fallback: this.currentLocation.name,
-          source: 'default',
-        });
-      }
-
-      // Start fetching fresh location in background (don't await)
-      const locationStartTime = performance.now();
-      this.locationService.getCurrentLocation().then(userLocation => {
-        const locationEndTime = performance.now();
-        const locationDuration = Math.round(locationEndTime - locationStartTime);
-
-        if (userLocation) {
-          // Check if location changed significantly (more than ~100m)
-          const latDiff = Math.abs(userLocation.lat - this.currentLocation.lat);
-          const lonDiff = Math.abs(userLocation.lon - this.currentLocation.lon);
-          const hasLocationChanged = latDiff > 0.001 || lonDiff > 0.001;
-
-          if (hasLocationChanged) {
-            this.debugPanel.log(`Location updated (${locationDuration}ms)`, {
-              name: userLocation.name,
-              coords: `${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`,
-              duration: locationDuration,
-              changed: true,
-            });
-
-            this.currentLocation = userLocation;
-            // Reload data with new location
-            this.loadData(true);
-          } else {
-            this.debugPanel.log(`Location confirmed (${locationDuration}ms)`, {
-              name: userLocation.name,
-              coords: `${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`,
-              duration: locationDuration,
-              changed: false,
-            });
-          }
-        } else {
-          this.debugPanel.log(`Location failed (${locationDuration}ms)`, {
-            fallback: this.currentLocation.name,
-            duration: locationDuration,
-          });
-        }
-      });
-
-      // Update location display
-      const locationIcon = this.currentLocation.isUserLocation ? '📍 ' : '';
-      const locationDisplay = document.getElementById('location-display');
-      if (locationDisplay) {
-        locationDisplay.textContent = `${locationIcon}${this.currentLocation.name}`;
+        this.renderWeatherData(localData, false);
       }
 
       // Fetch weather data
@@ -107,54 +61,18 @@ export class SolarSentinelApp {
 
       // Log cache status with timing
       const cacheStatus = data.timing?.cacheStatus || (data.metadata?.cached ? 'hit' : 'miss');
-      this.debugPanel.log(`UV API response: ${cacheStatus} (${data.timing?.duration}ms)`, {
+      this.debugPanel.log(`Weather API response: ${cacheStatus} (${data.timing?.duration}ms)`, {
         cached: data.metadata?.cached,
         cacheAge: data.metadata?.cacheAge,
         lastUpdated: data.metadata?.lastUpdated,
         duration: data.timing?.duration,
       });
 
-      // Show UI elements
-      if (!silent) {
-        document.getElementById('loading')?.style.setProperty('display', 'none');
-        document.getElementById('current-conditions')?.classList.remove('hidden');
-        document.getElementById('chart-container')?.classList.remove('hidden');
-        document.getElementById('weather-chart-container')?.classList.remove('hidden');
-        document.getElementById('legend')?.classList.remove('hidden');
-      }
-
-      // Update date display
-      const dateObj = new Date(data.date + 'T00:00:00');
-      const dateDisplay = dateObj.toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-      });
-      const dateElement = document.getElementById('date-display');
-      if (dateElement) {
-        dateElement.textContent = dateDisplay;
-      }
-
-      // Update last updated time
-      if (data.metadata?.lastUpdated) {
-        const lastUpdated = new Date(data.metadata.lastUpdated);
-        const timeString = lastUpdated.toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        });
-        this.updateElement('current-time', `Last updated: ${timeString}`);
-      }
-
-      // Update current conditions
-      this.updateCurrentConditions(data);
-
-      // Render charts
-      this.renderCharts(data);
+      this.renderWeatherData(data, silent && !renderedLocalCache);
     } catch (error) {
       this.debugPanel.log('Load error', { error: (error as Error).message });
 
-      if (!silent) {
+      if (!silent && !renderedLocalCache) {
         document.getElementById('loading')?.style.setProperty('display', 'none');
         document.getElementById('error')?.classList.remove('hidden');
         const errorMessage = document.getElementById('error-message');
@@ -163,6 +81,125 @@ export class SolarSentinelApp {
         }
       }
     }
+  }
+
+  private prepareHomeFirstLocation(): void {
+    if (
+      this.currentLocation.isUserLocation &&
+      !this.locationService.isHomeLocation(this.currentLocation)
+    ) {
+      this.debugPanel.log('Location: using active away location', {
+        name: this.currentLocation.name,
+        coords: `${this.currentLocation.lat.toFixed(4)}, ${this.currentLocation.lon.toFixed(4)}`,
+      });
+      return;
+    }
+
+    const cachedLocation = this.locationService.getCachedLocation();
+    this.currentLocation = this.locationService.getDefaultLocation();
+
+    if (cachedLocation && !this.locationService.isHomeLocation(cachedLocation)) {
+      this.debugPanel.log('Location: away cache ignored for home-first load', {
+        name: cachedLocation.name,
+        coords: `${cachedLocation.lat.toFixed(4)}, ${cachedLocation.lon.toFixed(4)}`,
+        fallback: this.currentLocation.name,
+      });
+    } else {
+      this.debugPanel.log('Location: home-first default', {
+        name: this.currentLocation.name,
+        coords: `${this.currentLocation.lat.toFixed(4)}, ${this.currentLocation.lon.toFixed(4)}`,
+      });
+    }
+  }
+
+  private refreshLocationInBackground(): void {
+    const locationStartTime = performance.now();
+    this.locationService.getCurrentLocation().then(userLocation => {
+      const locationEndTime = performance.now();
+      const locationDuration = Math.round(locationEndTime - locationStartTime);
+
+      if (userLocation) {
+        const latDiff = Math.abs(userLocation.lat - this.currentLocation.lat);
+        const lonDiff = Math.abs(userLocation.lon - this.currentLocation.lon);
+        const isUserAtHome = this.locationService.isHomeLocation(userLocation);
+        const isCurrentAtHome = this.locationService.isHomeLocation(this.currentLocation);
+        const hasLocationChanged = isUserAtHome
+          ? !isCurrentAtHome
+          : latDiff > 0.001 || lonDiff > 0.001;
+
+        if (hasLocationChanged) {
+          const nextLocation = isUserAtHome
+            ? this.locationService.getDefaultLocation()
+            : userLocation;
+          this.debugPanel.log(`Location updated (${locationDuration}ms)`, {
+            name: nextLocation.name,
+            coords: `${nextLocation.lat.toFixed(4)}, ${nextLocation.lon.toFixed(4)}`,
+            duration: locationDuration,
+            changed: true,
+          });
+
+          this.currentLocation = nextLocation;
+          this.updateLocationDisplay();
+          this.loadData(true);
+        } else {
+          this.debugPanel.log(`Location confirmed (${locationDuration}ms)`, {
+            name: isUserAtHome ? this.locationService.getDefaultLocation().name : userLocation.name,
+            coords: `${userLocation.lat.toFixed(4)}, ${userLocation.lon.toFixed(4)}`,
+            duration: locationDuration,
+            changed: false,
+          });
+        }
+      } else {
+        this.debugPanel.log(`Location failed (${locationDuration}ms)`, {
+          fallback: this.currentLocation.name,
+          duration: locationDuration,
+        });
+      }
+    });
+  }
+
+  private updateLocationDisplay(): void {
+    const locationIcon = this.currentLocation.isUserLocation ? '📍 ' : '';
+    const locationDisplay = document.getElementById('location-display');
+    if (locationDisplay) {
+      locationDisplay.textContent = `${locationIcon}${this.currentLocation.name}`;
+    }
+  }
+
+  private renderWeatherData(data: WeatherData, silent: boolean): void {
+    if (!silent) {
+      document.getElementById('loading')?.style.setProperty('display', 'none');
+      document.getElementById('current-conditions')?.classList.remove('hidden');
+      document.getElementById('chart-container')?.classList.remove('hidden');
+      document.getElementById('weather-chart-container')?.classList.remove('hidden');
+      document.getElementById('legend')?.classList.remove('hidden');
+    }
+
+    const dateObj = new Date(data.date + 'T00:00:00');
+    const dateDisplay = dateObj.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+    const dateElement = document.getElementById('date-display');
+    if (dateElement) {
+      dateElement.textContent = dateDisplay;
+    }
+
+    if (data.metadata?.lastUpdated) {
+      const lastUpdated = new Date(data.metadata.lastUpdated);
+      const timeString = lastUpdated.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+      this.updateElement('current-time', `Last updated: ${timeString}`);
+    }
+
+    this.updateCurrentConditions(data);
+    void this.renderCharts(data).catch(error => {
+      this.debugPanel.log('Chart render error', { error: (error as Error).message });
+    });
   }
 
   private updateCurrentConditions(data: WeatherData): void {
@@ -210,80 +247,66 @@ export class SolarSentinelApp {
       this.setElementColor('current-temp-dual', getTempLineColor(temp));
 
       // Update today's forecast
-      this.updateTodaysForecast();
+      this.updateTodaysForecast(data.daily);
     } else {
       // Show daily summary for future days
       document.getElementById('dual-display')?.classList.add('hidden');
       document.getElementById('single-display')?.classList.remove('hidden');
-      this.updateDailySummary();
+      this.updateDailySummary(data.daily);
     }
   }
 
-  private async updateTodaysForecast(): Promise<void> {
-    try {
-      const dailyData = await this.api.fetchDailyData(this.currentLocation, this.currentDate);
-
-      const cacheStatus =
-        dailyData.timing?.cacheStatus || (dailyData.metadata?.cached ? 'hit' : 'miss');
-      this.debugPanel.log(`Daily API response: ${cacheStatus} (${dailyData.timing?.duration}ms)`, {
-        cached: dailyData.metadata?.cached,
-        cacheAge: dailyData.metadata?.cacheAge,
-        duration: dailyData.timing?.duration,
-      });
-
-      const tempHigh = Math.round(dailyData.tempMax || 0);
-      const tempLow = Math.round(dailyData.tempMin || 0);
-      const uvMax = (dailyData.uvMax || 0).toFixed(1);
-      const precipMax = Math.round(dailyData.precipMax || 0);
-
-      this.updateElement('today-temp-dual', `${tempHigh}°/${tempLow}°F`);
-      this.updateElement('today-uv-dual', uvMax);
-      this.updateElement('today-precip-dual', `${precipMax}%`);
-
-      this.setElementColor('today-uv-dual', getUVColor(parseFloat(uvMax)));
-      this.setElementColor('today-temp-dual', getTempLineColor(tempHigh));
-    } catch (error) {
-      this.debugPanel.log('Today forecast error', { error: (error as Error).message });
+  private updateTodaysForecast(dailyData?: DailyData): void {
+    if (!dailyData) {
+      this.debugPanel.log('Today forecast missing from weather response');
+      return;
     }
+
+    const tempHigh = Math.round(dailyData.tempMax || 0);
+    const tempLow = Math.round(dailyData.tempMin || 0);
+    const uvMax = (dailyData.uvMax || 0).toFixed(1);
+    const precipMax = Math.round(dailyData.precipMax || 0);
+
+    this.updateElement('today-temp-dual', `${tempHigh}°/${tempLow}°F`);
+    this.updateElement('today-uv-dual', uvMax);
+    this.updateElement('today-precip-dual', `${precipMax}%`);
+
+    this.setElementColor('today-uv-dual', getUVColor(parseFloat(uvMax)));
+    this.setElementColor('today-temp-dual', getTempLineColor(tempHigh));
   }
 
-  private async updateDailySummary(): Promise<void> {
-    try {
-      const dailyData = await this.api.fetchDailyData(this.currentLocation, this.currentDate);
-
-      const cacheStatus =
-        dailyData.timing?.cacheStatus || (dailyData.metadata?.cached ? 'hit' : 'miss');
-      this.debugPanel.log(`Daily summary API: ${cacheStatus} (${dailyData.timing?.duration}ms)`, {
-        cached: dailyData.metadata?.cached,
-        cacheAge: dailyData.metadata?.cacheAge,
-        duration: dailyData.timing?.duration,
-      });
-
-      const tempHigh = Math.round(dailyData.tempMax || 0);
-      const tempLow = Math.round(dailyData.tempMin || 0);
-      const uvMax = (dailyData.uvMax || 0).toFixed(1);
-      const precipMax = Math.round(dailyData.precipMax || 0);
-      const humidityMax = Math.round(dailyData.humidityMax || 0);
-
-      this.updateElement('current-temp', `${tempHigh}°/${tempLow}°F`);
-      this.updateElement('current-uv', uvMax);
-      this.updateElement('current-precip', `${precipMax}%`);
-      this.updateElement('current-humidity', `${humidityMax}%`);
-
-      this.setElementColor('current-uv', getUVColor(parseFloat(uvMax)));
-      this.setElementColor('current-temp', getTempLineColor(tempHigh));
-    } catch (error) {
-      this.debugPanel.log('Daily summary error', { error: (error as Error).message });
+  private updateDailySummary(dailyData?: DailyData): void {
+    if (!dailyData) {
+      this.debugPanel.log('Daily summary missing from weather response');
+      return;
     }
+
+    const tempHigh = Math.round(dailyData.tempMax || 0);
+    const tempLow = Math.round(dailyData.tempMin || 0);
+    const uvMax = (dailyData.uvMax || 0).toFixed(1);
+    const precipMax = Math.round(dailyData.precipMax || 0);
+    const humidityMax = Math.round(dailyData.humidityMax || 0);
+
+    this.updateElement('current-temp', `${tempHigh}°/${tempLow}°F`);
+    this.updateElement('current-uv', uvMax);
+    this.updateElement('current-precip', `${precipMax}%`);
+    this.updateElement('current-humidity', `${humidityMax}%`);
+
+    this.setElementColor('current-uv', getUVColor(parseFloat(uvMax)));
+    this.setElementColor('current-temp', getTempLineColor(tempHigh));
   }
 
-  private renderCharts(data: WeatherData): void {
+  private async renderCharts(data: WeatherData): Promise<void> {
+    const renderToken = ++this.chartRenderToken;
+
     // Destroy existing charts
     if (this.uvChart) {
       this.uvChart.destroy();
+      this.uvChart = null;
     }
     if (this.weatherChart) {
       this.weatherChart.destroy();
+      this.weatherChart = null;
     }
 
     // Get canvas elements
@@ -302,9 +325,19 @@ export class SolarSentinelApp {
       weatherCanvas.width = weatherCanvas.offsetWidth;
       weatherCanvas.height = 384;
 
-      // Create new charts
-      this.uvChart = createUVChart(uvCanvas, data);
-      this.weatherChart = createWeatherChart(weatherCanvas, data);
+      const [uvChart, weatherChart] = await Promise.all([
+        createUVChart(uvCanvas, data),
+        createWeatherChart(weatherCanvas, data),
+      ]);
+
+      if (renderToken !== this.chartRenderToken) {
+        uvChart.destroy();
+        weatherChart.destroy();
+        return;
+      }
+
+      this.uvChart = uvChart;
+      this.weatherChart = weatherChart;
     }
   }
 

@@ -35,11 +35,13 @@ describe('Date navigation bounds', () => {
     cloudCover: [0],
     humidity: [50],
     date,
+    daily: { date, tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 },
   });
 
   beforeEach(() => {
     setupDOM();
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('does not navigate before today and not beyond +16 days', async () => {
@@ -52,13 +54,6 @@ describe('Date navigation bounds', () => {
       headers: { get: vi.fn().mockReturnValue('hit') },
       json: vi.fn().mockResolvedValue(mkData(fmt(today))),
     } as any);
-    // Daily
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      headers: { get: vi.fn().mockReturnValue('hit') },
-      json: vi.fn().mockResolvedValue({ date: fmt(today), tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 }),
-    } as any);
-
     const app = new SolarSentinelApp();
     const init = app.initialize();
     // End geolocation immediately to avoid wait
@@ -67,20 +62,19 @@ describe('Date navigation bounds', () => {
     await init;
 
     // Attempt to go prev-day (should not fetch because date would be < today)
-    ;(document.getElementById('prev-day') as HTMLButtonElement).click();
-    expect(global.fetch).toHaveBeenCalledTimes(2); // only initial two calls
+    (document.getElementById('prev-day') as HTMLButtonElement).click();
+    expect(global.fetch).toHaveBeenCalledTimes(1); // only initial combined call
 
     // Navigate forward up to bounds (best-effort; clicks that exceed bounds are ignored by app)
     for (let i = 0; i < 16; i++) {
       vi.mocked(global.fetch).mockResolvedValueOnce({
         ok: true,
         headers: { get: vi.fn().mockReturnValue('hit') },
-        json: vi.fn().mockResolvedValue(mkData(fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + (i + 1)))))
-      } as any);
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: vi.fn().mockReturnValue('hit') },
-        json: vi.fn().mockResolvedValue({ date: fmt(today), tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 }),
+        json: vi
+          .fn()
+          .mockResolvedValue(
+            mkData(fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + (i + 1))))
+          ),
       } as any);
       (document.getElementById('next-day') as HTMLButtonElement).click();
       // Allow the microtask queue to process the async loadData
@@ -92,6 +86,8 @@ describe('Date navigation bounds', () => {
     await Promise.resolve();
 
     // Expect initial data + daily summary calls only if within bounds; ensure no extra before-today fetch
-    expect((global.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(
+      (global.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length
+    ).toBeGreaterThanOrEqual(2);
   });
 });

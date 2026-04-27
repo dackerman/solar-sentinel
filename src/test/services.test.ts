@@ -6,9 +6,9 @@ import type { WeatherData, Location } from '../types/weather.js';
 describe('WeatherAPI', () => {
   let api: WeatherAPI;
   const mockLocation: Location = {
-    lat: 40.7162,
-    lon: -74.3625,
-    name: 'Summit, NJ',
+    lat: 42.8006,
+    lon: -71.3048,
+    name: 'Windham, NH',
     isUserLocation: false,
   };
 
@@ -28,6 +28,14 @@ describe('WeatherAPI', () => {
       cloudCover: [0, 5],
       humidity: [70, 72],
       date: '2025-08-31',
+      daily: {
+        date: '2025-08-31',
+        tempMax: 70,
+        tempMin: 50,
+        uvMax: 5,
+        precipMax: 10,
+        humidityMax: 70,
+      },
     };
 
     const mockResponse = {
@@ -39,7 +47,7 @@ describe('WeatherAPI', () => {
 
     const result = await api.fetchWeatherData(mockLocation, '2025-08-31');
 
-    expect(fetch).toHaveBeenCalledWith('/api/uv-today?lat=40.7162&lon=-74.3625&date=2025-08-31');
+    expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31');
     expect(result.timing).toBeDefined();
     expect(result.timing?.cacheStatus).toBe('hit');
     expect(typeof result.timing?.duration).toBe('number');
@@ -72,9 +80,9 @@ describe('LocationService', () => {
   it('should return default location', () => {
     const location = service.getDefaultLocation();
     expect(location).toEqual({
-      lat: 40.7162,
-      lon: -74.3625,
-      name: 'Summit, NJ',
+      lat: 42.8006,
+      lon: -71.3048,
+      name: 'Windham, NH',
       isUserLocation: false,
     });
   });

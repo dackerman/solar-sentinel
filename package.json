@@ -1,7 +1,7 @@
 {
   "name": "solar-sentinel",
   "version": "1.0.0",
-  "description": "Solar Sentinel - UV index monitoring for Summit, NJ",
+  "description": "Solar Sentinel - UV index monitoring for Windham, NH",
   "type": "module",
   "main": "server.js",
   "scripts": {

@@ -36,11 +36,13 @@ describe('Last updated display', () => {
     cloudCover: [0],
     humidity: [50],
     date: today,
+    daily: { date: today, tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 },
   };
 
   beforeEach(() => {
     setupDOM();
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('renders formatted lastUpdated time when provided by API', async () => {
@@ -52,19 +54,6 @@ describe('Last updated display', () => {
       json: vi.fn().mockResolvedValue({
         ...baseData,
         metadata: { cached: true, cacheAge: 0, lastUpdated: lastUpdatedIso },
-      }),
-    } as any);
-
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      headers: { get: vi.fn().mockReturnValue('hit') },
-      json: vi.fn().mockResolvedValue({
-        date: today,
-        tempMax: 70,
-        tempMin: 50,
-        uvMax: 5,
-        precipMax: 10,
-        humidityMax: 70,
       }),
     } as any);
 

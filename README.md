@@ -129,17 +129,17 @@ pnpm run format
 
 ### Backend (`server.js`)
 - **Express.js** server with ES modules (`type: "module"`)
-- **Dual API endpoints** - Hourly data (`/api/uv-today`) and daily summaries (`/api/daily-summary`)
+- **Combined fast-path API** - `/api/weather` returns hourly data and the daily summary in one request
 - **Open-Meteo API** integration for UV index, precipitation probability, and apparent temperature
-- **Location-based caching** - Map keyed by coordinates with 10-minute TTL (separate caches for hourly/daily)
+- **Location-based caching** - Full 16-day forecasts are cached by rounded coordinates and refreshed in the background
 - **Date-aware filtering** - Extracts specific day's hourly data in America/New_York timezone
 - **Extended forecast** - Supports up to 16 days of forecast data
 - **Coordinate validation** - Validates lat/lon bounds and date ranges
 - **Error handling** with comprehensive validation and 502 responses
 
 ### Frontend (`public/index.html`)
-- **Self-contained HTML** with inline JavaScript and Tailwind CSS via CDN
-- **Geolocation API** - Auto-detects user location, falls back to Summit, NJ (40.7162, -74.3625)
+- **Vite-built frontend** with Tailwind CSS via CDN and lazily loaded Chart.js
+- **Geolocation API** - Auto-detects user location, falls back to Windham, NH (42.8006, -71.3048)
 - **Current Conditions Display** - Smart card showing current hour (today) or daily forecast (future days)
 - **Two Chart.js visualizations**:
   1. Weather chart (color-coded temperature line + precipitation area, dual Y-axis)
@@ -158,13 +158,13 @@ pnpm run format
 
 ## 📍 Location Handling
 
-**Default Location (Summit, NJ):**
-- Latitude: `40.7162`
-- Longitude: `-74.3625`
+**Default Location (Windham, NH):**
+- Latitude: `42.8006`
+- Longitude: `-71.3048`
 - Timezone: `America/New_York`
 
 **Geolocation Features:**
-- Browser geolocation API with 5-minute cache
+- Browser geolocation API with 15-minute cache
 - Reverse geocoding for location names
 - Timezone detection heuristic (US longitudes use America/New_York, others use UTC)
 - Coordinate validation with lat/lon bounds checking
@@ -253,11 +253,12 @@ solar-sentinel/
 ### API Endpoints
 
 - `GET /` - Serves the frontend application
-- `GET /api/uv-today` - Returns hourly weather data with optional parameters:
-  - `lat` - Latitude (defaults to Summit, NJ)
-  - `lon` - Longitude (defaults to Summit, NJ)
+- `GET /api/weather` - Returns hourly weather data and a daily summary with optional parameters:
+  - `lat` - Latitude (defaults to Windham, NH)
+  - `lon` - Longitude (defaults to Windham, NH)
   - `date` - Date in YYYY-MM-DD format (defaults to today)
-- `GET /api/daily-summary` - Returns daily highs/lows with same parameters
+- `GET /api/uv-today` - Compatibility endpoint for hourly weather data with same parameters
+- `GET /api/daily-summary` - Compatibility endpoint for daily highs/lows with same parameters
 - `GET /api/uv-today/poll` - Polling endpoint for real-time updates
 
 ### Response Formats
@@ -312,15 +313,15 @@ The temperature line uses thermal comfort bands for quick visual reference:
 ## 📈 Performance
 
 ### ⚡ **Location Loading**
-- **First visit**: Normal geolocation (~6 seconds) + caching for future
-- **Return visits**: **Instant loading** (0ms) from localStorage cache
+- **Home-first path**: Windham weather loads immediately, with geolocation checked in the background
+- **Away path**: Device location can replace Windham after a short background geolocation check
 - **Cache duration**: 24 hours with automatic expiration
 - **Background updates**: Fresh location data without blocking UI
 
 ### 🎯 **API Performance**  
-- **API response**: ~45ms (cached), ~200ms (fresh)
-- **Cache strategy**: 10-minute TTL for location-based weather data
-- **Request optimization**: Dual endpoints (hourly + daily) with separate caches
+- **API response**: Single-digit milliseconds from server memory cache, upstream fetch time when cold
+- **Cache strategy**: Full forecast cached by rounded coordinates and refreshed every 10 minutes
+- **Request optimization**: One combined endpoint returns hourly data plus daily highs/lows
 
 ### 💻 **Application Metrics**
 - **Cold start**: ~2-3 seconds

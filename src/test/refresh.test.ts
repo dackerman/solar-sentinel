@@ -36,12 +36,14 @@ describe('Auto-refresh behavior', () => {
     cloudCover: [0],
     humidity: [50],
     date: today,
+    daily: { date: today, tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 },
     metadata: { cached: true, cacheAge: 0, lastUpdated: new Date().toISOString() },
   });
 
   beforeEach(() => {
     setupDOM();
     vi.clearAllMocks();
+    localStorage.clear();
     vi.useFakeTimers();
   });
   afterEach(() => {
@@ -55,13 +57,6 @@ describe('Auto-refresh behavior', () => {
       headers: { get: vi.fn().mockReturnValue('hit') },
       json: vi.fn().mockResolvedValue(mkData()),
     } as any);
-    // Daily
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      headers: { get: vi.fn().mockReturnValue('hit') },
-      json: vi.fn().mockResolvedValue({ date: today, tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 }),
-    } as any);
-
     const app = new SolarSentinelApp();
     const initPromise = app.initialize();
     // End geolocation immediately so initialize can proceed
@@ -73,7 +68,7 @@ describe('Auto-refresh behavior', () => {
 
     await initPromise;
 
-    // No extra fetch during in-flight; still only 2 calls
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    // No extra fetch during in-flight; still only the combined weather call
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });

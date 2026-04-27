@@ -8,18 +8,26 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// In-memory cache for UV data (keyed by location)
-const uvCache = new Map();
+const HOME_LOCATION = {
+  lat: 42.8006,
+  lon: -71.3048,
+  name: 'Windham, NH',
+};
 
-// Cache cleanup function - removes past dates
+// In-memory forecast cache keyed by rounded location. Each entry stores the full
+// 16-day Open-Meteo response so date navigation can reuse one upstream fetch.
+const forecastCache = new Map();
+const forecastRefreshes = new Map();
+const FORECAST_REFRESH_MS = 10 * 60 * 1000;
+const CACHE_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+// Cache cleanup function - removes old location forecasts
 function cleanupCache() {
-  const today = getTodayInNewYork();
-  const todayDate = new Date(today);
+  const now = Date.now();
 
-  for (const [key, value] of uvCache.entries()) {
-    const keyDate = new Date(value.data.date);
-    if (keyDate < todayDate) {
-      uvCache.delete(key);
+  for (const [key, value] of forecastCache.entries()) {
+    if (now - value.timestamp > CACHE_RETENTION_MS) {
+      forecastCache.delete(key);
     }
   }
 }
@@ -28,9 +36,9 @@ function cleanupCache() {
 cleanupCache();
 setInterval(cleanupCache, 24 * 60 * 60 * 1000); // Daily
 
-// Default location (Summit, NJ)
-const DEFAULT_LAT = 40.7162;
-const DEFAULT_LON = -74.3625;
+// Default location (Windham, NH)
+const DEFAULT_LAT = HOME_LOCATION.lat;
+const DEFAULT_LON = HOME_LOCATION.lon;
 
 // Serve static files with appropriate cache headers
 // In production, serve built files; in development, serve public files
@@ -106,6 +114,7 @@ function filterDateData(hourlyData, targetDate) {
 
   return {
     labels,
+    timestamps: todayIndices.map(i => hourlyData.time[i]),
     uv: uvValues,
     uvClearSky: uvClearSkyValues,
     precipitation: precipValues,
@@ -135,252 +144,245 @@ function extractDailyData(dailyData, targetDate) {
   };
 }
 
-// Background cache update function for hourly data
-async function updateCacheInBackground(lat, lon, requestedDate, timezone, cacheKey) {
-  try {
-    const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
+function getForecastCacheKey(lat, lon) {
+  return `${lat.toFixed(2)},${lon.toFixed(2)}`;
+}
+
+function getTimezone(lon) {
+  return lon >= -130 && lon <= -60 ? 'America/New_York' : 'UTC';
+}
+
+function getStringQueryParam(value) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return typeof value === 'string' ? value : undefined;
+}
+
+function parseForecastRequest(req) {
+  const latParam = parseFloat(getStringQueryParam(req.query.lat));
+  const lonParam = parseFloat(getStringQueryParam(req.query.lon));
+  const lat = Number.isFinite(latParam) ? latParam : DEFAULT_LAT;
+  const lon = Number.isFinite(lonParam) ? lonParam : DEFAULT_LON;
+  const requestedDate = getStringQueryParam(req.query.date) || getTodayInNewYork();
+
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return { error: { status: 400, message: 'Invalid coordinates' } };
+  }
+
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(requestedDate)) {
+    return { error: { status: 400, message: 'Invalid date format. Use YYYY-MM-DD' } };
+  }
+
+  const today = new Date(getTodayInNewYork());
+  const maxDate = new Date(today);
+  maxDate.setDate(maxDate.getDate() + 16);
+  const reqDate = new Date(requestedDate);
+
+  if (reqDate < today || reqDate > maxDate) {
+    return {
+      error: { status: 400, message: 'Date must be between today and 16 days from today' },
+    };
+  }
+
+  return {
+    lat,
+    lon,
+    requestedDate,
+    timezone: getTimezone(lon),
+  };
+}
+
+function hasUsableForecast(data, requestedDate, requiredFields) {
+  if (requiredFields.includes('hourly')) {
+    const hasHourlyDate = data.hourly?.time?.some(timestamp =>
+      timestamp.startsWith(`${requestedDate}T`)
     );
+    if (!hasHourlyDate) return false;
+  }
 
-    if (!response.ok) {
-      console.error(`Background update failed: ${response.status}`);
-      return;
-    }
+  if (requiredFields.includes('daily')) {
+    const hasDailyDate = data.daily?.time?.includes(requestedDate);
+    if (!hasDailyDate) return false;
+  }
 
-    const data = await response.json();
-    const dateData = filterDateData(data.hourly, requestedDate);
+  return true;
+}
 
-    // Update cache with fresh data
-    uvCache.set(cacheKey, {
-      data: dateData,
-      timestamp: Date.now(),
+async function fetchForecastFromOpenMeteo(lat, lon, timezone) {
+  const response = await fetch(
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
+  );
+
+  if (!response.ok) {
+    throw new Error(`API responded with status: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+async function fetchAndCacheForecast(lat, lon, timezone, cacheKey) {
+  const currentRefresh = forecastRefreshes.get(cacheKey);
+  if (currentRefresh) {
+    return currentRefresh;
+  }
+
+  const refresh = fetchForecastFromOpenMeteo(lat, lon, timezone)
+    .then(data => {
+      const entry = {
+        data,
+        timestamp: Date.now(),
+      };
+      forecastCache.set(cacheKey, entry);
+      return entry;
+    })
+    .finally(() => {
+      forecastRefreshes.delete(cacheKey);
     });
 
-    console.log(`Background cache update completed for ${cacheKey}`);
-  } catch (error) {
-    console.error('Background update error:', error.message);
+  forecastRefreshes.set(cacheKey, refresh);
+  return refresh;
+}
+
+async function getForecast(lat, lon, requestedDate, timezone, requiredFields) {
+  const cacheKey = getForecastCacheKey(lat, lon);
+  const cached = forecastCache.get(cacheKey);
+
+  if (cached && hasUsableForecast(cached.data, requestedDate, requiredFields)) {
+    return { cacheKey, cacheStatus: 'hit', entry: cached };
+  }
+
+  const entry = await fetchAndCacheForecast(lat, lon, timezone, cacheKey);
+  return { cacheKey, cacheStatus: 'miss', entry };
+}
+
+function refreshForecastInBackground(lat, lon, timezone, cacheKey) {
+  if (forecastRefreshes.has(cacheKey)) {
+    return;
+  }
+
+  fetchAndCacheForecast(lat, lon, timezone, cacheKey)
+    .then(() => {
+      console.log(`Forecast cache refresh completed for ${cacheKey}`);
+    })
+    .catch(error => {
+      console.error('Forecast cache refresh error:', error.message);
+    });
+}
+
+function refreshIfStale(lat, lon, timezone, cacheKey, entry) {
+  if (Date.now() - entry.timestamp > FORECAST_REFRESH_MS) {
+    refreshForecastInBackground(lat, lon, timezone, cacheKey);
   }
 }
 
-// Background cache update function for daily data
-async function updateDailyCacheInBackground(lat, lon, requestedDate, timezone, cacheKey) {
-  try {
-    const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
-    );
+function addMetadata(data, entry, cacheStatus) {
+  const now = Date.now();
+  return {
+    ...data,
+    metadata: {
+      cached: cacheStatus === 'hit',
+      cacheAge: now - entry.timestamp,
+      lastUpdated: new Date(entry.timestamp).toISOString(),
+    },
+  };
+}
 
-    if (!response.ok) {
-      console.error(`Daily background update failed: ${response.status}`);
-      return;
+function sendForecastResponse(res, data, entry, cacheStatus) {
+  res.set('X-Cache-Status', cacheStatus);
+  res.json(addMetadata(data, entry, cacheStatus));
+}
+
+async function handleForecastRequest(req, res, requiredFields, buildData, logLabel, errorMessage) {
+  try {
+    const request = parseForecastRequest(req);
+    if (request.error) {
+      return res.status(request.error.status).json({ error: request.error.message });
     }
 
-    const data = await response.json();
-    const dailyData = extractDailyData(data.daily, requestedDate);
+    const { lat, lon, requestedDate, timezone } = request;
+    const { cacheKey, cacheStatus, entry } = await getForecast(
+      lat,
+      lon,
+      requestedDate,
+      timezone,
+      requiredFields
+    );
 
-    // Update cache with fresh data
-    uvCache.set(cacheKey, {
-      data: dailyData,
-      timestamp: Date.now(),
-    });
+    const data = buildData(entry.data, requestedDate);
+    sendForecastResponse(res, data, entry, cacheStatus);
 
-    console.log(`Daily background cache update completed for ${cacheKey}`);
+    if (cacheStatus === 'hit') {
+      refreshIfStale(lat, lon, timezone, cacheKey, entry);
+    }
   } catch (error) {
-    console.error('Daily background update error:', error.message);
+    console.error(`${logLabel} error:`, error.message);
+    res.status(502).json({
+      error: errorMessage,
+    });
   }
+}
+
+function buildWeatherData(forecastData, requestedDate) {
+  return {
+    ...filterDateData(forecastData.hourly, requestedDate),
+    daily: extractDailyData(forecastData.daily, requestedDate),
+  };
+}
+
+function prewarmHomeForecast() {
+  const cacheKey = getForecastCacheKey(HOME_LOCATION.lat, HOME_LOCATION.lon);
+  refreshForecastInBackground(HOME_LOCATION.lat, HOME_LOCATION.lon, 'America/New_York', cacheKey);
 }
 
 // UV API endpoint
 app.get('/api/uv-today', async (req, res) => {
-  try {
-    // Get coordinates and date from query params or use defaults
-    const lat = parseFloat(req.query.lat) || DEFAULT_LAT;
-    const lon = parseFloat(req.query.lon) || DEFAULT_LON;
-    const requestedDate = req.query.date || getTodayInNewYork();
-
-    // Validate coordinates
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-      return res.status(400).json({ error: 'Invalid coordinates' });
-    }
-
-    // Validate date format (YYYY-MM-DD)
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(requestedDate)) {
-      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
-    }
-
-    // Validate date range (today to 16 days from today)
-    const today = new Date(getTodayInNewYork());
-    const maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 16);
-    const reqDate = new Date(requestedDate);
-
-    if (reqDate < today || reqDate > maxDate) {
-      return res.status(400).json({ error: 'Date must be between today and 16 days from today' });
-    }
-
-    // Determine timezone (simple heuristic)
-    const timezone = lon >= -130 && lon <= -60 ? 'America/New_York' : 'UTC';
-
-    // Create cache key including date (2 decimal places = ~1.1 km resolution)
-    const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
-
-    // Check cache - return immediately if available
-    const cached = uvCache.get(cacheKey);
-    if (cached) {
-      // Return cached data with metadata
-      res.set('X-Cache-Status', 'hit');
-      res.json({
-        ...cached.data,
-        metadata: {
-          cached: true,
-          cacheAge: Date.now() - cached.timestamp,
-          lastUpdated: new Date(cached.timestamp).toISOString(),
-        },
-      });
-
-      // For future dates, trigger background update
-      if (reqDate >= today) {
-        updateCacheInBackground(lat, lon, requestedDate, timezone, cacheKey);
-      }
-      return;
-    }
-
-    // Fetch fresh data with extended forecast range
-    const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
-    );
-
-    if (!response.ok) {
-      throw new Error(`API responded with status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const dateData = filterDateData(data.hourly, requestedDate);
-
-    // Update cache
-    uvCache.set(cacheKey, {
-      data: dateData,
-      timestamp: Date.now(),
-    });
-
-    res.set('X-Cache-Status', 'miss');
-    res.json({
-      ...dateData,
-      metadata: {
-        cached: false,
-        cacheAge: 0,
-        lastUpdated: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error('UV API error:', error.message);
-    res.status(502).json({
-      error: 'Failed to fetch UV data. Please try again later.',
-    });
-  }
+  await handleForecastRequest(
+    req,
+    res,
+    ['hourly'],
+    (forecastData, requestedDate) => filterDateData(forecastData.hourly, requestedDate),
+    'UV API',
+    'Failed to fetch UV data. Please try again later.'
+  );
 });
 
 // Daily summary endpoint for highs/lows
 app.get('/api/daily-summary', async (req, res) => {
-  try {
-    // Get coordinates and date from query params or use defaults
-    const lat = parseFloat(req.query.lat) || DEFAULT_LAT;
-    const lon = parseFloat(req.query.lon) || DEFAULT_LON;
-    const requestedDate = req.query.date || getTodayInNewYork();
+  await handleForecastRequest(
+    req,
+    res,
+    ['daily'],
+    (forecastData, requestedDate) => extractDailyData(forecastData.daily, requestedDate),
+    'Daily summary API',
+    'Failed to fetch daily summary data. Please try again later.'
+  );
+});
 
-    // Validate coordinates
-    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-      return res.status(400).json({ error: 'Invalid coordinates' });
-    }
-
-    // Validate date format (YYYY-MM-DD)
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(requestedDate)) {
-      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
-    }
-
-    // Validate date range (today to 16 days from today)
-    const today = new Date(getTodayInNewYork());
-    const maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 16);
-    const reqDate = new Date(requestedDate);
-
-    if (reqDate < today || reqDate > maxDate) {
-      return res.status(400).json({ error: 'Date must be between today and 16 days from today' });
-    }
-
-    // Determine timezone (simple heuristic)
-    const timezone = lon >= -130 && lon <= -60 ? 'America/New_York' : 'UTC';
-
-    // Create cache key for daily data
-    const cacheKey = `daily_${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
-
-    // Check cache - return immediately if available
-    const cached = uvCache.get(cacheKey);
-    if (cached) {
-      // Return cached data with metadata
-      res.set('X-Cache-Status', 'hit');
-      res.json({
-        ...cached.data,
-        metadata: {
-          cached: true,
-          cacheAge: Date.now() - cached.timestamp,
-          lastUpdated: new Date(cached.timestamp).toISOString(),
-        },
-      });
-
-      // For future dates, trigger background update
-      if (reqDate >= today) {
-        updateDailyCacheInBackground(lat, lon, requestedDate, timezone, cacheKey);
-      }
-      return;
-    }
-
-    // Fetch fresh daily data
-    const response = await fetch(
-      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
-    );
-
-    if (!response.ok) {
-      throw new Error(`API responded with status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const dailyData = extractDailyData(data.daily, requestedDate);
-
-    // Update cache
-    uvCache.set(cacheKey, {
-      data: dailyData,
-      timestamp: Date.now(),
-    });
-
-    res.set('X-Cache-Status', 'miss');
-    res.json({
-      ...dailyData,
-      metadata: {
-        cached: false,
-        cacheAge: 0,
-        lastUpdated: new Date().toISOString(),
-      },
-    });
-  } catch (error) {
-    console.error('Daily summary API error:', error.message);
-    res.status(502).json({
-      error: 'Failed to fetch daily summary data. Please try again later.',
-    });
-  }
+// Combined weather endpoint used by the app fast path
+app.get('/api/weather', async (req, res) => {
+  await handleForecastRequest(
+    req,
+    res,
+    ['hourly', 'daily'],
+    buildWeatherData,
+    'Weather API',
+    'Failed to fetch weather data. Please try again later.'
+  );
 });
 
 // Polling endpoint to check if newer data is available
 app.get('/api/uv-today/poll', async (req, res) => {
   try {
-    const lat = parseFloat(req.query.lat) || DEFAULT_LAT;
-    const lon = parseFloat(req.query.lon) || DEFAULT_LON;
-    const requestedDate = req.query.date || getTodayInNewYork();
+    const latParam = parseFloat(getStringQueryParam(req.query.lat));
+    const lonParam = parseFloat(getStringQueryParam(req.query.lon));
+    const lat = Number.isFinite(latParam) ? latParam : DEFAULT_LAT;
+    const lon = Number.isFinite(lonParam) ? lonParam : DEFAULT_LON;
     const clientTimestamp = parseInt(req.query.timestamp) || 0;
 
-    const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${requestedDate}`;
-    const cached = uvCache.get(cacheKey);
+    const cacheKey = getForecastCacheKey(lat, lon);
+    const cached = forecastCache.get(cacheKey);
 
     if (cached && cached.timestamp > clientTimestamp) {
       res.json({
@@ -405,6 +407,9 @@ export default app;
 
 // Only start server if this file is run directly (not imported)
 if (import.meta.url === `file://${process.argv[1]}`) {
+  prewarmHomeForecast();
+  setInterval(prewarmHomeForecast, FORECAST_REFRESH_MS);
+
   app.listen(PORT, () => {
     console.log(`UV Index app running on http://localhost:${PORT}`);
   });

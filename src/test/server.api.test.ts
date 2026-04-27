@@ -50,6 +50,13 @@ function getMockDailyData(dates: string[]) {
   };
 }
 
+function getMockCombinedData(date: string) {
+  return {
+    ...getMockHourlyData(date),
+    ...getMockDailyData([date, getTestDate(15)]),
+  };
+}
+
 describe('Server API Endpoints', () => {
   beforeEach(() => {
     // Reset the mock fetch
@@ -63,7 +70,7 @@ describe('Server API Endpoints', () => {
   describe('GET /api/uv-today - Core Functionality', () => {
     it('should return UV data for successful API response', async () => {
       const testDate = getTestDate();
-      
+
       // Mock successful API response
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -71,9 +78,7 @@ describe('Server API Endpoints', () => {
         json: () => Promise.resolve(getMockHourlyData(testDate)),
       });
 
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ date: testDate });
+      const response = await request(app).get('/api/uv-today').query({ date: testDate });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('labels');
@@ -88,7 +93,7 @@ describe('Server API Endpoints', () => {
 
     it('should accept custom coordinates', async () => {
       const testDate = getTestDate(2);
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -101,7 +106,7 @@ describe('Server API Endpoints', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('uv');
-      
+
       // Verify the mock was called with the correct coordinates
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('latitude=41.5&longitude=-74.2')
@@ -111,9 +116,7 @@ describe('Server API Endpoints', () => {
 
   describe('GET /api/uv-today - Validation', () => {
     it('should validate coordinate bounds', async () => {
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ lat: 91, lon: 0 }); // Invalid latitude
+      const response = await request(app).get('/api/uv-today').query({ lat: 91, lon: 0 }); // Invalid latitude
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Invalid coordinates');
@@ -121,9 +124,7 @@ describe('Server API Endpoints', () => {
     });
 
     it('should validate longitude bounds', async () => {
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ lat: 40, lon: 181 }); // Invalid longitude
+      const response = await request(app).get('/api/uv-today').query({ lat: 40, lon: 181 }); // Invalid longitude
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Invalid coordinates');
@@ -131,9 +132,7 @@ describe('Server API Endpoints', () => {
     });
 
     it('should validate date format', async () => {
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ date: '2025/01/15' }); // Invalid format
+      const response = await request(app).get('/api/uv-today').query({ date: '2025/01/15' }); // Invalid format
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Invalid date format. Use YYYY-MM-DD');
@@ -142,9 +141,7 @@ describe('Server API Endpoints', () => {
 
     it('should validate date range - past dates', async () => {
       const pastDate = '2020-01-01';
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ date: pastDate });
+      const response = await request(app).get('/api/uv-today').query({ date: pastDate });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Date must be between today and 16 days from today');
@@ -153,9 +150,7 @@ describe('Server API Endpoints', () => {
 
     it('should validate date range - far future dates', async () => {
       const futureDate = getTestDate(20); // 20 days from now (beyond 16 day limit)
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ date: futureDate });
+      const response = await request(app).get('/api/uv-today').query({ date: futureDate });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Date must be between today and 16 days from today');
@@ -166,15 +161,13 @@ describe('Server API Endpoints', () => {
   describe('GET /api/uv-today - Error Handling', () => {
     it('should handle API server errors', async () => {
       const testDate = getTestDate(3);
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
       });
 
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ date: testDate });
+      const response = await request(app).get('/api/uv-today').query({ date: testDate });
 
       expect(response.status).toBe(502);
       expect(response.body.error).toBe('Failed to fetch UV data. Please try again later.');
@@ -183,12 +176,10 @@ describe('Server API Endpoints', () => {
 
     it('should handle network errors', async () => {
       const testDate = getTestDate(4);
-      
+
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ date: testDate });
+      const response = await request(app).get('/api/uv-today').query({ date: testDate });
 
       expect(response.status).toBe(502);
       expect(response.body.error).toBe('Failed to fetch UV data. Please try again later.');
@@ -200,16 +191,14 @@ describe('Server API Endpoints', () => {
     it('should return daily summary data', async () => {
       const testDate = getTestDate(5);
       const testDates = [testDate, getTestDate(6)];
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: () => Promise.resolve(getMockDailyData(testDates)),
       });
 
-      const response = await request(app)
-        .get('/api/daily-summary')
-        .query({ date: testDate });
+      const response = await request(app).get('/api/daily-summary').query({ date: testDate });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('date');
@@ -224,11 +213,31 @@ describe('Server API Endpoints', () => {
     });
   });
 
+  describe('GET /api/weather - Combined Fast Path', () => {
+    it('should return hourly and daily data from one upstream response', async () => {
+      const testDate = getTestDate(6);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockCombinedData(testDate)),
+      });
+
+      const response = await request(app).get('/api/weather').query({ date: testDate });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('uv');
+      expect(response.body).toHaveProperty('daily');
+      expect(response.body.daily).toHaveProperty('tempMax');
+      expect(response.body.date).toBe(testDate);
+      expect(response.body.daily.date).toBe(testDate);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('GET /api/daily-summary - Validation', () => {
     it('should validate coordinates for daily summary', async () => {
-      const response = await request(app)
-        .get('/api/daily-summary')
-        .query({ lat: -91, lon: 0 });
+      const response = await request(app).get('/api/daily-summary').query({ lat: -91, lon: 0 });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Invalid coordinates');
@@ -236,9 +245,7 @@ describe('Server API Endpoints', () => {
     });
 
     it('should validate date format for daily summary', async () => {
-      const response = await request(app)
-        .get('/api/daily-summary')
-        .query({ date: 'invalid-date' });
+      const response = await request(app).get('/api/daily-summary').query({ date: 'invalid-date' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toBe('Invalid date format. Use YYYY-MM-DD');
@@ -249,18 +256,18 @@ describe('Server API Endpoints', () => {
   describe('GET /api/daily-summary - Error Handling', () => {
     it('should handle API errors for daily summary', async () => {
       const testDate = getTestDate(7);
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
       });
 
-      const response = await request(app)
-        .get('/api/daily-summary')
-        .query({ date: testDate });
+      const response = await request(app).get('/api/daily-summary').query({ date: testDate });
 
       expect(response.status).toBe(502);
-      expect(response.body.error).toBe('Failed to fetch daily summary data. Please try again later.');
+      expect(response.body.error).toBe(
+        'Failed to fetch daily summary data. Please try again later.'
+      );
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
@@ -281,7 +288,7 @@ describe('Server API Endpoints', () => {
   describe('Timezone handling', () => {
     it('should use America/New_York timezone for US coordinates', async () => {
       const testDate = getTestDate(8);
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -293,16 +300,14 @@ describe('Server API Endpoints', () => {
         .query({ lat: 40.7, lon: -74.0, date: testDate }); // New York coordinates
 
       expect(response.status).toBe(200);
-      
+
       // Verify the timezone parameter was set correctly
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('timezone=America/New_York')
-      );
+      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('timezone=America/New_York'));
     });
 
     it('should use UTC timezone for non-US coordinates', async () => {
       const testDate = getTestDate(9);
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -314,11 +319,9 @@ describe('Server API Endpoints', () => {
         .query({ lat: 51.5, lon: -0.1, date: testDate }); // London coordinates
 
       expect(response.status).toBe(200);
-      
+
       // Verify the timezone parameter was set correctly
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('timezone=UTC')
-      );
+      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('timezone=UTC'));
     });
   });
 
@@ -341,7 +344,7 @@ describe('Server API Endpoints', () => {
   describe('Cache Key Isolation', () => {
     it('should use different cache keys for different coordinates', async () => {
       const testDate = getTestDate(10);
-      
+
       // Setup mocks for two different locations
       mockFetch
         .mockResolvedValueOnce({
@@ -375,7 +378,7 @@ describe('Server API Endpoints', () => {
     it('should use different cache keys for different dates', async () => {
       const testDate1 = getTestDate(11);
       const testDate2 = getTestDate(12);
-      
+
       // Setup mocks for two different dates
       mockFetch
         .mockResolvedValueOnce({
@@ -390,14 +393,10 @@ describe('Server API Endpoints', () => {
         });
 
       // Request for date 1
-      const response1 = await request(app)
-        .get('/api/uv-today')
-        .query({ date: testDate1 });
+      const response1 = await request(app).get('/api/uv-today').query({ date: testDate1 });
 
       // Request for date 2 - should not hit cache due to different dates
-      const response2 = await request(app)
-        .get('/api/uv-today')
-        .query({ date: testDate2 });
+      const response2 = await request(app).get('/api/uv-today').query({ date: testDate2 });
 
       expect(response1.status).toBe(200);
       expect(response2.status).toBe(200);

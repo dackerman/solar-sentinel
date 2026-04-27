@@ -18,9 +18,162 @@ export function getTempLineColor(temperature: number): string {
 }
 
 export type ChartInstance = { destroy: () => void };
+let chartConstructor: any | null = null;
 
-export function createUVChart(canvas: HTMLCanvasElement, data: WeatherData): ChartInstance {
-  // @ts-ignore - Chart.js will be loaded globally
+interface TimeMarker {
+  label: string;
+  time: Date;
+  color: string;
+  lineDash: number[];
+  labelRow: number;
+}
+
+async function getChartConstructor(): Promise<any> {
+  const globalChart = (globalThis as any).Chart;
+  if (globalChart) {
+    return globalChart;
+  }
+
+  if (!chartConstructor) {
+    const chartModule = await import('chart.js/auto');
+    chartConstructor = chartModule.default;
+  }
+
+  return chartConstructor;
+}
+
+function getDateKey(date: Date): string {
+  return date.toLocaleDateString('en-CA');
+}
+
+function getTimeMarkers(data: WeatherData): TimeMarker[] {
+  const markers: TimeMarker[] = [];
+  const now = new Date();
+
+  if (getDateKey(now) === data.date) {
+    markers.push({
+      label: 'Now',
+      time: now,
+      color: '#111827',
+      lineDash: [],
+      labelRow: 0,
+    });
+  }
+
+  if (data.metadata?.lastUpdated) {
+    const lastUpdated = new Date(data.metadata.lastUpdated);
+    if (!Number.isNaN(lastUpdated.getTime()) && getDateKey(lastUpdated) === data.date) {
+      markers.push({
+        label: 'Updated',
+        time: lastUpdated,
+        color: '#64748b',
+        lineDash: [3, 4],
+        labelRow: 1,
+      });
+    }
+  }
+
+  return markers;
+}
+
+function getMarkerPosition(chart: any, data: WeatherData, markerTime: Date): number | null {
+  const xScale = chart.scales?.x;
+  const timestamps = data.timestamps;
+
+  if (!xScale || !timestamps || timestamps.length === 0) {
+    return null;
+  }
+
+  const times = timestamps.map(timestamp => new Date(timestamp).getTime());
+  const markerMs = markerTime.getTime();
+  const firstMs = times[0];
+  const lastMs = times[times.length - 1];
+  const intervalMs = times.length > 1 ? times[1] - times[0] : 60 * 60 * 1000;
+
+  if (Number.isNaN(markerMs) || markerMs < firstMs || markerMs > lastMs + intervalMs) {
+    return null;
+  }
+
+  for (let i = 0; i < times.length - 1; i++) {
+    if (markerMs >= times[i] && markerMs <= times[i + 1]) {
+      const progress = (markerMs - times[i]) / (times[i + 1] - times[i]);
+      const startX = xScale.getPixelForValue(i);
+      const endX = xScale.getPixelForValue(i + 1);
+      return startX + (endX - startX) * progress;
+    }
+  }
+
+  const previousX = xScale.getPixelForValue(Math.max(0, times.length - 2));
+  const lastX = xScale.getPixelForValue(times.length - 1);
+  const step = times.length > 1 ? lastX - previousX : 0;
+  return lastX + step * ((markerMs - lastMs) / intervalMs);
+}
+
+function createTimeMarkersPlugin(data: WeatherData): any {
+  const markers = getTimeMarkers(data);
+
+  return {
+    id: `time-markers-${data.date}`,
+    afterDraw(chart: any) {
+      if (markers.length === 0) return;
+
+      const { ctx, chartArea } = chart;
+      if (!ctx || !chartArea) return;
+
+      markers.forEach(marker => {
+        const x = getMarkerPosition(chart, data, marker.time);
+        if (x === null || x < chartArea.left || x > chartArea.right) {
+          return;
+        }
+
+        ctx.save();
+        ctx.strokeStyle = marker.color;
+        ctx.lineWidth = marker.lineDash.length > 0 ? 1.5 : 2;
+        ctx.setLineDash(marker.lineDash);
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+        ctx.restore();
+
+        drawMarkerLabel(ctx, chartArea, x, marker);
+      });
+    },
+  };
+}
+
+function drawMarkerLabel(
+  ctx: CanvasRenderingContext2D,
+  chartArea: any,
+  x: number,
+  marker: TimeMarker
+): void {
+  const textPaddingX = 5;
+  const textHeight = 16;
+  const textTop = chartArea.top + 4 + marker.labelRow * (textHeight + 2);
+
+  ctx.save();
+  ctx.font = '11px sans-serif';
+  const textWidth = ctx.measureText(marker.label).width;
+  const labelWidth = textWidth + textPaddingX * 2;
+  const labelLeft = Math.min(Math.max(x + 5, chartArea.left), chartArea.right - labelWidth);
+
+  ctx.fillStyle = marker.color;
+  ctx.globalAlpha = 0.9;
+  ctx.fillRect(labelLeft, textTop, labelWidth, textHeight);
+
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(marker.label, labelLeft + textPaddingX, textTop + textHeight / 2);
+  ctx.restore();
+}
+
+export async function createUVChart(
+  canvas: HTMLCanvasElement,
+  data: WeatherData
+): Promise<ChartInstance> {
+  const Chart = await getChartConstructor();
   return new Chart(canvas.getContext('2d'), {
     type: 'bar',
     data: {
@@ -105,11 +258,15 @@ export function createUVChart(canvas: HTMLCanvasElement, data: WeatherData): Cha
         },
       },
     },
+    plugins: [createTimeMarkersPlugin(data)],
   });
 }
 
-export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData): ChartInstance {
-  // @ts-ignore - Chart.js will be loaded globally
+export async function createWeatherChart(
+  canvas: HTMLCanvasElement,
+  data: WeatherData
+): Promise<ChartInstance> {
+  const Chart = await getChartConstructor();
   return new Chart(canvas.getContext('2d'), {
     type: 'line',
     data: {
@@ -144,7 +301,10 @@ export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData)
           tension: 0.3,
           pointRadius: 0,
           segment: {
-            borderColor: (ctx: { p0?: { parsed?: { y?: number } }; p1?: { parsed?: { y?: number } } }) => {
+            borderColor: (ctx: {
+              p0?: { parsed?: { y?: number } };
+              p1?: { parsed?: { y?: number } };
+            }) => {
               const y0 = ctx.p0?.parsed?.y;
               const y1 = ctx.p1?.parsed?.y;
               if (typeof y0 !== 'number' || typeof y1 !== 'number') return undefined;
@@ -165,7 +325,10 @@ export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData)
           tension: 0.3,
           pointRadius: 0,
           segment: {
-            borderColor: (ctx: { p0?: { parsed?: { y?: number } }; p1?: { parsed?: { y?: number } } }) => {
+            borderColor: (ctx: {
+              p0?: { parsed?: { y?: number } };
+              p1?: { parsed?: { y?: number } };
+            }) => {
               const y0 = ctx.p0?.parsed?.y;
               const y1 = ctx.p1?.parsed?.y;
               if (typeof y0 !== 'number' || typeof y1 !== 'number') return undefined;
@@ -242,5 +405,6 @@ export function createWeatherChart(canvas: HTMLCanvasElement, data: WeatherData)
         },
       },
     },
+    plugins: [createTimeMarkersPlugin(data)],
   });
 }
