@@ -14,7 +14,9 @@ export interface WeatherData {
     cached: boolean;
     cacheAge: number;
     lastUpdated: string;
+    performance?: ServerPerformanceMetadata;
   };
+  timing?: RequestTiming;
 }
 
 export interface DailyData {
@@ -28,7 +30,9 @@ export interface DailyData {
     cached: boolean;
     cacheAge: number;
     lastUpdated: string;
+    performance?: ServerPerformanceMetadata;
   };
+  timing?: RequestTiming;
 }
 
 export interface Location {
@@ -46,5 +50,14 @@ export interface DebugEntry {
 
 export interface RequestTiming {
   duration: number;
+  responseDuration?: number;
+  parseDuration?: number;
+  cacheWriteDuration?: number;
   cacheStatus?: 'hit' | 'miss' | 'local' | 'unknown';
+  serverTiming?: string | null;
+}
+
+export interface ServerPerformanceMetadata {
+  totalMs: number;
+  phases: Record<string, number>;
 }

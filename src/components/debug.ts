@@ -4,7 +4,8 @@ export class DebugPanel {
   private entries: DebugEntry[] = [];
   private isVisible = false;
   private isMinimized = false;
-  private readonly maxEntries = 50;
+  private readonly maxEntries = 150;
+  private readonly consoleLoggingEnabled = this.getConsoleLoggingEnabled();
 
   constructor() {
     this.setupPanel();
@@ -37,6 +38,10 @@ export class DebugPanel {
   log(message: string, data?: unknown): void {
     const timestamp = new Date().toLocaleTimeString();
     const entry: DebugEntry = { timestamp, message, data };
+
+    if (this.consoleLoggingEnabled) {
+      console.debug(`[Solar Sentinel] ${message}`, data ?? '');
+    }
 
     this.entries.push(entry);
     if (this.entries.length > this.maxEntries) {
@@ -103,5 +108,13 @@ export class DebugPanel {
       .join('');
 
     logElement.scrollTop = logElement.scrollHeight;
+  }
+
+  private getConsoleLoggingEnabled(): boolean {
+    try {
+      return localStorage.getItem('solar_sentinel_debug_console') === '1';
+    } catch {
+      return false;
+    }
   }
 }

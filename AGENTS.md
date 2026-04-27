@@ -28,15 +28,18 @@
 ## Architecture
 - ES modules (`"type": "module"`) - use `.js` imports in TS files
 - Express backend (server.js), TypeScript frontend (src/)
+- Tailwind CSS is built through Vite (`@tailwindcss/vite`) from `src/styles.css`; do not re-add `@tailwindcss/browser` or any blocking CSS CDN
 - Chart.js with fixed dimensions, no animations/responsive mode
 - Main app endpoint is `GET /api/weather`, returning hourly data plus `daily` summary in one request
 - Compatibility endpoints remain: `GET /api/uv-today`, `GET /api/daily-summary`, `GET /api/uv-today/poll`
 - Server caches the full 16-day Open-Meteo forecast by rounded coordinates, not individual dates
+- Express uses `compression()` and immutable one-year cache headers for Vite `/assets/*` files
 - Windham, NH is the optimized home path: `42.8006, -71.3048`
 - Home forecast is prewarmed and refreshed every 10 minutes while the server is running
-- Frontend paints from local weather cache when available, then refreshes in the background
+- Frontend stores weather responses in localStorage by rounded location/date for fast perceived startup, paints from that cache when available, then refreshes from `/api/weather`
 - Geolocation is background-only for startup; Windham loads first unless the device is away from home
 - Chart.js is lazily imported from `chart.js/auto`; do not re-add a blocking CDN script
+- Performance instrumentation is intentional: frontend logs `Perf:` entries to the debug panel/console, and API responses include `Server-Timing` plus `metadata.performance`
 
 ## Weather Data
 - Open-Meteo hourly fields: `uv_index`, `uv_index_clear_sky`, `precipitation_probability`, `temperature_2m`, `apparent_temperature`, `cloud_cover`, `relative_humidity_2m`

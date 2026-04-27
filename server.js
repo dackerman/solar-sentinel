@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -40,14 +41,61 @@ setInterval(cleanupCache, 24 * 60 * 60 * 1000); // Daily
 const DEFAULT_LAT = HOME_LOCATION.lat;
 const DEFAULT_LON = HOME_LOCATION.lon;
 
+function roundTiming(duration) {
+  return Math.round(duration * 10) / 10;
+}
+
+function createRequestTimer() {
+  const start = performance.now();
+  const phases = [];
+
+  return {
+    measure(name, phaseStart) {
+      phases.push({
+        name,
+        duration: roundTiming(performance.now() - phaseStart),
+      });
+    },
+    add(name, duration) {
+      phases.push({
+        name,
+        duration: roundTiming(duration),
+      });
+    },
+    total() {
+      return roundTiming(performance.now() - start);
+    },
+    metadata() {
+      return {
+        totalMs: this.total(),
+        phases: Object.fromEntries(phases.map(phase => [phase.name, phase.duration])),
+      };
+    },
+    serverTiming() {
+      return [
+        ...phases.map(phase => `${phase.name};dur=${phase.duration}`),
+        `total;dur=${this.total()}`,
+      ].join(', ');
+    },
+  };
+}
+
+app.use(compression());
+
 // Serve static files with appropriate cache headers
 // In production, serve built files; in development, serve public files
 const staticDir = process.env.NODE_ENV === 'production' ? 'dist' : 'public';
 app.use(
   express.static(join(__dirname, staticDir), {
     setHeaders: (res, path) => {
+      // Vite emits fingerprinted files under /assets; cache those indefinitely.
+      if (path.match(/[\\/]assets[\\/]/)) {
+        res.set({
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        });
+      }
       // No cache for HTML files (always get updates)
-      if (path.endsWith('.html') || path.endsWith('/')) {
+      else if (path.endsWith('.html') || path.endsWith('/')) {
         res.set({
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           Pragma: 'no-cache',
@@ -211,15 +259,30 @@ function hasUsableForecast(data, requestedDate, requiredFields) {
 }
 
 async function fetchForecastFromOpenMeteo(lat, lon, timezone) {
+  const upstreamStart = performance.now();
   const response = await fetch(
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
   );
+  const responseMs = roundTiming(performance.now() - upstreamStart);
 
   if (!response.ok) {
     throw new Error(`API responded with status: ${response.status}`);
   }
 
-  return response.json();
+  const parseStart = performance.now();
+  const data = await response.json();
+  const parseMs = roundTiming(performance.now() - parseStart);
+
+  console.log('Open-Meteo fetch completed', {
+    lat,
+    lon,
+    timezone,
+    responseMs,
+    parseMs,
+    totalMs: roundTiming(performance.now() - upstreamStart),
+  });
+
+  return data;
 }
 
 async function fetchAndCacheForecast(lat, lon, timezone, cacheKey) {
@@ -246,15 +309,37 @@ async function fetchAndCacheForecast(lat, lon, timezone, cacheKey) {
 }
 
 async function getForecast(lat, lon, requestedDate, timezone, requiredFields) {
+  const lookupStart = performance.now();
   const cacheKey = getForecastCacheKey(lat, lon);
   const cached = forecastCache.get(cacheKey);
+  const cacheLookupMs = performance.now() - lookupStart;
 
+  const validationStart = performance.now();
   if (cached && hasUsableForecast(cached.data, requestedDate, requiredFields)) {
-    return { cacheKey, cacheStatus: 'hit', entry: cached };
+    return {
+      cacheKey,
+      cacheStatus: 'hit',
+      entry: cached,
+      performance: {
+        cacheLookupMs,
+        cacheValidationMs: performance.now() - validationStart,
+      },
+    };
   }
+  const cacheValidationMs = performance.now() - validationStart;
 
+  const forecastWaitStart = performance.now();
   const entry = await fetchAndCacheForecast(lat, lon, timezone, cacheKey);
-  return { cacheKey, cacheStatus: 'miss', entry };
+  return {
+    cacheKey,
+    cacheStatus: 'miss',
+    entry,
+    performance: {
+      cacheLookupMs,
+      cacheValidationMs,
+      forecastWaitMs: performance.now() - forecastWaitStart,
+    },
+  };
 }
 
 function refreshForecastInBackground(lat, lon, timezone, cacheKey) {
@@ -277,7 +362,7 @@ function refreshIfStale(lat, lon, timezone, cacheKey, entry) {
   }
 }
 
-function addMetadata(data, entry, cacheStatus) {
+function addMetadata(data, entry, cacheStatus, performanceMetadata) {
   const now = Date.now();
   return {
     ...data,
@@ -285,39 +370,88 @@ function addMetadata(data, entry, cacheStatus) {
       cached: cacheStatus === 'hit',
       cacheAge: now - entry.timestamp,
       lastUpdated: new Date(entry.timestamp).toISOString(),
+      performance: performanceMetadata,
     },
   };
 }
 
-function sendForecastResponse(res, data, entry, cacheStatus) {
+function sendForecastResponse(res, data, entry, cacheStatus, timer) {
   res.set('X-Cache-Status', cacheStatus);
-  res.json(addMetadata(data, entry, cacheStatus));
+  res.set('Server-Timing', timer.serverTiming());
+  res.json(addMetadata(data, entry, cacheStatus, timer.metadata()));
 }
 
 async function handleForecastRequest(req, res, requiredFields, buildData, logLabel, errorMessage) {
+  const timer = createRequestTimer();
+  let responseContext = {
+    route: req.path,
+    cacheStatus: 'error',
+  };
+
+  res.on('finish', () => {
+    console.log(`${logLabel} request completed`, {
+      ...responseContext,
+      statusCode: res.statusCode,
+      totalMs: timer.total(),
+    });
+  });
+
   try {
+    const parseStart = performance.now();
     const request = parseForecastRequest(req);
+    timer.measure('parseRequest', parseStart);
+
     if (request.error) {
+      responseContext = {
+        ...responseContext,
+        error: request.error.message,
+      };
       return res.status(request.error.status).json({ error: request.error.message });
     }
 
     const { lat, lon, requestedDate, timezone } = request;
-    const { cacheKey, cacheStatus, entry } = await getForecast(
+    responseContext = {
+      ...responseContext,
       lat,
       lon,
-      requestedDate,
-      timezone,
-      requiredFields
-    );
+      date: requestedDate,
+    };
 
+    const forecastStart = performance.now();
+    const {
+      cacheKey,
+      cacheStatus,
+      entry,
+      performance: forecastPerformance,
+    } = await getForecast(lat, lon, requestedDate, timezone, requiredFields);
+    timer.measure('getForecast', forecastStart);
+    Object.entries(forecastPerformance).forEach(([name, duration]) => {
+      timer.add(name, duration);
+    });
+    responseContext = {
+      ...responseContext,
+      cacheKey,
+      cacheStatus,
+      cacheAgeMs: Date.now() - entry.timestamp,
+    };
+
+    const buildStart = performance.now();
     const data = buildData(entry.data, requestedDate);
-    sendForecastResponse(res, data, entry, cacheStatus);
+    timer.measure('buildData', buildStart);
 
     if (cacheStatus === 'hit') {
+      const refreshStart = performance.now();
       refreshIfStale(lat, lon, timezone, cacheKey, entry);
+      timer.measure('refreshCheck', refreshStart);
     }
+
+    sendForecastResponse(res, data, entry, cacheStatus, timer);
   } catch (error) {
     console.error(`${logLabel} error:`, error.message);
+    responseContext = {
+      ...responseContext,
+      error: error.message,
+    };
     res.status(502).json({
       error: errorMessage,
     });

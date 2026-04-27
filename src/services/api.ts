@@ -13,22 +13,33 @@ export class WeatherAPI {
     const url = `${this.baseURL}/api/weather?lat=${location.lat}&lon=${location.lon}&date=${date}`;
 
     const response = await fetch(url);
-    const endTime = performance.now();
-    const duration = Math.round(endTime - startTime);
+    const responseTime = performance.now();
+    const responseDuration = Math.round(responseTime - startTime);
 
     if (!response.ok) {
       throw new Error(`Weather API failed: ${response.status}`);
     }
 
     const cacheStatus = response.headers.get('X-Cache-Status') as 'hit' | 'miss' | null;
+    const serverTiming = response.headers.get('Server-Timing');
+    const parseStart = performance.now();
     const data = await response.json();
+    const parseDuration = Math.round(performance.now() - parseStart);
+
+    const cacheWriteStart = performance.now();
     this.setCachedWeatherData(location, date, data);
+    const cacheWriteDuration = Math.round(performance.now() - cacheWriteStart);
+    const duration = Math.round(performance.now() - startTime);
 
     return {
       ...data,
       timing: {
         duration,
+        responseDuration,
+        parseDuration,
+        cacheWriteDuration,
         cacheStatus: cacheStatus || 'unknown',
+        serverTiming,
       },
     } as WeatherData & { timing: RequestTiming };
   }
@@ -94,21 +105,28 @@ export class WeatherAPI {
     const url = `${this.baseURL}/api/daily-summary?lat=${location.lat}&lon=${location.lon}&date=${date}`;
 
     const response = await fetch(url);
-    const endTime = performance.now();
-    const duration = Math.round(endTime - startTime);
+    const responseTime = performance.now();
+    const responseDuration = Math.round(responseTime - startTime);
 
     if (!response.ok) {
       throw new Error(`Daily API failed: ${response.status}`);
     }
 
     const cacheStatus = response.headers.get('X-Cache-Status') as 'hit' | 'miss' | null;
+    const serverTiming = response.headers.get('Server-Timing');
+    const parseStart = performance.now();
     const data = await response.json();
+    const parseDuration = Math.round(performance.now() - parseStart);
+    const duration = Math.round(performance.now() - startTime);
 
     return {
       ...data,
       timing: {
         duration,
+        responseDuration,
+        parseDuration,
         cacheStatus: cacheStatus || 'unknown',
+        serverTiming,
       },
     } as DailyData & { timing: RequestTiming };
   }

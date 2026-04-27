@@ -16,14 +16,19 @@ export class SolarSentinelApp {
   private refreshTimer: number | null = null;
   private refreshInFlight = false;
   private chartRenderToken = 0;
+  private readonly appStartTime = performance.now();
+  private lastPerformanceMark = this.appStartTime;
 
   private readonly REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 
   async initialize(): Promise<void> {
     this.debugPanel = new DebugPanel();
+    this.markPerformance('app-created');
     this.setupEventListeners();
+    this.markPerformance('event-listeners-ready');
     await this.loadData();
     this.scheduleAutoRefresh();
+    this.markPerformance('initialize-complete');
   }
 
   private setupEventListeners(): void {
@@ -38,28 +43,52 @@ export class SolarSentinelApp {
 
   private async loadData(silent = false): Promise<void> {
     const reason = silent ? 'auto-refresh' : 'user-initiated';
+    this.markPerformance('load-start', { reason, date: this.currentDate });
     this.debugPanel.log(`Loading UV data for ${this.currentDate}`, { reason });
     let renderedLocalCache = false;
 
     try {
+      const locationStart = performance.now();
       this.prepareHomeFirstLocation();
       this.refreshLocationInBackground();
       this.updateLocationDisplay();
+      this.markPerformance('location-fast-path-ready', {
+        durationMs: Math.round(performance.now() - locationStart),
+        location: this.currentLocation.name,
+      });
 
+      const localCacheStart = performance.now();
       const localData = this.api.getCachedWeatherData(this.currentLocation, this.currentDate);
+      this.markPerformance('local-weather-cache-lookup', {
+        durationMs: Math.round(performance.now() - localCacheStart),
+        hit: Boolean(localData),
+      });
+
       if (localData && !silent) {
+        const localRenderStart = performance.now();
         renderedLocalCache = true;
         this.debugPanel.log('Local weather cache hit (0ms)', {
           cacheAge: localData.metadata?.cacheAge,
           lastUpdated: localData.metadata?.lastUpdated,
         });
         this.renderWeatherData(localData, false);
+        this.markPerformance('local-weather-cache-rendered', {
+          durationMs: Math.round(performance.now() - localRenderStart),
+        });
       }
 
-      // Fetch weather data
+      const apiStart = performance.now();
       const data = await this.api.fetchWeatherData(this.currentLocation, this.currentDate);
+      this.markPerformance('weather-api-complete', {
+        durationMs: Math.round(performance.now() - apiStart),
+        responseMs: data.timing?.responseDuration,
+        parseMs: data.timing?.parseDuration,
+        localCacheWriteMs: data.timing?.cacheWriteDuration,
+        cacheStatus: data.timing?.cacheStatus,
+        serverTiming: data.timing?.serverTiming,
+        serverPerformance: data.metadata?.performance,
+      });
 
-      // Log cache status with timing
       const cacheStatus = data.timing?.cacheStatus || (data.metadata?.cached ? 'hit' : 'miss');
       this.debugPanel.log(`Weather API response: ${cacheStatus} (${data.timing?.duration}ms)`, {
         cached: data.metadata?.cached,
@@ -68,8 +97,14 @@ export class SolarSentinelApp {
         duration: data.timing?.duration,
       });
 
+      const apiRenderStart = performance.now();
       this.renderWeatherData(data, silent && !renderedLocalCache);
+      this.markPerformance('weather-api-rendered', {
+        durationMs: Math.round(performance.now() - apiRenderStart),
+        silent: silent && !renderedLocalCache,
+      });
     } catch (error) {
+      this.markPerformance('load-error', { error: (error as Error).message });
       this.debugPanel.log('Load error', { error: (error as Error).message });
 
       if (!silent && !renderedLocalCache) {
@@ -167,6 +202,8 @@ export class SolarSentinelApp {
   }
 
   private renderWeatherData(data: WeatherData, silent: boolean): void {
+    const renderStart = performance.now();
+
     if (!silent) {
       document.getElementById('loading')?.style.setProperty('display', 'none');
       document.getElementById('current-conditions')?.classList.remove('hidden');
@@ -197,7 +234,14 @@ export class SolarSentinelApp {
     }
 
     this.updateCurrentConditions(data);
+    this.markPerformance('weather-dom-updated', {
+      durationMs: Math.round(performance.now() - renderStart),
+      date: data.date,
+      cacheStatus: data.timing?.cacheStatus,
+    });
+
     void this.renderCharts(data).catch(error => {
+      this.markPerformance('charts-error', { error: (error as Error).message });
       this.debugPanel.log('Chart render error', { error: (error as Error).message });
     });
   }
@@ -297,9 +341,11 @@ export class SolarSentinelApp {
   }
 
   private async renderCharts(data: WeatherData): Promise<void> {
+    const chartStart = performance.now();
     const renderToken = ++this.chartRenderToken;
+    this.markPerformance('charts-render-start', { date: data.date, renderToken });
 
-    // Destroy existing charts
+    const destroyStart = performance.now();
     if (this.uvChart) {
       this.uvChart.destroy();
       this.uvChart = null;
@@ -308,13 +354,16 @@ export class SolarSentinelApp {
       this.weatherChart.destroy();
       this.weatherChart = null;
     }
+    this.markPerformance('charts-destroyed', {
+      durationMs: Math.round(performance.now() - destroyStart),
+      renderToken,
+    });
 
-    // Get canvas elements
     const uvCanvas = document.getElementById('uvChart') as HTMLCanvasElement;
     const weatherCanvas = document.getElementById('weatherChart') as HTMLCanvasElement;
 
     if (uvCanvas && weatherCanvas) {
-      // Reset canvas dimensions
+      const canvasStart = performance.now();
       uvCanvas.style.width = '100%';
       uvCanvas.style.height = '384px';
       uvCanvas.width = uvCanvas.offsetWidth;
@@ -324,20 +373,41 @@ export class SolarSentinelApp {
       weatherCanvas.style.height = '384px';
       weatherCanvas.width = weatherCanvas.offsetWidth;
       weatherCanvas.height = 384;
+      this.markPerformance('chart-canvases-sized', {
+        durationMs: Math.round(performance.now() - canvasStart),
+        uvWidth: uvCanvas.width,
+        weatherWidth: weatherCanvas.width,
+        renderToken,
+      });
 
+      const chartCreateStart = performance.now();
       const [uvChart, weatherChart] = await Promise.all([
         createUVChart(uvCanvas, data),
         createWeatherChart(weatherCanvas, data),
       ]);
+      this.markPerformance('chart-instances-created', {
+        durationMs: Math.round(performance.now() - chartCreateStart),
+        renderToken,
+      });
 
       if (renderToken !== this.chartRenderToken) {
         uvChart.destroy();
         weatherChart.destroy();
+        this.markPerformance('stale-charts-discarded', { renderToken });
         return;
       }
 
       this.uvChart = uvChart;
       this.weatherChart = weatherChart;
+      this.markPerformance('charts-render-complete', {
+        durationMs: Math.round(performance.now() - chartStart),
+        renderToken,
+      });
+    } else {
+      this.markPerformance('charts-render-skipped', {
+        reason: 'missing-canvas',
+        renderToken,
+      });
     }
   }
 
@@ -399,5 +469,18 @@ export class SolarSentinelApp {
     if (element) {
       element.style.color = color;
     }
+  }
+
+  private markPerformance(message: string, data: Record<string, unknown> = {}): void {
+    const now = performance.now();
+    const payload = {
+      totalMs: Math.round(now - this.appStartTime),
+      deltaMs: Math.round(now - this.lastPerformanceMark),
+      ...data,
+    };
+
+    this.lastPerformanceMark = now;
+    performance.mark(`solar-sentinel:${message}`);
+    this.debugPanel.log(`Perf: ${message}`, payload);
   }
 }

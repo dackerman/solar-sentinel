@@ -229,8 +229,12 @@ describe('Server API Endpoints', () => {
       expect(response.body).toHaveProperty('uv');
       expect(response.body).toHaveProperty('daily');
       expect(response.body.daily).toHaveProperty('tempMax');
+      expect(response.body.metadata).toHaveProperty('performance');
+      expect(response.body.metadata.performance.phases).toHaveProperty('buildData');
       expect(response.body.date).toBe(testDate);
       expect(response.body.daily.date).toBe(testDate);
+      expect(response.headers['x-cache-status']).toBe('miss');
+      expect(response.headers['server-timing']).toContain('total;dur=');
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });

@@ -23,9 +23,11 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 ## ✨ Features
 
 ### 🚀 **Performance & Caching**
-- **⚡ Instant Loading** - Location caching eliminates 6+ second geolocation delays 
+- **⚡ Instant Loading** - Windham-first startup avoids blocking on geolocation
 - **🗄️ Smart Location Cache** - 24-hour localStorage cache with background updates
-- **💾 API Caching** - 10-minute location-based cache to reduce API calls
+- **💾 Weather Cache** - Frontend localStorage renders recent weather immediately, then refreshes from the backend
+- **🧠 Server Forecast Cache** - Full 16-day forecasts are cached by rounded coordinates and refreshed every 10 minutes
+- **📦 Built Assets** - Tailwind CSS is compiled by Vite, compressed by Express, and hashed assets get immutable cache headers
 - **🎯 Background Refresh** - Updates location data without blocking UI
 
 ### 📊 **Data Visualization** 
@@ -42,9 +44,9 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 
 ### 🔧 **Developer Tools**
 - **🐛 Fixed Debug Panel** - Bottom-screen panel with minimize/expand functionality  
-- **📊 Performance Metrics** - Real-time API timing, cache status, and location updates
+- **📊 Performance Metrics** - Frontend phase timings, API timing, server timings, cache status, and location updates
 - **⚡ Cache Monitoring** - Visual feedback for cache hits/misses and data age
-- **🔍 Request Logging** - Detailed logging of all API calls and responses
+- **🔍 Request Logging** - Detailed logging of API cache/fetch/build phases and responses
 
 ### 🎯 **Technical Excellence**
 - **📱 Mobile-Optimized** - Responsive design with mobile-specific optimizations
@@ -132,14 +134,17 @@ pnpm run format
 - **Combined fast-path API** - `/api/weather` returns hourly data and the daily summary in one request
 - **Open-Meteo API** integration for UV index, precipitation probability, and apparent temperature
 - **Location-based caching** - Full 16-day forecasts are cached by rounded coordinates and refreshed in the background
+- **Compression and immutable assets** - Express compresses responses and serves Vite `/assets/*` files with one-year immutable cache headers
+- **Server timing instrumentation** - API responses include `Server-Timing` and `metadata.performance`
 - **Date-aware filtering** - Extracts specific day's hourly data in America/New_York timezone
 - **Extended forecast** - Supports up to 16 days of forecast data
 - **Coordinate validation** - Validates lat/lon bounds and date ranges
 - **Error handling** with comprehensive validation and 502 responses
 
-### Frontend (`public/index.html`)
-- **Vite-built frontend** with Tailwind CSS via CDN and lazily loaded Chart.js
+### Frontend (`src/index.html`)
+- **Vite-built frontend** with compiled Tailwind CSS from `src/styles.css` and lazily loaded Chart.js
 - **Geolocation API** - Auto-detects user location, falls back to Windham, NH (42.8006, -71.3048)
+- **Frontend weather cache** - localStorage cache by rounded location/date paints cached data immediately before backend refresh
 - **Current Conditions Display** - Smart card showing current hour (today) or daily forecast (future days)
 - **Two Chart.js visualizations**:
   1. Weather chart (color-coded temperature line + precipitation area, dual Y-axis)
@@ -219,6 +224,7 @@ solar-sentinel/
 ├── src/                         # TypeScript source code
 │   ├── app.ts                   # Main application class
 │   ├── main.ts                  # Application entry point
+│   ├── styles.css               # Tailwind CSS entry
 │   ├── components/
 │   │   └── debug.ts             # Debug panel component
 │   ├── services/
@@ -230,7 +236,6 @@ solar-sentinel/
 │   │   └── charts.ts            # Chart.js utilities
 │   └── test/                    # Test files
 ├── public/                      # Static assets
-│   ├── index.html               # Frontend HTML template
 │   ├── logo.png                # Application logo
 │   ├── manifest.json           # PWA manifest
 │   ├── sw.js                   # Service worker
@@ -322,17 +327,22 @@ The temperature line uses thermal comfort bands for quick visual reference:
 - **API response**: Single-digit milliseconds from server memory cache, upstream fetch time when cold
 - **Cache strategy**: Full forecast cached by rounded coordinates and refreshed every 10 minutes
 - **Request optimization**: One combined endpoint returns hourly data plus daily highs/lows
+- **Wire efficiency**: Express compression is enabled for compressible responses
+- **Server visibility**: `/api/*` responses include `Server-Timing` and `metadata.performance` phase breakdowns
 
 ### 💻 **Application Metrics**
-- **Cold start**: ~2-3 seconds
-- **Bundle size**: ~460KB (including optimized logo)  
+- **Perceived startup**: Recent localStorage weather can paint before the backend response
+- **CSS startup**: Tailwind is compiled at build time instead of running in the browser
+- **Asset caching**: Hashed Vite assets are served with `Cache-Control: public, max-age=31536000, immutable`
+- **Bundle size**: JS/CSS chunks are emitted by Vite with Chart.js split into a lazy chunk
 - **Memory usage**: ~25MB container footprint
 - **Chart rendering**: Fixed dimensions, no animations for optimal mobile performance
 
 ### 🔧 **Debug Performance**
 - **Debug panel**: Fixed positioning, instant toggle, minimize/expand
-- **Real-time logging**: Location cache status, API timing, response metrics
-- **Performance tracking**: Request duration, cache age, data freshness indicators
+- **Real-time logging**: Location cache status, frontend phase timing, API timing, response metrics
+- **Performance tracking**: Local cache lookup/render, backend response/parse/cache write, DOM render, chart render, server cache/fetch/build phases
+- **Console opt-in**: Set `localStorage.solar_sentinel_debug_console = '1'` to mirror debug-panel entries to the browser console
 
 ## 🧪 Health Monitoring
 

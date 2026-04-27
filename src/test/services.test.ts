@@ -44,12 +44,19 @@ describe('WeatherAPI', () => {
       json: vi.fn().mockResolvedValue(mockData),
     };
     vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
+    mockResponse.headers.get.mockImplementation((header: string) =>
+      header === 'Server-Timing' ? 'parseRequest;dur=1, total;dur=2' : 'hit'
+    );
 
     const result = await api.fetchWeatherData(mockLocation, '2025-08-31');
 
     expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31');
     expect(result.timing).toBeDefined();
     expect(result.timing?.cacheStatus).toBe('hit');
+    expect(result.timing?.serverTiming).toBe('parseRequest;dur=1, total;dur=2');
+    expect(typeof result.timing?.responseDuration).toBe('number');
+    expect(typeof result.timing?.parseDuration).toBe('number');
+    expect(typeof result.timing?.cacheWriteDuration).toBe('number');
     expect(typeof result.timing?.duration).toBe('number');
     expect(result.timing?.duration).toBeGreaterThanOrEqual(0);
   });
