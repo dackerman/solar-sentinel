@@ -220,7 +220,6 @@ export class SolarSentinelApp {
       document.getElementById('current-conditions')?.classList.remove('hidden');
       document.getElementById('chart-container')?.classList.remove('hidden');
       document.getElementById('weather-chart-container')?.classList.remove('hidden');
-      document.getElementById('legend')?.classList.remove('hidden');
     }
 
     const dateObj = new Date(data.date + 'T00:00:00');
@@ -481,13 +480,13 @@ export class SolarSentinelApp {
       return;
     }
 
-    const headers = this.getCalendarWeekdayHeaders(calendar.startDate);
-    const totalCells = Math.ceil(calendar.days.length / 7) * 7;
-    const emptyCellCount = totalCells - calendar.days.length;
+    const leadingCellCount = new Date(calendar.startDate + 'T00:00:00').getDay();
+    const totalCells = Math.ceil((leadingCellCount + calendar.days.length) / 7) * 7;
+    const trailingCellCount = totalCells - leadingCellCount - calendar.days.length;
 
     calendarElement.innerHTML = `
       <div class="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden border border-gray-200">
-        ${headers
+        ${this.getCalendarWeekdayHeaders()
           .map(
             header => `
               <div class="bg-gray-100 text-center text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-gray-600 py-2">
@@ -496,8 +495,11 @@ export class SolarSentinelApp {
             `
           )
           .join('')}
+        ${Array.from({ length: leadingCellCount })
+          .map(() => '<div class="bg-gray-50 min-h-24 sm:min-h-32"></div>')
+          .join('')}
         ${calendar.days.map(day => this.renderForecastCalendarDay(day)).join('')}
-        ${Array.from({ length: emptyCellCount })
+        ${Array.from({ length: trailingCellCount })
           .map(() => '<div class="bg-gray-50 min-h-24 sm:min-h-32"></div>')
           .join('')}
       </div>
@@ -515,10 +517,13 @@ export class SolarSentinelApp {
     const high = Math.round(day.tempMax);
     const low = Math.round(day.tempMin);
     const precip = Math.round(day.precipMax || 0);
-    const uv = Math.round(day.uvMax || 0);
+    const highColor = getTempLineColor(high);
+    const lowColor = getTempLineColor(low);
+    const isNiceDay = high > 60 && precip < 25;
+    const backgroundClass = isNiceDay ? 'bg-green-50' : 'bg-white';
 
     return `
-      <article class="bg-white min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}">
+      <article class="${backgroundClass} min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}">
         <div class="flex items-start justify-between gap-1">
           <div>
             <div class="text-[10px] sm:text-xs font-semibold text-gray-500">${date.toLocaleDateString('en-US', { month: 'short' })}</div>
@@ -528,12 +533,11 @@ export class SolarSentinelApp {
         </div>
         <div class="mt-1 sm:mt-2 flex flex-col items-center text-center">
           <div class="text-2xl sm:text-3xl leading-none" title="${label}" aria-label="${label}">${icon}</div>
-          <div class="mt-1 text-sm sm:text-base font-bold text-gray-900">${high}°</div>
-          <div class="text-[10px] sm:text-xs font-medium text-gray-500">Low ${low}°</div>
+          <div class="mt-1 text-sm sm:text-base font-bold" style="color: ${highColor}">${high}°</div>
+          <div class="text-[10px] sm:text-xs font-semibold" style="color: ${lowColor}">Low ${low}°</div>
         </div>
-        <div class="mt-1 sm:mt-2 flex justify-between text-[10px] sm:text-xs text-gray-500">
+        <div class="mt-1 sm:mt-2 flex justify-center text-[10px] sm:text-xs text-gray-500">
           <span>🌧 ${precip}%</span>
-          <span>UV ${uv}</span>
         </div>
       </article>
     `;
@@ -565,13 +569,8 @@ export class SolarSentinelApp {
     }
   }
 
-  private getCalendarWeekdayHeaders(startDate: string): string[] {
-    const start = new Date(startDate + 'T00:00:00');
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + index);
-      return date.toLocaleDateString('en-US', { weekday: 'short' });
-    });
+  private getCalendarWeekdayHeaders(): string[] {
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   }
 
   private getWeatherIcon(day: DailyCalendarDay): { icon: string; label: string } {

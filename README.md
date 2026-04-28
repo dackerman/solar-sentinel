@@ -26,7 +26,7 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 - **⚡ Instant Loading** - Windham-first startup avoids blocking on geolocation
 - **🗄️ Smart Location Cache** - 24-hour localStorage cache with background updates
 - **💾 Weather Cache** - Frontend localStorage renders recent weather immediately, then refreshes from the backend
-- **🗓️ Forecast Calendar Cache** - Upcoming daily forecast calendar paints from localStorage while fresh data loads asynchronously
+- **🗓️ Forecast Cache** - Upcoming daily forecast paints from localStorage while fresh data loads asynchronously
 - **🧠 Server Forecast Cache** - Full 16-day forecasts are cached by rounded coordinates and refreshed every 10 minutes
 - **📦 Built Assets** - Tailwind CSS is compiled by Vite, compressed by Express, and hashed assets get immutable cache headers
 - **🎯 Background Refresh** - Updates location data without blocking UI
@@ -147,7 +147,7 @@ pnpm run format
 - **Vite-built frontend** with compiled Tailwind CSS from `src/styles.css` and lazily loaded Chart.js
 - **Geolocation API** - Auto-detects user location, falls back to Windham, NH (42.8006, -71.3048)
 - **Frontend weather cache** - localStorage cache by rounded location/date paints cached data immediately before backend refresh
-- **Forecast calendar** - Calendar-style multi-week daily forecast below the UV chart, loaded asynchronously after current conditions
+- **Forecast** - Sunday-first multi-week daily forecast below the UV chart, loaded asynchronously after current conditions
 - **Current Conditions Display** - Smart card showing current hour (today) or daily forecast (future days)
 - **Two Chart.js visualizations**:
   1. Weather chart (color-coded temperature line + precipitation area, dual Y-axis)
@@ -214,7 +214,7 @@ The app supports browsing forecast data for up to 16 days with smart condition d
 - **Smart Conditions Card**:
   - **Today**: Shows "Current Conditions" with live time and current hour data (feels-like temp, current UV/precip/humidity)
   - **Future Days**: Shows "Daily Forecast" with daily highs/lows (high/low temps, peak UV, max precip/humidity)
-- **Forecast Calendar** - Shows the available upcoming forecast days in week rows, starting today, with weather icons and daily high/low temperatures
+- **Forecast** - Shows the available upcoming forecast days in Sunday-first week rows with weather icons and daily high/low temperatures
 - **Timezone Handling** - Properly handles local timezone date boundaries
 - **Staleness Indicators** - Shows when current data is from a different hour (e.g., "3:45 PM (showing 3:00 PM)")
 

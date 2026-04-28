@@ -167,9 +167,38 @@
           <div style="height: 384px; width: 100%; position: relative">
             <canvas id="uvChart" style="height: 384px !important; width: 100% !important"></canvas>
           </div>
+          <details id="legend" class="mt-4 rounded-lg border border-gray-200 bg-gray-50">
+            <summary
+              class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
+            >
+              UV Index Scale
+            </summary>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 pt-1 text-sm">
+              <div class="flex items-center">
+                <div class="w-4 h-4 bg-green-400 rounded mr-2"></div>
+                <span>0-2 Low</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-4 h-4 bg-yellow-400 rounded mr-2"></div>
+                <span>3-5 Moderate</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-4 h-4 bg-orange-400 rounded mr-2"></div>
+                <span>6-7 High</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-4 h-4 bg-red-500 rounded mr-2"></div>
+                <span>8-10 Very High</span>
+              </div>
+              <div class="flex items-center">
+                <div class="w-4 h-4 bg-purple-600 rounded mr-2"></div>
+                <span>11+ Extreme</span>
+              </div>
+            </div>
+          </details>
         </div>
 
-        <!-- Daily Forecast Calendar -->
+        <!-- Forecast -->
         <section
           id="forecast-calendar-container"
           class="hidden mt-6 bg-white rounded-lg shadow-lg overflow-hidden"
@@ -179,7 +208,7 @@
             class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between px-4 py-4 sm:px-6 border-b border-gray-200"
           >
             <div>
-              <h3 class="text-lg font-semibold text-gray-900">Forecast Calendar</h3>
+              <h3 class="text-lg font-semibold text-gray-900">Forecast</h3>
               <p id="forecast-calendar-range" class="text-sm text-gray-600">
                 Loading upcoming weather...
               </p>
@@ -188,33 +217,6 @@
           </div>
           <div id="forecast-calendar" class="p-2 sm:p-4"></div>
         </section>
-
-        <!-- UV Index Legend -->
-        <div id="legend" class="hidden mt-6 bg-white rounded-lg shadow-lg p-6">
-          <h3 class="text-lg font-semibold mb-4">UV Index Scale</h3>
-          <div class="grid grid-cols-2 md:grid-cols-5 gap-2 text-sm">
-            <div class="flex items-center">
-              <div class="w-4 h-4 bg-green-400 rounded mr-2"></div>
-              <span>0-2 Low</span>
-            </div>
-            <div class="flex items-center">
-              <div class="w-4 h-4 bg-yellow-400 rounded mr-2"></div>
-              <span>3-5 Moderate</span>
-            </div>
-            <div class="flex items-center">
-              <div class="w-4 h-4 bg-orange-400 rounded mr-2"></div>
-              <span>6-7 High</span>
-            </div>
-            <div class="flex items-center">
-              <div class="w-4 h-4 bg-red-500 rounded mr-2"></div>
-              <span>8-10 Very High</span>
-            </div>
-            <div class="flex items-center">
-              <div class="w-4 h-4 bg-purple-600 rounded mr-2"></div>
-              <span>11+ Extreme</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 

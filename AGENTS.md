@@ -32,7 +32,7 @@
 - Chart.js with fixed dimensions, no animations/responsive mode
 - Main app endpoint is `GET /api/weather`, returning hourly data plus `daily` summary in one request
 - Compatibility endpoints remain: `GET /api/uv-today`, `GET /api/daily-summary`, `GET /api/uv-today/poll`
-- Async forecast calendar endpoint is `GET /api/daily-calendar`; it returns the available daily range starting at the requested date
+- Async forecast endpoint is `GET /api/daily-calendar`; it returns the available daily range starting at the requested date
 - Server caches the full 16-day Open-Meteo forecast by rounded coordinates, not individual dates
 - Express uses `compression()` and immutable one-year cache headers for Vite `/assets/*` files
 - Windham, NH is the optimized home path: `42.8006, -71.3048`
