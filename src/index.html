@@ -169,6 +169,26 @@
           </div>
         </div>
 
+        <!-- Daily Forecast Calendar -->
+        <section
+          id="forecast-calendar-container"
+          class="hidden mt-6 bg-white rounded-lg shadow-lg overflow-hidden"
+          aria-live="polite"
+        >
+          <div
+            class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between px-4 py-4 sm:px-6 border-b border-gray-200"
+          >
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Forecast Calendar</h3>
+              <p id="forecast-calendar-range" class="text-sm text-gray-600">
+                Loading upcoming weather...
+              </p>
+            </div>
+            <p id="forecast-calendar-updated" class="text-xs text-gray-500"></p>
+          </div>
+          <div id="forecast-calendar" class="p-2 sm:p-4"></div>
+        </section>
+
         <!-- UV Index Legend -->
         <div id="legend" class="hidden mt-6 bg-white rounded-lg shadow-lg p-6">
           <h3 class="text-lg font-semibold mb-4">UV Index Scale</h3>

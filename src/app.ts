@@ -2,7 +2,13 @@ import { WeatherAPI } from './services/api.js';
 import { LocationService } from './services/location.js';
 import { DebugPanel } from './components/debug.js';
 import { createUVChart, createWeatherChart, getUVColor, getTempLineColor } from './utils/charts.js';
-import type { WeatherData, DailyData, Location } from './types/weather.js';
+import type {
+  WeatherData,
+  DailyData,
+  DailyCalendarData,
+  DailyCalendarDay,
+  Location,
+} from './types/weather.js';
 
 export class SolarSentinelApp {
   private api = new WeatherAPI();
@@ -46,6 +52,7 @@ export class SolarSentinelApp {
     this.markPerformance('load-start', { reason, date: this.currentDate });
     this.debugPanel.log(`Loading UV data for ${this.currentDate}`, { reason });
     let renderedLocalCache = false;
+    let requestedCalendar = false;
 
     try {
       const locationStart = performance.now();
@@ -75,6 +82,7 @@ export class SolarSentinelApp {
         this.markPerformance('local-weather-cache-rendered', {
           durationMs: Math.round(performance.now() - localRenderStart),
         });
+        requestedCalendar = this.requestForecastCalendar(false);
       }
 
       const apiStart = performance.now();
@@ -103,6 +111,9 @@ export class SolarSentinelApp {
         durationMs: Math.round(performance.now() - apiRenderStart),
         silent: silent && !renderedLocalCache,
       });
+      if (!requestedCalendar) {
+        this.requestForecastCalendar(silent && !renderedLocalCache);
+      }
     } catch (error) {
       this.markPerformance('load-error', { error: (error as Error).message });
       this.debugPanel.log('Load error', { error: (error as Error).message });
@@ -409,6 +420,177 @@ export class SolarSentinelApp {
         renderToken,
       });
     }
+  }
+
+  private requestForecastCalendar(silent: boolean): boolean {
+    if (!document.getElementById('forecast-calendar-container')) {
+      return false;
+    }
+
+    void this.loadForecastCalendar(silent).catch(error => {
+      this.markPerformance('forecast-calendar-error', { error: (error as Error).message });
+      this.debugPanel.log('Forecast calendar error', { error: (error as Error).message });
+    });
+    return true;
+  }
+
+  private async loadForecastCalendar(silent: boolean): Promise<void> {
+    const startDate = new Date().toLocaleDateString('en-CA');
+    const cacheStart = performance.now();
+    const cachedCalendar = this.api.getCachedDailyCalendar(this.currentLocation, startDate);
+    this.markPerformance('forecast-calendar-cache-lookup', {
+      durationMs: Math.round(performance.now() - cacheStart),
+      hit: Boolean(cachedCalendar),
+      location: this.currentLocation.name,
+    });
+
+    if (cachedCalendar && !silent) {
+      const renderStart = performance.now();
+      this.renderForecastCalendar(cachedCalendar);
+      this.markPerformance('forecast-calendar-cache-rendered', {
+        durationMs: Math.round(performance.now() - renderStart),
+        days: cachedCalendar.days.length,
+      });
+    }
+
+    const apiStart = performance.now();
+    const calendar = await this.api.fetchDailyCalendar(this.currentLocation, startDate);
+    this.markPerformance('forecast-calendar-api-complete', {
+      durationMs: Math.round(performance.now() - apiStart),
+      responseMs: calendar.timing?.responseDuration,
+      parseMs: calendar.timing?.parseDuration,
+      localCacheWriteMs: calendar.timing?.cacheWriteDuration,
+      cacheStatus: calendar.timing?.cacheStatus,
+      serverTiming: calendar.timing?.serverTiming,
+      days: calendar.days.length,
+    });
+
+    const renderStart = performance.now();
+    this.renderForecastCalendar(calendar);
+    this.markPerformance('forecast-calendar-api-rendered', {
+      durationMs: Math.round(performance.now() - renderStart),
+      days: calendar.days.length,
+      silent,
+    });
+  }
+
+  private renderForecastCalendar(calendar: DailyCalendarData): void {
+    const container = document.getElementById('forecast-calendar-container');
+    const calendarElement = document.getElementById('forecast-calendar');
+    if (!container || !calendarElement || calendar.days.length === 0) {
+      return;
+    }
+
+    const headers = this.getCalendarWeekdayHeaders(calendar.startDate);
+    const totalCells = Math.ceil(calendar.days.length / 7) * 7;
+    const emptyCellCount = totalCells - calendar.days.length;
+
+    calendarElement.innerHTML = `
+      <div class="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden border border-gray-200">
+        ${headers
+          .map(
+            header => `
+              <div class="bg-gray-100 text-center text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-gray-600 py-2">
+                ${header}
+              </div>
+            `
+          )
+          .join('')}
+        ${calendar.days.map(day => this.renderForecastCalendarDay(day)).join('')}
+        ${Array.from({ length: emptyCellCount })
+          .map(() => '<div class="bg-gray-50 min-h-24 sm:min-h-32"></div>')
+          .join('')}
+      </div>
+    `;
+
+    this.updateForecastCalendarMetadata(calendar);
+    container.classList.remove('hidden');
+  }
+
+  private renderForecastCalendarDay(day: DailyCalendarDay): string {
+    const date = new Date(day.date + 'T00:00:00');
+    const today = new Date().toLocaleDateString('en-CA');
+    const isToday = day.date === today;
+    const { icon, label } = this.getWeatherIcon(day);
+    const high = Math.round(day.tempMax);
+    const low = Math.round(day.tempMin);
+    const precip = Math.round(day.precipMax || 0);
+    const uv = Math.round(day.uvMax || 0);
+
+    return `
+      <article class="bg-white min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}">
+        <div class="flex items-start justify-between gap-1">
+          <div>
+            <div class="text-[10px] sm:text-xs font-semibold text-gray-500">${date.toLocaleDateString('en-US', { month: 'short' })}</div>
+            <div class="text-sm sm:text-lg font-bold text-gray-900">${date.getDate()}</div>
+          </div>
+          ${isToday ? '<span class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold text-blue-700">Today</span>' : ''}
+        </div>
+        <div class="mt-1 sm:mt-2 flex flex-col items-center text-center">
+          <div class="text-2xl sm:text-3xl leading-none" title="${label}" aria-label="${label}">${icon}</div>
+          <div class="mt-1 text-sm sm:text-base font-bold text-gray-900">${high}°</div>
+          <div class="text-[10px] sm:text-xs font-medium text-gray-500">Low ${low}°</div>
+        </div>
+        <div class="mt-1 sm:mt-2 flex justify-between text-[10px] sm:text-xs text-gray-500">
+          <span>🌧 ${precip}%</span>
+          <span>UV ${uv}</span>
+        </div>
+      </article>
+    `;
+  }
+
+  private updateForecastCalendarMetadata(calendar: DailyCalendarData): void {
+    const start = new Date(calendar.startDate + 'T00:00:00');
+    const end = new Date(calendar.endDate + 'T00:00:00');
+    const rangeElement = document.getElementById('forecast-calendar-range');
+    const updatedElement = document.getElementById('forecast-calendar-updated');
+
+    if (rangeElement) {
+      rangeElement.textContent = `${calendar.days.length}-day outlook, ${start.toLocaleDateString(
+        'en-US',
+        {
+          month: 'short',
+          day: 'numeric',
+        }
+      )}–${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    }
+
+    if (updatedElement && calendar.metadata?.lastUpdated) {
+      const updated = new Date(calendar.metadata.lastUpdated);
+      updatedElement.textContent = `Updated ${updated.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })}`;
+    }
+  }
+
+  private getCalendarWeekdayHeaders(startDate: string): string[] {
+    const start = new Date(startDate + 'T00:00:00');
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      return date.toLocaleDateString('en-US', { weekday: 'short' });
+    });
+  }
+
+  private getWeatherIcon(day: DailyCalendarDay): { icon: string; label: string } {
+    const code = day.weatherCode;
+
+    if (code === 0) return { icon: '☀️', label: 'Sunny' };
+    if (code === 1) return { icon: '🌤️', label: 'Mostly sunny' };
+    if (code === 2) return { icon: '⛅', label: 'Partly cloudy' };
+    if (code === 3) return { icon: '☁️', label: 'Cloudy' };
+    if (code === 45 || code === 48) return { icon: '🌫️', label: 'Fog' };
+    if (code && code >= 51 && code <= 57) return { icon: '🌦️', label: 'Drizzle' };
+    if (code && code >= 61 && code <= 67) return { icon: '🌧️', label: 'Rain' };
+    if (code && code >= 71 && code <= 77) return { icon: '🌨️', label: 'Snow' };
+    if (code && code >= 80 && code <= 82) return { icon: '🌦️', label: 'Rain showers' };
+    if (code && code >= 85 && code <= 86) return { icon: '🌨️', label: 'Snow showers' };
+    if (code && code >= 95) return { icon: '⛈️', label: 'Thunderstorms' };
+    if (day.precipMax >= 50) return { icon: '🌧️', label: 'Likely rain' };
+
+    return { icon: '☀️', label: 'Clear' };
   }
 
   private scheduleAutoRefresh(): void {

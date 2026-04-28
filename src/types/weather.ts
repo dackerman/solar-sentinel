@@ -26,6 +26,30 @@ export interface DailyData {
   uvMax: number;
   precipMax: number;
   humidityMax: number;
+  weatherCode?: number;
+  metadata?: {
+    cached: boolean;
+    cacheAge: number;
+    lastUpdated: string;
+    performance?: ServerPerformanceMetadata;
+  };
+  timing?: RequestTiming;
+}
+
+export interface DailyCalendarDay {
+  date: string;
+  tempMax: number;
+  tempMin: number;
+  uvMax: number;
+  precipMax: number;
+  humidityMax: number;
+  weatherCode?: number;
+}
+
+export interface DailyCalendarData {
+  startDate: string;
+  endDate: string;
+  days: DailyCalendarDay[];
   metadata?: {
     cached: boolean;
     cacheAge: number;

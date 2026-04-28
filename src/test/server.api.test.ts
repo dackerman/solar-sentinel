@@ -46,6 +46,7 @@ function getMockDailyData(dates: string[]) {
       uv_index_max: [5.2, 6.1],
       precipitation_probability_max: [35, 20],
       relative_humidity_2m_max: [92, 78],
+      weather_code: [61, 2],
     },
   };
 }
@@ -233,6 +234,33 @@ describe('Server API Endpoints', () => {
       expect(response.body.metadata.performance.phases).toHaveProperty('buildData');
       expect(response.body.date).toBe(testDate);
       expect(response.body.daily.date).toBe(testDate);
+      expect(response.headers['x-cache-status']).toBe('miss');
+      expect(response.headers['server-timing']).toContain('total;dur=');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('GET /api/daily-calendar - Calendar Forecast', () => {
+    it('should return available daily forecast days with weather codes', async () => {
+      const testDate = getTestDate(13);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockCombinedData(testDate)),
+      });
+
+      const response = await request(app).get('/api/daily-calendar').query({ date: testDate });
+
+      expect(response.status).toBe(200);
+      expect(response.body.startDate).toBe(testDate);
+      expect(response.body.days).toHaveLength(2);
+      expect(response.body.days[0]).toMatchObject({
+        date: testDate,
+        tempMax: 68.1,
+        tempMin: 28.9,
+        weatherCode: 61,
+      });
       expect(response.headers['x-cache-status']).toBe('miss');
       expect(response.headers['server-timing']).toContain('total;dur=');
       expect(mockFetch).toHaveBeenCalledTimes(1);

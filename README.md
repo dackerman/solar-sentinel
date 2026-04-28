@@ -26,6 +26,7 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 - **⚡ Instant Loading** - Windham-first startup avoids blocking on geolocation
 - **🗄️ Smart Location Cache** - 24-hour localStorage cache with background updates
 - **💾 Weather Cache** - Frontend localStorage renders recent weather immediately, then refreshes from the backend
+- **🗓️ Forecast Calendar Cache** - Upcoming daily forecast calendar paints from localStorage while fresh data loads asynchronously
 - **🧠 Server Forecast Cache** - Full 16-day forecasts are cached by rounded coordinates and refreshed every 10 minutes
 - **📦 Built Assets** - Tailwind CSS is compiled by Vite, compressed by Express, and hashed assets get immutable cache headers
 - **🎯 Background Refresh** - Updates location data without blocking UI
@@ -134,6 +135,7 @@ pnpm run format
 - **Combined fast-path API** - `/api/weather` returns hourly data and the daily summary in one request
 - **Open-Meteo API** integration for UV index, precipitation probability, and apparent temperature
 - **Location-based caching** - Full 16-day forecasts are cached by rounded coordinates and refreshed in the background
+- **Daily calendar API** - `/api/daily-calendar` returns the available daily forecast range with high/low temperatures and WMO weather codes
 - **Compression and immutable assets** - Express compresses responses and serves Vite `/assets/*` files with one-year immutable cache headers
 - **Server timing instrumentation** - API responses include `Server-Timing` and `metadata.performance`
 - **Date-aware filtering** - Extracts specific day's hourly data in America/New_York timezone
@@ -145,6 +147,7 @@ pnpm run format
 - **Vite-built frontend** with compiled Tailwind CSS from `src/styles.css` and lazily loaded Chart.js
 - **Geolocation API** - Auto-detects user location, falls back to Windham, NH (42.8006, -71.3048)
 - **Frontend weather cache** - localStorage cache by rounded location/date paints cached data immediately before backend refresh
+- **Forecast calendar** - Calendar-style multi-week daily forecast below the UV chart, loaded asynchronously after current conditions
 - **Current Conditions Display** - Smart card showing current hour (today) or daily forecast (future days)
 - **Two Chart.js visualizations**:
   1. Weather chart (color-coded temperature line + precipitation area, dual Y-axis)
@@ -211,6 +214,7 @@ The app supports browsing forecast data for up to 16 days with smart condition d
 - **Smart Conditions Card**:
   - **Today**: Shows "Current Conditions" with live time and current hour data (feels-like temp, current UV/precip/humidity)
   - **Future Days**: Shows "Daily Forecast" with daily highs/lows (high/low temps, peak UV, max precip/humidity)
+- **Forecast Calendar** - Shows the available upcoming forecast days in week rows, starting today, with weather icons and daily high/low temperatures
 - **Timezone Handling** - Properly handles local timezone date boundaries
 - **Staleness Indicators** - Shows when current data is from a different hour (e.g., "3:45 PM (showing 3:00 PM)")
 
@@ -264,6 +268,7 @@ solar-sentinel/
   - `date` - Date in YYYY-MM-DD format (defaults to today)
 - `GET /api/uv-today` - Compatibility endpoint for hourly weather data with same parameters
 - `GET /api/daily-summary` - Compatibility endpoint for daily highs/lows with same parameters
+- `GET /api/daily-calendar` - Returns the available daily forecast range from the requested date forward
 - `GET /api/uv-today/poll` - Polling endpoint for real-time updates
 
 ### Response Formats
@@ -290,7 +295,27 @@ solar-sentinel/
   "tempMin": 64.6,
   "uvMax": 7.3,
   "precipMax": 0,
-  "humidityMax": 95
+  "humidityMax": 95,
+  "weatherCode": 0
+}
+```
+
+**Daily Calendar (`/api/daily-calendar`):**
+```json
+{
+  "startDate": "2025-08-12",
+  "endDate": "2025-08-27",
+  "days": [
+    {
+      "date": "2025-08-12",
+      "tempMax": 90.5,
+      "tempMin": 64.6,
+      "uvMax": 7.3,
+      "precipMax": 0,
+      "humidityMax": 95,
+      "weatherCode": 0
+    }
+  ]
 }
 ```
 
@@ -331,7 +356,7 @@ The temperature line uses thermal comfort bands for quick visual reference:
 - **Server visibility**: `/api/*` responses include `Server-Timing` and `metadata.performance` phase breakdowns
 
 ### 💻 **Application Metrics**
-- **Perceived startup**: Recent localStorage weather can paint before the backend response
+- **Perceived startup**: Recent localStorage weather and calendar forecasts can paint before backend responses
 - **CSS startup**: Tailwind is compiled at build time instead of running in the browser
 - **Asset caching**: Hashed Vite assets are served with `Cache-Control: public, max-age=31536000, immutable`
 - **Bundle size**: JS/CSS chunks are emitted by Vite with Chart.js split into a lazy chunk

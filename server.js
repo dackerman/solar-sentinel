@@ -189,6 +189,27 @@ function extractDailyData(dailyData, targetDate) {
     uvMax: dailyData.uv_index_max[dateIndex],
     precipMax: dailyData.precipitation_probability_max[dateIndex],
     humidityMax: dailyData.relative_humidity_2m_max[dateIndex],
+    weatherCode: dailyData.weather_code?.[dateIndex],
+  };
+}
+
+function buildDailyCalendarData(dailyData, startDate) {
+  const days = dailyData.time
+    .map((date, index) => ({
+      date,
+      tempMax: dailyData.temperature_2m_max[index],
+      tempMin: dailyData.temperature_2m_min[index],
+      uvMax: dailyData.uv_index_max[index],
+      precipMax: dailyData.precipitation_probability_max[index],
+      humidityMax: dailyData.relative_humidity_2m_max[index],
+      weatherCode: dailyData.weather_code?.[index],
+    }))
+    .filter(day => day.date >= startDate);
+
+  return {
+    startDate,
+    endDate: days.length > 0 ? days[days.length - 1].date : startDate,
+    days,
   };
 }
 
@@ -261,7 +282,7 @@ function hasUsableForecast(data, requestedDate, requiredFields) {
 async function fetchForecastFromOpenMeteo(lat, lon, timezone) {
   const upstreamStart = performance.now();
   const response = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max,weather_code&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
   );
   const responseMs = roundTiming(performance.now() - upstreamStart);
 
@@ -503,6 +524,18 @@ app.get('/api/weather', async (req, res) => {
     buildWeatherData,
     'Weather API',
     'Failed to fetch weather data. Please try again later.'
+  );
+});
+
+// Daily calendar endpoint used by the async forecast calendar UI
+app.get('/api/daily-calendar', async (req, res) => {
+  await handleForecastRequest(
+    req,
+    res,
+    ['daily'],
+    (forecastData, requestedDate) => buildDailyCalendarData(forecastData.daily, requestedDate),
+    'Daily calendar API',
+    'Failed to fetch daily calendar data. Please try again later.'
   );
 });
 

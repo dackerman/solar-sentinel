@@ -16,7 +16,7 @@ const cacheStrategies = {
   static: ['/icon-192.png', '/icon-512.png', '/logo.png', '/manifest.json', '/favicon.ico'],
   
   // API endpoints - Network first with short cache
-  api: ['/api/weather', '/api/uv-today', '/api/daily-summary']
+  api: ['/api/weather', '/api/uv-today', '/api/daily-summary', '/api/daily-calendar']
 };
 
 // Install event - cache essential static assets only
