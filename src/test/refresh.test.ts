@@ -138,4 +138,36 @@ describe('Auto-refresh behavior', () => {
 
     expect(refreshUrl.searchParams.get('date')).toBe('2026-05-02');
   });
+
+  it('updates the chart now line every minute without fetching', async () => {
+    const chartInstances = [
+      { destroy: vi.fn(), update: vi.fn() },
+      { destroy: vi.fn(), update: vi.fn() },
+    ];
+    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+      configurable: true,
+      value: vi.fn().mockReturnValue({}),
+    });
+    vi.mocked((global as any).Chart).mockImplementation(() => chartInstances.shift());
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+
+    expect(chartInstances).toHaveLength(0);
+    expect(vi.mocked((global as any).Chart).mock.results[0].value.update).toHaveBeenCalledWith(
+      'none'
+    );
+    expect(vi.mocked((global as any).Chart).mock.results[1].value.update).toHaveBeenCalledWith(
+      'none'
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,7 +1,13 @@
 import { WeatherAPI } from './services/api.js';
 import { LocationService } from './services/location.js';
 import { DebugPanel } from './components/debug.js';
-import { createUVChart, createWeatherChart, getUVColor, getTempLineColor } from './utils/charts.js';
+import {
+  createUVChart,
+  createWeatherChart,
+  getUVColor,
+  getTempLineColor,
+  type ChartInstance,
+} from './utils/charts.js';
 import type {
   WeatherData,
   DailyData,
@@ -19,9 +25,10 @@ export class SolarSentinelApp {
 
   private currentLocation: Location = this.locationService.getDefaultLocation();
   private currentDate = new Date().toLocaleDateString('en-CA');
-  private uvChart: any = null;
-  private weatherChart: any = null;
+  private uvChart: ChartInstance | null = null;
+  private weatherChart: ChartInstance | null = null;
   private refreshTimer: number | null = null;
+  private chartNowLineTimer: number | null = null;
   private refreshInFlight = false;
   private chartRenderToken = 0;
   private readonly appStartTime = performance.now();
@@ -31,6 +38,7 @@ export class SolarSentinelApp {
   };
 
   private readonly REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly NOW_LINE_INTERVAL_MS = 60 * 1000; // 1 minute
 
   async initialize(): Promise<void> {
     this.debugPanel = new DebugPanel();
@@ -361,6 +369,7 @@ export class SolarSentinelApp {
     this.markPerformance('charts-render-start', { date: data.date, renderToken });
 
     const destroyStart = performance.now();
+    this.clearChartNowLineTimer();
     if (this.uvChart) {
       this.uvChart.destroy();
       this.uvChart = null;
@@ -414,6 +423,7 @@ export class SolarSentinelApp {
 
       this.uvChart = uvChart;
       this.weatherChart = weatherChart;
+      this.scheduleChartNowLineUpdates(data.date);
       this.markPerformance('charts-render-complete', {
         durationMs: Math.round(performance.now() - chartStart),
         renderToken,
@@ -424,6 +434,30 @@ export class SolarSentinelApp {
         renderToken,
       });
     }
+  }
+
+  private scheduleChartNowLineUpdates(chartDate: string): void {
+    this.clearChartNowLineTimer();
+
+    if (chartDate !== new Date().toLocaleDateString('en-CA')) {
+      return;
+    }
+
+    this.chartNowLineTimer = window.setInterval(() => {
+      this.updateChartsNowLine();
+    }, this.NOW_LINE_INTERVAL_MS);
+  }
+
+  private clearChartNowLineTimer(): void {
+    if (this.chartNowLineTimer) {
+      clearInterval(this.chartNowLineTimer);
+      this.chartNowLineTimer = null;
+    }
+  }
+
+  private updateChartsNowLine(): void {
+    this.uvChart?.update('none');
+    this.weatherChart?.update('none');
   }
 
   private requestForecastCalendar(silent: boolean): boolean {

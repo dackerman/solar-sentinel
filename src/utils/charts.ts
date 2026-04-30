@@ -17,7 +17,7 @@ export function getTempLineColor(temperature: number): string {
   return '#dc2626'; // deep red
 }
 
-export type ChartInstance = { destroy: () => void };
+export type ChartInstance = { destroy: () => void; update: (mode?: string) => void };
 let chartConstructor: any | null = null;
 
 interface TimeMarker {
@@ -110,11 +110,10 @@ function getMarkerPosition(chart: any, data: WeatherData, markerTime: Date): num
 }
 
 function createTimeMarkersPlugin(data: WeatherData): any {
-  const markers = getTimeMarkers(data);
-
   return {
     id: `time-markers-${data.date}`,
     afterDraw(chart: any) {
+      const markers = getTimeMarkers(data);
       if (markers.length === 0) return;
 
       const { ctx, chartArea } = chart;
