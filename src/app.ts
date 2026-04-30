@@ -11,6 +11,8 @@ import type {
 } from './types/weather.js';
 
 export class SolarSentinelApp {
+  private static activeFocusRefreshHandler: (() => void) | null = null;
+
   private api = new WeatherAPI();
   private locationService = new LocationService();
   private debugPanel!: DebugPanel;
@@ -24,8 +26,11 @@ export class SolarSentinelApp {
   private chartRenderToken = 0;
   private readonly appStartTime = performance.now();
   private lastPerformanceMark = this.appStartTime;
+  private readonly handleWindowFocus = () => {
+    void this.runAutoRefresh('window focus');
+  };
 
-  private readonly REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+  private readonly REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
   async initialize(): Promise<void> {
     this.debugPanel = new DebugPanel();
@@ -597,27 +602,43 @@ export class SolarSentinelApp {
       clearInterval(this.refreshTimer);
     }
 
-    this.debugPanel.log('Scheduled 30-min auto-refresh timer');
+    this.debugPanel.log('Scheduled 5-min auto-refresh timer');
+    if (SolarSentinelApp.activeFocusRefreshHandler) {
+      window.removeEventListener('focus', SolarSentinelApp.activeFocusRefreshHandler);
+    }
+
+    SolarSentinelApp.activeFocusRefreshHandler = this.handleWindowFocus;
+    window.addEventListener('focus', this.handleWindowFocus);
 
     this.refreshTimer = window.setInterval(async () => {
-      const todayStr = new Date().toLocaleDateString('en-CA');
-      if (this.currentDate === todayStr) {
-        this.currentDate = todayStr;
-      }
-
-      if (this.refreshInFlight) {
-        this.debugPanel.log('Auto-refresh skipped: request in flight');
-        return;
-      }
-
-      this.refreshInFlight = true;
-      try {
-        this.debugPanel.log('30-min auto-refresh triggered');
-        await this.loadData(true);
-      } finally {
-        this.refreshInFlight = false;
-      }
+      await this.runAutoRefresh('timer');
     }, this.REFRESH_INTERVAL_MS);
+  }
+
+  private async runAutoRefresh(trigger: string): Promise<void> {
+    this.normalizeCurrentDateForRefresh();
+
+    if (this.refreshInFlight) {
+      this.debugPanel.log(`Auto-refresh skipped (${trigger}): request in flight`);
+      return;
+    }
+
+    this.refreshInFlight = true;
+    try {
+      this.debugPanel.log(`Auto-refresh triggered (${trigger})`);
+      await this.loadData(true);
+    } finally {
+      this.refreshInFlight = false;
+    }
+  }
+
+  private normalizeCurrentDateForRefresh(): void {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+
+    if (this.currentDate < todayStr) {
+      this.debugPanel.log(`Date rollover: ${this.currentDate} → ${todayStr}`);
+      this.currentDate = todayStr;
+    }
   }
 
   private navigateDate(direction: number): void {
