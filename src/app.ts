@@ -555,28 +555,31 @@ export class SolarSentinelApp {
     const { icon, label } = this.getWeatherIcon(day);
     const high = Math.round(day.tempMax);
     const low = Math.round(day.tempMin);
-    const precip = Math.round(day.precipMax || 0);
+    const precip = Math.max(0, Math.min(100, Math.round(day.precipMax || 0)));
     const highColor = getTempLineColor(high);
     const lowColor = getTempLineColor(low);
     const isNiceDay = high > 60 && precip < 25;
     const backgroundClass = isNiceDay ? 'bg-green-50' : 'bg-white';
 
     return `
-      <article class="${backgroundClass} min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}">
-        <div class="flex items-start justify-between gap-1">
-          <div>
-            <div class="text-[10px] sm:text-xs font-semibold text-gray-500">${date.toLocaleDateString('en-US', { month: 'short' })}</div>
-            <div class="text-sm sm:text-lg font-bold text-gray-900">${date.getDate()}</div>
+      <article class="forecast-day-cell ${backgroundClass} min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}">
+        ${precip > 0 ? `<div class="forecast-day-water" style="--rain-fill: ${precip}%" aria-hidden="true"></div>` : ''}
+        <div class="forecast-day-content">
+          <div class="flex items-start justify-between gap-1">
+            <div>
+              <div class="text-[10px] sm:text-xs font-semibold text-gray-500">${date.toLocaleDateString('en-US', { month: 'short' })}</div>
+              <div class="text-sm sm:text-lg font-bold text-gray-900">${date.getDate()}</div>
+            </div>
+            ${isToday ? '<span class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold text-blue-700">Today</span>' : ''}
           </div>
-          ${isToday ? '<span class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold text-blue-700">Today</span>' : ''}
-        </div>
-        <div class="mt-1 sm:mt-2 flex flex-col items-center text-center">
-          <div class="text-2xl sm:text-3xl leading-none" title="${label}" aria-label="${label}">${icon}</div>
-          <div class="mt-1 text-sm sm:text-base font-bold" style="color: ${highColor}">${high}°</div>
-          <div class="text-[10px] sm:text-xs font-semibold" style="color: ${lowColor}">Low ${low}°</div>
-        </div>
-        <div class="mt-1 sm:mt-2 flex justify-center text-[10px] sm:text-xs text-gray-500">
-          <span>🌧 ${precip}%</span>
+          <div class="mt-1 sm:mt-2 flex flex-col items-center text-center">
+            <div class="text-2xl sm:text-3xl leading-none" title="${label}" aria-label="${label}">${icon}</div>
+            <div class="mt-1 text-sm sm:text-base font-bold" style="color: ${highColor}">${high}°</div>
+            <div class="text-[10px] sm:text-xs font-semibold" style="color: ${lowColor}">Low ${low}°</div>
+          </div>
+          <div class="mt-1 sm:mt-2 flex justify-center text-[10px] sm:text-xs text-gray-600">
+            <span>🌧 ${precip}%</span>
+          </div>
         </div>
       </article>
     `;

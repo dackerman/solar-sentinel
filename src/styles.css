@@ -1,3 +1,47 @@
 @import 'tailwindcss';
 
 @source './**/*.{html,ts}';
+
+@layer components {
+  .forecast-day-cell {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .forecast-day-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .forecast-day-water {
+    position: absolute;
+    right: -8%;
+    bottom: 0;
+    left: -8%;
+    z-index: 0;
+    height: var(--rain-fill);
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(56, 189, 248, 0.2), rgba(14, 165, 233, 0.36)),
+      repeating-linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.18) 0 8px,
+        rgba(255, 255, 255, 0) 8px 18px
+      );
+    opacity: 0.72;
+  }
+
+  .forecast-day-water::before {
+    position: absolute;
+    top: -9px;
+    right: 0;
+    left: 0;
+    height: 16px;
+    content: '';
+    background:
+      radial-gradient(13px 9px at 13px 9px, rgba(186, 230, 253, 0.74) 0 58%, transparent 60%) 0 0 /
+        26px 16px repeat-x,
+      linear-gradient(180deg, rgba(14, 165, 233, 0), rgba(14, 165, 233, 0.22));
+  }
+}
