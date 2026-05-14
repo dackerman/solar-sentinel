@@ -4,6 +4,7 @@ import { DebugPanel } from './components/debug.js';
 import {
   createUVChart,
   createWeatherChart,
+  getForecastTempBackgroundColor,
   getUVColor,
   getTempLineColor,
   type ChartInstance,
@@ -558,11 +559,10 @@ export class SolarSentinelApp {
     const precip = Math.max(0, Math.min(100, Math.round(day.precipMax || 0)));
     const highColor = getTempLineColor(high);
     const lowColor = getTempLineColor(low);
-    const isNiceDay = high > 60 && precip < 25;
-    const backgroundClass = isNiceDay ? 'bg-green-50' : 'bg-white';
+    const backgroundColor = getForecastTempBackgroundColor(high);
 
     return `
-      <article class="forecast-day-cell ${backgroundClass} min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}">
+      <article class="forecast-day-cell min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}" style="--forecast-temp-color: ${backgroundColor}">
         ${precip > 0 ? `<div class="forecast-day-water" style="--rain-fill: ${precip}%" aria-hidden="true"></div>` : ''}
         <div class="forecast-day-content">
           <div class="flex items-start justify-between gap-1">

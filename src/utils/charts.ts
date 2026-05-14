@@ -17,6 +17,133 @@ export function getTempLineColor(temperature: number): string {
   return '#dc2626'; // deep red
 }
 
+interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+interface OklabColor {
+  l: number;
+  a: number;
+  b: number;
+}
+
+const TEMP_BACKGROUND_STOPS = [
+  { temperature: 32, color: '#3b82f6' },
+  { temperature: 55, color: '#60a5fa' },
+  { temperature: 70, color: '#eab308' },
+  { temperature: 80, color: '#f97316' },
+  { temperature: 90, color: '#ef4444' },
+  { temperature: 95, color: '#dc2626' },
+] as const;
+
+export function getForecastTempBackgroundColor(temperature: number): string {
+  const safeTemperature = Number.isFinite(temperature)
+    ? temperature
+    : TEMP_BACKGROUND_STOPS[0].temperature;
+  const firstStop = TEMP_BACKGROUND_STOPS[0];
+  const lastStop = TEMP_BACKGROUND_STOPS[TEMP_BACKGROUND_STOPS.length - 1];
+
+  if (safeTemperature <= firstStop.temperature) return firstStop.color;
+  if (safeTemperature >= lastStop.temperature) return lastStop.color;
+
+  for (let i = 1; i < TEMP_BACKGROUND_STOPS.length; i++) {
+    const lowerStop = TEMP_BACKGROUND_STOPS[i - 1];
+    const upperStop = TEMP_BACKGROUND_STOPS[i];
+
+    if (safeTemperature === upperStop.temperature) return upperStop.color;
+
+    if (safeTemperature < upperStop.temperature) {
+      const ratio =
+        (safeTemperature - lowerStop.temperature) / (upperStop.temperature - lowerStop.temperature);
+      const easedRatio = ratio * ratio * (3 - 2 * ratio);
+      const lowerColor = rgbToOklab(hexToRgb(lowerStop.color));
+      const upperColor = rgbToOklab(hexToRgb(upperStop.color));
+
+      return rgbToHex(oklabToRgb(interpolateOklab(lowerColor, upperColor, easedRatio)));
+    }
+  }
+
+  return lastStop.color;
+}
+
+function hexToRgb(hex: string): RgbColor {
+  const normalizedHex = hex.replace('#', '');
+  const value = Number.parseInt(normalizedHex, 16);
+
+  return {
+    r: ((value >> 16) & 255) / 255,
+    g: ((value >> 8) & 255) / 255,
+    b: (value & 255) / 255,
+  };
+}
+
+function rgbToHex(color: RgbColor): string {
+  const toHex = (channel: number): string =>
+    Math.round(clamp(channel, 0, 1) * 255)
+      .toString(16)
+      .padStart(2, '0');
+
+  return `#${toHex(color.r)}${toHex(color.g)}${toHex(color.b)}`;
+}
+
+function rgbToOklab(color: RgbColor): OklabColor {
+  const red = srgbToLinear(color.r);
+  const green = srgbToLinear(color.g);
+  const blue = srgbToLinear(color.b);
+
+  const l = 0.4122214708 * red + 0.5363325363 * green + 0.0514459929 * blue;
+  const m = 0.2119034982 * red + 0.6806995451 * green + 0.1073969566 * blue;
+  const s = 0.0883024619 * red + 0.2817188376 * green + 0.6299787005 * blue;
+
+  const lRoot = Math.cbrt(l);
+  const mRoot = Math.cbrt(m);
+  const sRoot = Math.cbrt(s);
+
+  return {
+    l: 0.2104542553 * lRoot + 0.793617785 * mRoot - 0.0040720468 * sRoot,
+    a: 1.9779984951 * lRoot - 2.428592205 * mRoot + 0.4505937099 * sRoot,
+    b: 0.0259040371 * lRoot + 0.7827717662 * mRoot - 0.808675766 * sRoot,
+  };
+}
+
+function oklabToRgb(color: OklabColor): RgbColor {
+  const lRoot = color.l + 0.3963377774 * color.a + 0.2158037573 * color.b;
+  const mRoot = color.l - 0.1055613458 * color.a - 0.0638541728 * color.b;
+  const sRoot = color.l - 0.0894841775 * color.a - 1.291485548 * color.b;
+
+  const l = lRoot * lRoot * lRoot;
+  const m = mRoot * mRoot * mRoot;
+  const s = sRoot * sRoot * sRoot;
+
+  return {
+    r: linearToSrgb(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    g: linearToSrgb(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    b: linearToSrgb(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
+  };
+}
+
+function interpolateOklab(start: OklabColor, end: OklabColor, ratio: number): OklabColor {
+  return {
+    l: start.l + (end.l - start.l) * ratio,
+    a: start.a + (end.a - start.a) * ratio,
+    b: start.b + (end.b - start.b) * ratio,
+  };
+}
+
+function srgbToLinear(channel: number): number {
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+function linearToSrgb(channel: number): number {
+  return channel <= 0.0031308 ? channel * 12.92 : 1.055 * channel ** (1 / 2.4) - 0.055;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 export type ChartInstance = { destroy: () => void; update: (mode?: string) => void };
 let chartConstructor: any | null = null;
 

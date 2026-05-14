@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getUVColor, getTempLineColor } from '../utils/charts.js';
+import { getUVColor, getTempLineColor, getForecastTempBackgroundColor } from '../utils/charts.js';
 
 describe('Chart utilities', () => {
   describe('getUVColor', () => {
@@ -57,6 +57,30 @@ describe('Chart utilities', () => {
 
     it('should return deep red for very hot temperatures', () => {
       expect(getTempLineColor(100)).toBe('#dc2626');
+    });
+  });
+
+  describe('getForecastTempBackgroundColor', () => {
+    it('returns exact colors at forecast background temperature stops', () => {
+      expect(getForecastTempBackgroundColor(32)).toBe('#3b82f6');
+      expect(getForecastTempBackgroundColor(55)).toBe('#60a5fa');
+      expect(getForecastTempBackgroundColor(70)).toBe('#eab308');
+      expect(getForecastTempBackgroundColor(80)).toBe('#f97316');
+      expect(getForecastTempBackgroundColor(90)).toBe('#ef4444');
+      expect(getForecastTempBackgroundColor(95)).toBe('#dc2626');
+    });
+
+    it('clamps temperatures outside the forecast background scale', () => {
+      expect(getForecastTempBackgroundColor(-10)).toBe('#3b82f6');
+      expect(getForecastTempBackgroundColor(110)).toBe('#dc2626');
+    });
+
+    it('interpolates between neighboring forecast background stops', () => {
+      const midWarmColor = getForecastTempBackgroundColor(75);
+
+      expect(midWarmColor).toMatch(/^#[0-9a-f]{6}$/);
+      expect(midWarmColor).not.toBe('#eab308');
+      expect(midWarmColor).not.toBe('#f97316');
     });
   });
 });
