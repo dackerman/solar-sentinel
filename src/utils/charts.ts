@@ -435,7 +435,7 @@ export async function createWeatherChart(
               const y1 = ctx.p1?.parsed?.y;
               if (typeof y0 !== 'number' || typeof y1 !== 'number') return undefined;
               const t = (y0 + y1) / 2;
-              return getTempLineColor(t);
+              return getForecastTempBackgroundColor(t);
             },
           },
           yAxisID: 'y1',
@@ -459,7 +459,7 @@ export async function createWeatherChart(
               const y1 = ctx.p1?.parsed?.y;
               if (typeof y0 !== 'number' || typeof y1 !== 'number') return undefined;
               const t = (y0 + y1) / 2;
-              return getTempLineColor(t);
+              return getForecastTempBackgroundColor(t);
             },
           },
           yAxisID: 'y1',
