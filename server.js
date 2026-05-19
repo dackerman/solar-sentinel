@@ -28,6 +28,7 @@ const forecastCache = new Map();
 const forecastRefreshes = new Map();
 const FORECAST_REFRESH_MS = 10 * 60 * 1000;
 const CACHE_RETENTION_MS = 24 * 60 * 60 * 1000;
+const API_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 if (DB_PATH !== ':memory:') {
   mkdirSync(dirname(DB_PATH), { recursive: true });
@@ -95,6 +96,23 @@ const selectApiHistoryStatement = apiHistoryDb.prepare(`
   )
   ORDER BY fetched_at ASC, id ASC
 `);
+
+const pruneApiHistoryStatement = apiHistoryDb.prepare(`
+  DELETE FROM api_call_history
+  WHERE fetched_at < ?
+`);
+
+function pruneApiHistory() {
+  try {
+    const cutoff = new Date(Date.now() - API_HISTORY_RETENTION_MS).toISOString();
+    pruneApiHistoryStatement.run(cutoff);
+  } catch (error) {
+    console.error('API history prune error:', error.message);
+  }
+}
+
+pruneApiHistory();
+setInterval(pruneApiHistory, 24 * 60 * 60 * 1000);
 
 // Cache cleanup function - removes old location forecasts
 function cleanupCache() {
