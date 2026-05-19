@@ -730,7 +730,7 @@ export class SolarSentinelApp {
 
     return `
       <article class="forecast-day-cell min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}" style="--forecast-temp-color: ${backgroundColor}">
-        ${precip > 0 ? `<div class="forecast-day-water" style="--rain-fill: ${precip}%" aria-hidden="true"></div>` : ''}
+        ${precip > 10 ? `<div class="forecast-day-water" style="--rain-fill: ${precip}%" aria-hidden="true"></div>` : ''}
         <div class="forecast-day-content">
           <div class="flex items-start justify-between gap-1">
             <div>
