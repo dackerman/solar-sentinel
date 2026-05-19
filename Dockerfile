@@ -1,14 +1,14 @@
-FROM node:20-alpine
+FROM node:22-alpine
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+# Install pnpm. The lockfile is pnpm v9; avoid pnpm@latest changing Docker install behavior.
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Create non-root user early
 RUN addgroup -g 1001 -S nodejs
 RUN adduser -S uvapp -u 1001
 
 # Create and own the app directory
-RUN mkdir -p /app && chown uvapp:nodejs /app
+RUN mkdir -p /app/data && chown -R uvapp:nodejs /app
 WORKDIR /app
 
 # Switch to non-root user

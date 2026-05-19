@@ -1,13 +1,20 @@
 import express from 'express';
 import compression from 'compression';
+import { mkdirSync } from 'fs';
+import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const require = createRequire(import.meta.url);
+const { DatabaseSync } = require('node:sqlite');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const DB_PATH =
+  process.env.SQLITE_DB_PATH ||
+  (process.env.NODE_ENV === 'test' ? ':memory:' : join(__dirname, 'data', 'solar-sentinel.sqlite'));
 
 const HOME_LOCATION = {
   lat: 42.8006,
@@ -21,6 +28,73 @@ const forecastCache = new Map();
 const forecastRefreshes = new Map();
 const FORECAST_REFRESH_MS = 10 * 60 * 1000;
 const CACHE_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+if (DB_PATH !== ':memory:') {
+  mkdirSync(dirname(DB_PATH), { recursive: true });
+}
+
+const apiHistoryDb = new DatabaseSync(DB_PATH);
+apiHistoryDb.exec(`
+  PRAGMA journal_mode = WAL;
+  PRAGMA busy_timeout = 5000;
+
+  CREATE TABLE IF NOT EXISTS api_call_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fetched_at TEXT NOT NULL,
+    route TEXT NOT NULL,
+    request_query_json TEXT NOT NULL,
+    lat REAL,
+    lon REAL,
+    location_key TEXT,
+    date TEXT,
+    cache_key TEXT,
+    cache_status TEXT,
+    status_code INTEGER NOT NULL,
+    response_json TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_api_call_history_lookup
+    ON api_call_history (route, location_key, date, status_code, fetched_at);
+`);
+
+const insertApiHistoryStatement = apiHistoryDb.prepare(`
+  INSERT INTO api_call_history (
+    fetched_at,
+    route,
+    request_query_json,
+    lat,
+    lon,
+    location_key,
+    date,
+    cache_key,
+    cache_status,
+    status_code,
+    response_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const selectApiHistoryStatement = apiHistoryDb.prepare(`
+  SELECT * FROM (
+    SELECT
+      id,
+      fetched_at,
+      route,
+      lat,
+      lon,
+      date,
+      cache_status,
+      status_code,
+      response_json
+    FROM api_call_history
+    WHERE route = ?
+      AND location_key = ?
+      AND date = ?
+      AND status_code = 200
+    ORDER BY fetched_at DESC, id DESC
+    LIMIT ?
+  )
+  ORDER BY fetched_at ASC, id ASC
+`);
 
 // Cache cleanup function - removes old location forecasts
 function cleanupCache() {
@@ -217,6 +291,71 @@ function getForecastCacheKey(lat, lon) {
   return `${lat.toFixed(2)},${lon.toFixed(2)}`;
 }
 
+function getHistoryLocationName(lat, lon) {
+  const isHome =
+    Math.abs(lat - HOME_LOCATION.lat) < 0.001 && Math.abs(lon - HOME_LOCATION.lon) < 0.001;
+  return isHome ? HOME_LOCATION.name : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+}
+
+function getSafeNumber(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function recordApiCall({ req, lat, lon, date, cacheKey, cacheStatus, statusCode, responseBody }) {
+  try {
+    const safeLat = getSafeNumber(lat);
+    const safeLon = getSafeNumber(lon);
+    const locationKey =
+      safeLat !== null && safeLon !== null ? getForecastCacheKey(safeLat, safeLon) : null;
+
+    insertApiHistoryStatement.run(
+      new Date().toISOString(),
+      req.path,
+      JSON.stringify(req.query || {}),
+      safeLat,
+      safeLon,
+      locationKey,
+      date || null,
+      cacheKey || null,
+      cacheStatus || null,
+      statusCode,
+      JSON.stringify(responseBody)
+    );
+  } catch (error) {
+    console.error('API history write error:', error.message);
+  }
+}
+
+function getApiHistoryEntries({ route, lat, lon, date, limit }) {
+  const locationKey = getForecastCacheKey(lat, lon);
+  const rows = selectApiHistoryStatement.all(route, locationKey, date, limit);
+
+  return rows
+    .map(row => {
+      try {
+        return {
+          id: row.id,
+          fetchedAt: row.fetched_at,
+          route: row.route,
+          location: {
+            lat: row.lat,
+            lon: row.lon,
+            name: getHistoryLocationName(row.lat, row.lon),
+            isUserLocation: getHistoryLocationName(row.lat, row.lon) !== HOME_LOCATION.name,
+          },
+          date: row.date,
+          cacheStatus: row.cache_status,
+          statusCode: row.status_code,
+          data: JSON.parse(row.response_json),
+        };
+      } catch (error) {
+        console.error('API history read error:', error.message);
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
 function getTimezone(lon) {
   return lon >= -130 && lon <= -60 ? 'America/New_York' : 'UTC';
 }
@@ -260,6 +399,39 @@ function parseForecastRequest(req) {
     lon,
     requestedDate,
     timezone: getTimezone(lon),
+  };
+}
+
+function parseHistoryRequest(req) {
+  const route = getStringQueryParam(req.query.route) || '/api/weather';
+  const allowedRoutes = new Set(['/api/weather', '/api/daily-calendar']);
+  if (!allowedRoutes.has(route)) {
+    return { error: { status: 400, message: 'Invalid history route' } };
+  }
+
+  const latParam = parseFloat(getStringQueryParam(req.query.lat));
+  const lonParam = parseFloat(getStringQueryParam(req.query.lon));
+  const lat = Number.isFinite(latParam) ? latParam : DEFAULT_LAT;
+  const lon = Number.isFinite(lonParam) ? lonParam : DEFAULT_LON;
+  const requestedDate = getStringQueryParam(req.query.date) || getTodayInNewYork();
+  const limitParam = parseInt(getStringQueryParam(req.query.limit), 10);
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 200;
+
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return { error: { status: 400, message: 'Invalid coordinates' } };
+  }
+
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(requestedDate)) {
+    return { error: { status: 400, message: 'Invalid date format. Use YYYY-MM-DD' } };
+  }
+
+  return {
+    route,
+    lat,
+    lon,
+    requestedDate,
+    limit,
   };
 }
 
@@ -396,10 +568,18 @@ function addMetadata(data, entry, cacheStatus, performanceMetadata) {
   };
 }
 
-function sendForecastResponse(res, data, entry, cacheStatus, timer) {
+function sendForecastResponse(req, res, data, entry, cacheStatus, timer, historyContext) {
+  const responseBody = addMetadata(data, entry, cacheStatus, timer.metadata());
   res.set('X-Cache-Status', cacheStatus);
   res.set('Server-Timing', timer.serverTiming());
-  res.json(addMetadata(data, entry, cacheStatus, timer.metadata()));
+  recordApiCall({
+    req,
+    ...historyContext,
+    cacheStatus,
+    statusCode: 200,
+    responseBody,
+  });
+  res.json(responseBody);
 }
 
 async function handleForecastRequest(req, res, requiredFields, buildData, logLabel, errorMessage) {
@@ -423,11 +603,21 @@ async function handleForecastRequest(req, res, requiredFields, buildData, logLab
     timer.measure('parseRequest', parseStart);
 
     if (request.error) {
+      const responseBody = { error: request.error.message };
       responseContext = {
         ...responseContext,
         error: request.error.message,
       };
-      return res.status(request.error.status).json({ error: request.error.message });
+      recordApiCall({
+        req,
+        lat: parseFloat(getStringQueryParam(req.query.lat)),
+        lon: parseFloat(getStringQueryParam(req.query.lon)),
+        date: getStringQueryParam(req.query.date),
+        cacheStatus: 'error',
+        statusCode: request.error.status,
+        responseBody,
+      });
+      return res.status(request.error.status).json(responseBody);
     }
 
     const { lat, lon, requestedDate, timezone } = request;
@@ -466,16 +656,32 @@ async function handleForecastRequest(req, res, requiredFields, buildData, logLab
       timer.measure('refreshCheck', refreshStart);
     }
 
-    sendForecastResponse(res, data, entry, cacheStatus, timer);
+    sendForecastResponse(req, res, data, entry, cacheStatus, timer, {
+      lat,
+      lon,
+      date: requestedDate,
+      cacheKey,
+    });
   } catch (error) {
     console.error(`${logLabel} error:`, error.message);
+    const responseBody = {
+      error: errorMessage,
+    };
     responseContext = {
       ...responseContext,
       error: error.message,
     };
-    res.status(502).json({
-      error: errorMessage,
+    recordApiCall({
+      req,
+      lat: responseContext.lat,
+      lon: responseContext.lon,
+      date: responseContext.date,
+      cacheKey: responseContext.cacheKey,
+      cacheStatus: 'error',
+      statusCode: 502,
+      responseBody,
     });
+    res.status(502).json(responseBody);
   }
 }
 
@@ -539,6 +745,35 @@ app.get('/api/daily-calendar', async (req, res) => {
   );
 });
 
+// Persisted response snapshots for the frontend history scrubber.
+app.get('/api/history', (req, res) => {
+  const request = parseHistoryRequest(req);
+  if (request.error) {
+    return res.status(request.error.status).json({ error: request.error.message });
+  }
+
+  const { route, lat, lon, requestedDate, limit } = request;
+  const entries = getApiHistoryEntries({
+    route,
+    lat,
+    lon,
+    date: requestedDate,
+    limit,
+  });
+
+  res.json({
+    route,
+    date: requestedDate,
+    location: {
+      lat,
+      lon,
+      name: getHistoryLocationName(lat, lon),
+      isUserLocation: getHistoryLocationName(lat, lon) !== HOME_LOCATION.name,
+    },
+    entries,
+  });
+});
+
 // Polling endpoint to check if newer data is available
 app.get('/api/uv-today/poll', async (req, res) => {
   try {
@@ -552,20 +787,52 @@ app.get('/api/uv-today/poll', async (req, res) => {
     const cached = forecastCache.get(cacheKey);
 
     if (cached && cached.timestamp > clientTimestamp) {
-      res.json({
+      const responseBody = {
         hasUpdate: true,
         timestamp: cached.timestamp,
         lastUpdated: new Date(cached.timestamp).toISOString(),
+      };
+      recordApiCall({
+        req,
+        lat,
+        lon,
+        date: getStringQueryParam(req.query.date),
+        cacheKey,
+        cacheStatus: 'hit',
+        statusCode: 200,
+        responseBody,
       });
+      res.json(responseBody);
     } else {
-      res.json({
+      const responseBody = {
         hasUpdate: false,
         timestamp: cached ? cached.timestamp : null,
+      };
+      recordApiCall({
+        req,
+        lat,
+        lon,
+        date: getStringQueryParam(req.query.date),
+        cacheKey,
+        cacheStatus: cached ? 'hit' : 'miss',
+        statusCode: 200,
+        responseBody,
       });
+      res.json(responseBody);
     }
   } catch (error) {
     console.error('Poll error:', error.message);
-    res.status(500).json({ error: 'Poll failed' });
+    const responseBody = { error: 'Poll failed' };
+    recordApiCall({
+      req,
+      lat: parseFloat(getStringQueryParam(req.query.lat)),
+      lon: parseFloat(getStringQueryParam(req.query.lon)),
+      date: getStringQueryParam(req.query.date),
+      cacheStatus: 'error',
+      statusCode: 500,
+      responseBody,
+    });
+    res.status(500).json(responseBody);
   }
 });
 

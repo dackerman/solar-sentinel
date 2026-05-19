@@ -2,8 +2,11 @@ import type {
   WeatherData,
   DailyData,
   DailyCalendarData,
+  DailyCalendarHistoryEntry,
   Location,
   RequestTiming,
+  ApiHistoryResponse,
+  WeatherHistoryEntry,
 } from '../types/weather.js';
 
 export class WeatherAPI {
@@ -199,6 +202,60 @@ export class WeatherAPI {
 
   private getCalendarCacheKey(location: Location, startDate: string): string {
     return `${this.CALENDAR_CACHE_PREFIX}_${location.lat.toFixed(2)},${location.lon.toFixed(2)},${startDate}`;
+  }
+
+  async fetchWeatherHistory(location: Location, date: string): Promise<WeatherHistoryEntry[]> {
+    const history = await this.fetchHistory<WeatherData>('/api/weather', location, date);
+    return history.entries.map(entry => ({
+      id: entry.id,
+      fetchedAt: entry.fetchedAt,
+      location: entry.location,
+      date: entry.date,
+      data: entry.data,
+      statusCode: entry.statusCode,
+      cacheStatus: entry.cacheStatus,
+    }));
+  }
+
+  async fetchDailyCalendarHistory(
+    location: Location,
+    startDate: string
+  ): Promise<DailyCalendarHistoryEntry[]> {
+    const history = await this.fetchHistory<DailyCalendarData>(
+      '/api/daily-calendar',
+      location,
+      startDate
+    );
+    return history.entries.map(entry => ({
+      id: entry.id,
+      fetchedAt: entry.fetchedAt,
+      location: entry.location,
+      startDate: entry.date,
+      data: entry.data,
+      statusCode: entry.statusCode,
+      cacheStatus: entry.cacheStatus,
+    }));
+  }
+
+  private async fetchHistory<T>(
+    route: '/api/weather' | '/api/daily-calendar',
+    location: Location,
+    date: string
+  ): Promise<ApiHistoryResponse<T>> {
+    const params = new URLSearchParams({
+      route,
+      lat: String(location.lat),
+      lon: String(location.lon),
+      date,
+      limit: '500',
+    });
+    const response = await fetch(`${this.baseURL}/api/history?${params.toString()}`);
+
+    if (!response.ok) {
+      throw new Error(`History API failed: ${response.status}`);
+    }
+
+    return (await response.json()) as ApiHistoryResponse<T>;
   }
 
   async fetchDailyData(

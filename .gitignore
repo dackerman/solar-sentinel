@@ -5,5 +5,9 @@ npm-debug.log*
 .vite/
 coverage/
 dist/
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 .DS_Store
 .claude/

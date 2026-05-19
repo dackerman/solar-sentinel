@@ -85,3 +85,35 @@ export interface ServerPerformanceMetadata {
   totalMs: number;
   phases: Record<string, number>;
 }
+
+export interface WeatherHistoryEntry {
+  id?: number;
+  fetchedAt: string;
+  location: Location;
+  date: string;
+  data: WeatherData;
+  statusCode?: number;
+  cacheStatus?: string | null;
+}
+
+export interface DailyCalendarHistoryEntry {
+  id?: number;
+  fetchedAt: string;
+  location: Location;
+  startDate: string;
+  data: DailyCalendarData;
+  statusCode?: number;
+  cacheStatus?: string | null;
+}
+
+export interface ApiHistoryResponse<T> {
+  entries: Array<{
+    id: number;
+    fetchedAt: string;
+    location: Location;
+    date: string;
+    data: T;
+    statusCode: number;
+    cacheStatus?: string | null;
+  }>;
+}

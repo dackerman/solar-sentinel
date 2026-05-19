@@ -240,6 +240,29 @@ describe('Server API Endpoints', () => {
     });
   });
 
+  describe('GET /api/history - Persisted Snapshots', () => {
+    it('returns stored weather snapshots for a location and date', async () => {
+      const testDate = getTestDate(14);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockCombinedData(testDate)),
+      });
+
+      await request(app).get('/api/weather').query({ date: testDate }).expect(200);
+
+      const response = await request(app)
+        .get('/api/history')
+        .query({ route: '/api/weather', date: testDate, lat: 42.8006, lon: -71.3048 })
+        .expect(200);
+
+      expect(response.body.entries.length).toBeGreaterThan(0);
+      const latestEntry = response.body.entries[response.body.entries.length - 1];
+      expect(latestEntry.data.date).toBe(testDate);
+      expect(latestEntry.data.daily.tempMax).toBe(68.1);
+    });
+  });
+
   describe('GET /api/daily-calendar - Calendar Forecast', () => {
     it('should return available daily forecast days with weather codes', async () => {
       const testDate = getTestDate(13);
