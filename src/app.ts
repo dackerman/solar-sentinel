@@ -1016,9 +1016,13 @@ export class SolarSentinelApp {
   }
 
   private switchEnvironment(): void {
-    const { protocol, hostname, port, pathname, search, hash } = window.location;
-    const targetPort = port === '45273' ? '49877' : '45273';
-    window.location.href = `${protocol}//${hostname}:${targetPort}${pathname}${search}${hash}`;
+    const { hostname, port, pathname, search, hash } = window.location;
+    const isDev = port === '45273';
+    const targetOrigin = isDev
+      ? 'https://solar-sentinel.ackermansoftware.com'
+      : `http://${hostname === 'localhost' ? 'localhost' : 'homoiconicity'}:45273`;
+
+    window.location.href = `${targetOrigin}${pathname}${search}${hash}`;
   }
 
   private updateEnvironmentToggleLabel(): void {
