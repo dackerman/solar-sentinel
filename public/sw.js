@@ -1,7 +1,7 @@
 // Solar Sentinel Service Worker
 // Smart caching strategy: Network-first for app shell, cache-first for static assets
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const CURRENT_CACHES = {
   static: `solar-sentinel-static-v${VERSION}`,
   api: `solar-sentinel-api-v${VERSION}`
@@ -64,6 +64,13 @@ self.addEventListener('fetch', event => {
   
   // Skip non-GET requests
   if (event.request.method !== 'GET') {
+    return;
+  }
+
+  // Let the browser handle third-party scripts/beacons directly. If they are
+  // blocked by an extension or privacy setting, the service worker should not
+  // turn that into an uncaught FetchEvent error.
+  if (url.origin !== self.location.origin) {
     return;
   }
   
@@ -138,10 +145,7 @@ self.addEventListener('fetch', event => {
     );
   }
   
-  // Everything else - Network only (no caching)
-  else {
-    event.respondWith(fetch(event.request));
-  }
+  // Everything else - let the browser handle it normally.
 });
 
 // Handle messages from main thread

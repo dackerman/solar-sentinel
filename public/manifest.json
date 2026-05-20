@@ -29,15 +29,6 @@
       "purpose": "maskable any"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshot.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide",
-      "label": "Solar Sentinel main interface showing UV index and weather charts"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Current UV Index",
