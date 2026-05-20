@@ -30,11 +30,11 @@ RUN pnpm run build
 ENV NODE_ENV=production
 
 # Expose port
-EXPOSE 3000
+EXPOSE 43187
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/api/weather').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://localhost:43187/api/weather').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 # Start the application
 CMD ["pnpm", "start"]

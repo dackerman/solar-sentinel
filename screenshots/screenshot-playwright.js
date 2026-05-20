@@ -16,7 +16,7 @@ const { chromium } = require('playwright');
 
     console.log('Navigating to Solar Sentinel...');
     // Use host.docker.internal to access the host's localhost from container
-    await page.goto('http://host.docker.internal:9890', {
+    await page.goto('http://host.docker.internal:49877', {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
@@ -35,6 +35,7 @@ const { chromium } = require('playwright');
     // Try to open debug panel and take another screenshot
     try {
       console.log('Opening debug panel...');
+      await page.click('#app-menu-toggle');
       await page.click('#debug-btn');
       await page.waitForTimeout(2000);
 

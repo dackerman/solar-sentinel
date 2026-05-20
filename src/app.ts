@@ -79,6 +79,7 @@ export class SolarSentinelApp {
     document.getElementById('environment-toggle')?.addEventListener('click', () => {
       this.switchEnvironment();
     });
+    this.updateEnvironmentToggleLabel();
 
     // Date navigation
     document.getElementById('prev-day')?.addEventListener('click', () => this.navigateDate(-1));
@@ -935,8 +936,15 @@ export class SolarSentinelApp {
 
   private switchEnvironment(): void {
     const { protocol, hostname, port, pathname, search, hash } = window.location;
-    const targetPort = port === '5173' ? '9890' : '5173';
+    const targetPort = port === '45273' ? '49877' : '45273';
     window.location.href = `${protocol}//${hostname}:${targetPort}${pathname}${search}${hash}`;
+  }
+
+  private updateEnvironmentToggleLabel(): void {
+    const button = document.getElementById('environment-toggle');
+    if (!button) return;
+
+    button.textContent = window.location.port === '45273' ? 'Switch to prod' : 'Switch to dev';
   }
 
   private parseLocalDate(dateString: string): Date {

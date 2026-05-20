@@ -35,8 +35,8 @@ print_error() {
 
 # Check if Solar Sentinel is running
 print_status "Checking if Solar Sentinel is running..."
-if ! curl -s http://localhost:9890 > /dev/null; then
-    print_error "Solar Sentinel is not running at http://localhost:9890"
+if ! curl -s http://localhost:49877 > /dev/null; then
+    print_error "Solar Sentinel is not running at http://localhost:49877"
     echo "Please start it with: docker compose up -d"
     exit 1
 fi
@@ -109,7 +109,7 @@ done
 echo ""
 print_status "💡 How this works:"
 echo "  1. Playwright runs in Docker containers (avoids X11 display issues)"
-echo "  2. Uses host.docker.internal:9890 to access Solar Sentinel"
+echo "  2. Uses host.docker.internal:49877 to access Solar Sentinel"
 echo "  3. Desktop container: 1920x1080 viewport with standard user agent"
 echo "  4. Mobile container: 390x844 viewport with iPhone user agent"
 echo "  5. Each container captures main view + debug panel view"

@@ -13,7 +13,7 @@
 - `docker compose down && docker compose up -d --build` - Rebuild Docker image after code changes
 
 ## Docker
-- External port is `9890`; internal app port is `3000`
+- External port is `49877`; internal app port is `43187`
 - Docker copies files at build time, so `docker compose restart` does **not** apply code changes
 - Use a full rebuild for code changes: `docker compose down && docker compose up -d --build`
 

@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 43187;
 const DB_PATH =
   process.env.SQLITE_DB_PATH ||
   (process.env.NODE_ENV === 'test' ? ':memory:' : join(__dirname, 'data', 'solar-sentinel.sqlite'));

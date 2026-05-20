@@ -10,10 +10,10 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 5173,
+    port: 45273,
     allowedHosts: ['homoiconicity'],
     proxy: {
-      '/api': 'http://localhost:3000',
+      '/api': 'http://localhost:43187',
     },
   },
   test: {

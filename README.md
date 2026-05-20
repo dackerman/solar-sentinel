@@ -68,7 +68,7 @@ cd solar-sentinel
 docker compose up -d
 
 # Access the app
-open http://localhost:9890
+open http://localhost:49877
 ```
 
 ### Local Development
@@ -183,14 +183,14 @@ pnpm run format
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3000` | Internal server port |
+| `PORT` | `43187` | Internal server port |
 | `NODE_ENV` | `production` | Runtime environment |
 
 ### Docker Ports
 
 | Internal | External | Description |
 |----------|----------|-------------|
-| `3000` | `9890` | Web application |
+| `43187` | `49877` | Web application |
 
 ## 📊 UV Index Scale
 
@@ -378,7 +378,7 @@ The application includes comprehensive health checks:
 docker compose ps
 
 # Manual health check
-curl http://localhost:9890/api/uv-today
+curl http://localhost:49877/api/uv-today
 ```
 
 ## 📸 Screenshot Generation

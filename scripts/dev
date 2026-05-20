@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PORTS=(3000 5173)
+PORTS=(43187 45273)
 
 for port in "${PORTS[@]}"; do
   if command -v lsof >/dev/null 2>&1; then
-    pids="$(lsof -ti tcp:"${port}" || true)"
+    pids="$(lsof -ti tcp:"${port}" -sTCP:LISTEN || true)"
   elif command -v fuser >/dev/null 2>&1; then
     pids="$(fuser "${port}"/tcp 2>/dev/null || true)"
   else
@@ -17,8 +17,26 @@ for port in "${PORTS[@]}"; do
   if [[ -n "${pids}" ]]; then
     echo "Killing process(es) on port ${port}: ${pids}"
     kill ${pids} 2>/dev/null || true
+
+    for _ in {1..25}; do
+      if command -v lsof >/dev/null 2>&1; then
+        pids="$(lsof -ti tcp:"${port}" -sTCP:LISTEN || true)"
+      else
+        pids="$(fuser "${port}"/tcp 2>/dev/null || true)"
+      fi
+
+      if [[ -z "${pids}" ]]; then
+        break
+      fi
+      sleep 0.2
+    done
+
+    if [[ -n "${pids}" ]]; then
+      echo "Force killing process(es) on port ${port}: ${pids}"
+      kill -9 ${pids} 2>/dev/null || true
+    fi
   fi
 done
 
 cd "${ROOT_DIR}"
-exec pnpm exec concurrently "pnpm run dev:server" "pnpm exec vite --host 0.0.0.0"
+exec pnpm exec concurrently "PORT=43187 pnpm run dev:server" "pnpm exec vite --host 0.0.0.0 --port 45273 --strictPort"

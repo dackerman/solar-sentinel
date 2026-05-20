@@ -25,7 +25,7 @@ We solved this by using **Playwright in Docker containers**, which provides:
 │   Host Machine      │    │  Docker Container   │
 │                     │    │                     │
 │  Solar Sentinel     │    │  Playwright +       │
-│  :9890              │◄───┤  Chromium           │
+│  :49877             │◄───┤  Chromium           │
 │                     │    │                     │
 │  Screenshots/       │    │  screenshot-*.js    │
 │  (volume mount)     │◄───┤  captures UI        │
@@ -40,7 +40,7 @@ We solved this by using **Playwright in Docker containers**, which provides:
    - Runs on Ubuntu with proper font rendering
 
 2. **Network Access**: `--add-host host.docker.internal:host-gateway`
-   - Allows container to reach `http://localhost:9890` on host
+   - Allows container to reach `http://localhost:49877` on host
    - No port forwarding needed
 
 3. **Volume Mount**: `-v $(pwd):/screenshots`
@@ -123,7 +123,7 @@ const { chromium } = require('playwright');
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 await page.setViewportSize({ width: 1920, height: 1080 });
-await page.goto('http://host.docker.internal:9890');
+await page.goto('http://host.docker.internal:49877');
 await page.screenshot({ path: '/screenshots/name.png', fullPage: true });
 ```
 
@@ -133,7 +133,7 @@ await page.screenshot({ path: '/screenshots/name.png', fullPage: true });
 
 1. **"Cannot connect to host.docker.internal"**
    - Ensure `--add-host host.docker.internal:host-gateway` is used
-   - Check Solar Sentinel is running on port 9890
+   - Check Solar Sentinel is running on port 49877
 
 2. **"Screenshots are empty/blank"**
    - Increase wait time with `await page.waitForTimeout(5000)`
