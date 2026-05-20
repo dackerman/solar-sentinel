@@ -38,7 +38,6 @@ export class SolarSentinelApp {
   private calendarHistory: DailyCalendarHistoryEntry[] = [];
   private latestWeatherData: WeatherData | null = null;
   private latestCalendarData: DailyCalendarData | null = null;
-  private historyRefreshTimer: number | null = null;
   private historyRefreshPromise: Promise<void> | null = null;
   private chartRenderToken = 0;
   private readonly appStartTime = performance.now();
@@ -119,7 +118,6 @@ export class SolarSentinelApp {
       const apiStart = performance.now();
       const data = await this.api.fetchWeatherData(this.currentLocation, this.currentDate);
       this.latestWeatherData = data;
-      this.requestHistoryRefresh();
       this.markPerformance('weather-api-complete', {
         durationMs: Math.round(performance.now() - apiStart),
         responseMs: data.timing?.responseDuration,
@@ -274,6 +272,7 @@ export class SolarSentinelApp {
     if (dateElement) {
       dateElement.textContent = dateDisplay;
     }
+    this.updateDateNavigationControls();
 
     if (data.metadata?.lastUpdated) {
       const lastUpdated = new Date(data.metadata.lastUpdated);
@@ -286,6 +285,7 @@ export class SolarSentinelApp {
     }
 
     this.updateCurrentConditions(data);
+    this.updateHistoryControls();
     this.markPerformance('weather-dom-updated', {
       durationMs: Math.round(performance.now() - renderStart),
       date: data.date,
@@ -524,7 +524,6 @@ export class SolarSentinelApp {
     const apiStart = performance.now();
     const calendar = await this.api.fetchDailyCalendar(this.currentLocation, startDate);
     this.latestCalendarData = calendar;
-    this.requestHistoryRefresh();
     this.markPerformance('forecast-calendar-api-complete', {
       durationMs: Math.round(performance.now() - apiStart),
       responseMs: calendar.timing?.responseDuration,
@@ -583,30 +582,6 @@ export class SolarSentinelApp {
     container.classList.remove('hidden');
   }
 
-  private requestHistoryRefresh(): void {
-    if (!document.getElementById('history-toggle')) {
-      return;
-    }
-
-    if (this.historyRefreshTimer) {
-      clearTimeout(this.historyRefreshTimer);
-    }
-
-    this.historyRefreshTimer = window.setTimeout(() => {
-      this.historyRefreshTimer = null;
-
-      if (!this.historyRefreshPromise) {
-        this.historyRefreshPromise = this.refreshHistoryState().finally(() => {
-          this.historyRefreshPromise = null;
-        });
-      }
-
-      void this.historyRefreshPromise.catch(error => {
-        this.debugPanel.log('History refresh error', { error: (error as Error).message });
-      });
-    }, 250);
-  }
-
   private async refreshHistoryState(): Promise<void> {
     const startDate = new Date().toLocaleDateString('en-CA');
     const [weatherHistory, calendarHistory] = await Promise.all([
@@ -628,8 +603,9 @@ export class SolarSentinelApp {
 
     if (!panel || !controls || !scrubber || !status || !detail || !toggle) return;
 
+    const canLoadHistory = Boolean(this.latestWeatherData);
     const hasHistory = this.weatherHistory.length > 0;
-    toggle.classList.toggle('hidden', !hasHistory);
+    toggle.classList.toggle('hidden', !canLoadHistory);
     toggle.setAttribute('aria-pressed', String(this.historyMode));
     const historyToggleLabel = this.historyMode
       ? 'Return to current conditions'
@@ -662,7 +638,13 @@ export class SolarSentinelApp {
   }
 
   private async enterHistoryMode(): Promise<void> {
-    await this.refreshHistoryState();
+    if (!this.historyRefreshPromise) {
+      this.historyRefreshPromise = this.refreshHistoryState().finally(() => {
+        this.historyRefreshPromise = null;
+      });
+    }
+
+    await this.historyRefreshPromise;
     if (this.weatherHistory.length === 0) return;
 
     this.historyMode = true;
@@ -885,6 +867,22 @@ export class SolarSentinelApp {
       this.updateHistoryControls();
       this.loadData();
     }
+  }
+
+  private updateDateNavigationControls(): void {
+    const selectedDate = this.parseLocalDate(this.currentDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 16);
+
+    document.getElementById('prev-day')?.classList.toggle('hidden', selectedDate <= today);
+    document.getElementById('next-day')?.classList.toggle('hidden', selectedDate >= maxDate);
+  }
+
+  private parseLocalDate(dateString: string): Date {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day);
   }
 
   private updateElement(id: string, text: string): void {
