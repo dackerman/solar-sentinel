@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
     <link rel="manifest" href="/manifest.json" />
   </head>
-  <body class="bg-gray-50 min-h-screen">
+  <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto max-w-4xl">
       <header class="flex items-center justify-between">
         <img src="/logo.png" alt="Solar Sentinel" class="h-auto w-32 m-1" />
@@ -45,7 +45,7 @@
 
       <div class="max-w-4xl mx-auto">
         <!-- Current Conditions -->
-        <div id="current-conditions" class="hidden bg-white rounded-lg shadow-lg p-4 mb-6">
+        <div id="current-conditions" class="hidden bg-white rounded-lg border border-gray-200 p-4 mb-6">
           <div class="flex justify-between items-center mb-3">
             <div class="flex items-center gap-2">
               <h3 class="text-lg font-semibold">Current Conditions</h3>
@@ -101,45 +101,45 @@
           </div>
 
           <!-- Dual Display: Current + Today's Forecast -->
-          <div id="dual-display" class="hidden space-y-3">
-            <!-- Current Row -->
-            <div class="flex items-center justify-between bg-blue-50 rounded-lg p-3">
-              <div class="text-sm font-medium text-blue-800 w-12">Now:</div>
-              <div class="flex items-center space-x-4 text-sm">
-                <div class="flex items-center space-x-1">
+          <div id="dual-display" class="hidden grid grid-cols-2 gap-3">
+            <!-- Now panel -->
+            <div class="bg-gray-50 rounded-lg p-3">
+              <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Now</div>
+              <div class="grid grid-cols-2 gap-y-2 gap-x-3 text-sm">
+                <div class="flex items-center gap-1.5">
                   <span>🌡️</span>
-                  <span id="current-temp-dual" class="font-semibold">--°F</span>
+                  <span id="current-temp-dual" class="font-semibold text-gray-800">--°F</span>
                 </div>
-                <div class="flex items-center space-x-1">
+                <div class="flex items-center gap-1.5">
                   <span>☀️</span>
-                  <span id="current-uv-dual" class="font-semibold">--</span>
+                  <span id="current-uv-dual" class="font-semibold text-gray-800">--</span>
                 </div>
-                <div class="flex items-center space-x-1">
+                <div class="flex items-center gap-1.5">
                   <span>🌧️</span>
-                  <span id="current-precip-dual" class="font-semibold">--%</span>
+                  <span id="current-precip-dual" class="font-semibold text-gray-800">--%</span>
                 </div>
-                <div class="flex items-center space-x-1">
+                <div class="flex items-center gap-1.5">
                   <span>💧</span>
-                  <span id="current-humidity-dual" class="font-semibold">--%</span>
+                  <span id="current-humidity-dual" class="font-semibold text-gray-800">--%</span>
                 </div>
               </div>
             </div>
 
-            <!-- Today's Forecast Row -->
-            <div class="flex items-center justify-between bg-green-50 rounded-lg p-3">
-              <div class="text-sm font-medium text-green-800 w-12">Today:</div>
-              <div class="flex items-center space-x-4 text-sm">
-                <div class="flex items-center space-x-1">
+            <!-- Today panel -->
+            <div class="bg-gray-50 rounded-lg p-3">
+              <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Today</div>
+              <div class="grid grid-cols-2 gap-y-2 gap-x-3 text-sm">
+                <div class="flex items-center gap-1.5 col-span-2">
                   <span>🌡️</span>
-                  <span id="today-temp-dual" class="font-semibold">--°/--°F</span>
+                  <span id="today-temp-dual" class="font-semibold text-gray-800">--°/--°F</span>
                 </div>
-                <div class="flex items-center space-x-1">
+                <div class="flex items-center gap-1.5">
                   <span>☀️</span>
-                  <span id="today-uv-dual" class="font-semibold">--</span>
+                  <span id="today-uv-dual" class="font-semibold text-gray-800">--</span>
                 </div>
-                <div class="flex items-center space-x-1">
+                <div class="flex items-center gap-1.5">
                   <span>🌧️</span>
-                  <span id="today-precip-dual" class="font-semibold">--%</span>
+                  <span id="today-precip-dual" class="font-semibold text-gray-800">--%</span>
                 </div>
               </div>
             </div>
@@ -189,7 +189,7 @@
         <!-- Weather Chart container -->
         <div
           id="weather-chart-container"
-          class="hidden bg-white rounded-lg shadow-lg p-2 sm:p-6 mb-6"
+          class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6 mb-6"
         >
           <h3 class="text-lg font-semibold mb-2 sm:mb-4">Weather Conditions</h3>
           <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
@@ -209,7 +209,7 @@
         </div>
 
         <!-- UV Chart container -->
-        <div id="chart-container" class="hidden bg-white rounded-lg shadow-lg p-2 sm:p-6">
+        <div id="chart-container" class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6">
           <h3 class="text-lg font-semibold mb-2 sm:mb-4">UV Index</h3>
           <div class="text-xs text-gray-600 mb-2 sm:hidden">☀️ UV Index Level</div>
           <div style="height: 384px; width: 100%; position: relative">
@@ -249,7 +249,7 @@
         <!-- Forecast -->
         <section
           id="forecast-calendar-container"
-          class="hidden mt-6 bg-white rounded-lg shadow-lg overflow-hidden"
+          class="hidden mt-6 bg-white rounded-lg border border-gray-200 overflow-hidden"
           aria-live="polite"
         >
           <div
