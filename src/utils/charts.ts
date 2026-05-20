@@ -406,7 +406,7 @@ export async function createWeatherChart(
           borderWidth: 2,
           fill: true,
           tension: 0.3,
-          yAxisID: 'y',
+          yAxisID: 'y1',
         },
         {
           label: 'Cloud Cover (%)',
@@ -415,7 +415,7 @@ export async function createWeatherChart(
           borderColor: '#d1d5db',
           backgroundColor: 'rgba(209, 213, 219, 0.6)',
           borderWidth: 1,
-          yAxisID: 'y',
+          yAxisID: 'y1',
         },
         {
           label: 'Temperature (°F)',
@@ -438,7 +438,7 @@ export async function createWeatherChart(
               return getForecastTempBackgroundColor(t);
             },
           },
-          yAxisID: 'y1',
+          yAxisID: 'y',
         },
         {
           label: 'Apparent Temperature (°F)',
@@ -462,7 +462,7 @@ export async function createWeatherChart(
               return getForecastTempBackgroundColor(t);
             },
           },
-          yAxisID: 'y1',
+          yAxisID: 'y',
         },
         {
           label: 'Humidity (%)',
@@ -473,7 +473,7 @@ export async function createWeatherChart(
           borderDash: [2, 2],
           fill: false,
           tension: 0.3,
-          yAxisID: 'y',
+          yAxisID: 'y1',
         },
       ],
     },
@@ -496,20 +496,26 @@ export async function createWeatherChart(
           type: 'linear',
           display: true,
           position: 'left',
-          beginAtZero: true,
-          max: 100,
           title: {
             display: window.innerWidth >= 640,
-            text: 'Percentage',
+            text: 'Temperature (°F)',
+          },
+          ticks: {
+            callback: (value: string | number) => `${value}°`,
           },
         },
         y1: {
           type: 'linear',
           display: true,
           position: 'right',
+          beginAtZero: true,
+          max: 100,
           title: {
             display: window.innerWidth >= 640,
-            text: 'Temperature (°F)',
+            text: 'Percentage',
+          },
+          ticks: {
+            callback: (value: string | number) => `${value}%`,
           },
           grid: {
             drawOnChartArea: false,
