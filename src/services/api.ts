@@ -14,6 +14,7 @@ export class WeatherAPI {
   private readonly WEATHER_CACHE_PREFIX = 'solar_sentinel_weather';
   private readonly CALENDAR_CACHE_PREFIX = 'solar_sentinel_calendar';
   private readonly WEATHER_CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
+  private readonly inFlightRequests = new Map<string, Promise<unknown>>();
 
   async fetchWeatherData(
     location: Location,
@@ -22,7 +23,7 @@ export class WeatherAPI {
     const startTime = performance.now();
     const url = `${this.baseURL}/api/weather?lat=${location.lat}&lon=${location.lon}&date=${date}`;
 
-    const response = await fetch(url);
+    const response = await this.fetchOnce(url);
     const responseTime = performance.now();
     const responseDuration = Math.round(responseTime - startTime);
 
@@ -114,7 +115,7 @@ export class WeatherAPI {
     const startTime = performance.now();
     const url = `${this.baseURL}/api/daily-calendar?lat=${location.lat}&lon=${location.lon}&date=${startDate}`;
 
-    const response = await fetch(url);
+    const response = await this.fetchOnce(url);
     const responseTime = performance.now();
     const responseDuration = Math.round(responseTime - startTime);
 
@@ -249,7 +250,7 @@ export class WeatherAPI {
       date,
       limit: '500',
     });
-    const response = await fetch(`${this.baseURL}/api/history?${params.toString()}`);
+    const response = await this.fetchOnce(`${this.baseURL}/api/history?${params.toString()}`);
 
     if (!response.ok) {
       throw new Error(`History API failed: ${response.status}`);
@@ -265,7 +266,7 @@ export class WeatherAPI {
     const startTime = performance.now();
     const url = `${this.baseURL}/api/daily-summary?lat=${location.lat}&lon=${location.lon}&date=${date}`;
 
-    const response = await fetch(url);
+    const response = await this.fetchOnce(url);
     const responseTime = performance.now();
     const responseDuration = Math.round(responseTime - startTime);
 
@@ -300,7 +301,7 @@ export class WeatherAPI {
     const startTime = performance.now();
     const url = `${this.baseURL}/api/uv-today/poll?lat=${location.lat}&lon=${location.lon}&date=${date}&timestamp=${timestamp}`;
 
-    const response = await fetch(url);
+    const response = await this.fetchOnce(url);
     const endTime = performance.now();
     const duration = Math.round(endTime - startTime);
 
@@ -316,5 +317,20 @@ export class WeatherAPI {
         cacheStatus: 'unknown', // Poll endpoint doesn't have cache headers
       },
     };
+  }
+
+  private async fetchOnce(url: string): Promise<Response> {
+    const inFlight = this.inFlightRequests.get(url) as Promise<Response> | undefined;
+    if (inFlight) {
+      return inFlight.then(response => response.clone());
+    }
+
+    const request = fetch(url).finally(() => {
+      this.inFlightRequests.delete(url);
+    });
+    this.inFlightRequests.set(url, request);
+
+    const response = await request;
+    return response.clone();
   }
 }

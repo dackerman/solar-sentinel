@@ -38,6 +38,8 @@ export class SolarSentinelApp {
   private calendarHistory: DailyCalendarHistoryEntry[] = [];
   private latestWeatherData: WeatherData | null = null;
   private latestCalendarData: DailyCalendarData | null = null;
+  private historyRefreshTimer: number | null = null;
+  private historyRefreshPromise: Promise<void> | null = null;
   private chartRenderToken = 0;
   private readonly appStartTime = performance.now();
   private lastPerformanceMark = this.appStartTime;
@@ -586,9 +588,23 @@ export class SolarSentinelApp {
       return;
     }
 
-    void this.refreshHistoryState().catch(error => {
-      this.debugPanel.log('History refresh error', { error: (error as Error).message });
-    });
+    if (this.historyRefreshTimer) {
+      clearTimeout(this.historyRefreshTimer);
+    }
+
+    this.historyRefreshTimer = window.setTimeout(() => {
+      this.historyRefreshTimer = null;
+
+      if (!this.historyRefreshPromise) {
+        this.historyRefreshPromise = this.refreshHistoryState().finally(() => {
+          this.historyRefreshPromise = null;
+        });
+      }
+
+      void this.historyRefreshPromise.catch(error => {
+        this.debugPanel.log('History refresh error', { error: (error as Error).message });
+      });
+    }, 250);
   }
 
   private async refreshHistoryState(): Promise<void> {
