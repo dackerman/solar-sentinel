@@ -268,13 +268,35 @@
       </div>
     </div>
 
-    <!-- Debug Button - Fixed at bottom -->
+    <!-- App Menu - Fixed at bottom -->
     <div class="fixed bottom-4 right-4 z-50">
-      <button
-        id="debug-btn"
-        class="bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-3 py-2 rounded-full shadow-lg transition-colors duration-200 text-sm"
+      <div
+        id="app-menu"
+        class="hidden absolute bottom-12 right-0 w-44 overflow-hidden rounded-xl border border-gray-200 bg-white text-sm shadow-xl"
       >
-        🐛 Debug
+        <button
+          id="debug-btn"
+          class="block w-full px-4 py-3 text-left font-medium text-gray-700 hover:bg-gray-50"
+          type="button"
+        >
+          Debug log
+        </button>
+        <button
+          id="environment-toggle"
+          class="block w-full border-t border-gray-100 px-4 py-3 text-left font-medium text-gray-700 hover:bg-gray-50"
+          type="button"
+        >
+          Switch environment
+        </button>
+      </div>
+      <button
+        id="app-menu-toggle"
+        class="flex h-11 w-11 items-center justify-center rounded-full bg-gray-800 text-xl text-gray-200 shadow-lg transition-colors duration-200 hover:bg-gray-700 hover:text-white"
+        type="button"
+        aria-label="Open app menu"
+        aria-expanded="false"
+      >
+        ⚙
       </button>
     </div>
 

@@ -60,9 +60,25 @@ export class SolarSentinelApp {
   }
 
   private setupEventListeners(): void {
-    // Debug button
+    // App menu
+    const menu = document.getElementById('app-menu');
+    const menuToggle = document.getElementById('app-menu-toggle');
+    menuToggle?.addEventListener('click', () => {
+      const isOpen = !menu?.classList.contains('hidden');
+      menu?.classList.toggle('hidden', isOpen);
+      menuToggle.setAttribute('aria-expanded', String(!isOpen));
+    });
+
     const debugBtn = document.getElementById('debug-btn');
-    debugBtn?.addEventListener('click', () => this.debugPanel.toggle());
+    debugBtn?.addEventListener('click', () => {
+      menu?.classList.add('hidden');
+      menuToggle?.setAttribute('aria-expanded', 'false');
+      this.debugPanel.toggle();
+    });
+
+    document.getElementById('environment-toggle')?.addEventListener('click', () => {
+      this.switchEnvironment();
+    });
 
     // Date navigation
     document.getElementById('prev-day')?.addEventListener('click', () => this.navigateDate(-1));
@@ -73,6 +89,13 @@ export class SolarSentinelApp {
       ?.addEventListener('click', () => this.toggleHistoryMode());
     document.getElementById('history-scrubber')?.addEventListener('input', event => {
       this.renderHistoryAt(Number((event.target as HTMLInputElement).value));
+    });
+
+    document.getElementById('forecast-calendar')?.addEventListener('click', event => {
+      const dayCell = (event.target as HTMLElement).closest<HTMLElement>('[data-forecast-date]');
+      if (dayCell?.dataset.forecastDate) {
+        this.selectForecastDate(dayCell.dataset.forecastDate);
+      }
     });
   }
 
@@ -718,6 +741,7 @@ export class SolarSentinelApp {
     const date = new Date(day.date + 'T00:00:00');
     const today = new Date().toLocaleDateString('en-CA');
     const isToday = day.date === today;
+    const isSelected = day.date === this.currentDate;
     const { icon, label } = this.getWeatherIcon(day);
     const high = Math.round(day.tempMax);
     const low = Math.round(day.tempMin);
@@ -725,9 +749,14 @@ export class SolarSentinelApp {
     const highColor = getTempLineColor(high);
     const lowColor = getTempLineColor(low);
     const backgroundColor = getForecastTempBackgroundColor(high);
+    const highlightClass = isToday
+      ? 'ring-2 ring-blue-500 ring-inset'
+      : isSelected
+        ? 'ring-2 ring-emerald-500 ring-inset'
+        : '';
 
     return `
-      <article class="forecast-day-cell min-h-24 sm:min-h-32 p-1.5 sm:p-3 ${isToday ? 'ring-2 ring-blue-500 ring-inset' : ''}" style="--forecast-temp-color: ${backgroundColor}">
+      <article class="forecast-day-cell min-h-24 cursor-pointer sm:min-h-32 p-1.5 sm:p-3 ${highlightClass}" data-forecast-date="${day.date}" style="--forecast-temp-color: ${backgroundColor}">
         ${precip > 10 ? `<div class="forecast-day-water" style="--rain-fill: ${precip}%" aria-hidden="true"></div>` : ''}
         <div class="forecast-day-content">
           <div class="flex items-start justify-between gap-1">
@@ -748,6 +777,30 @@ export class SolarSentinelApp {
         </div>
       </article>
     `;
+  }
+
+  private selectForecastDate(dateString: string): void {
+    if (dateString === this.currentDate) {
+      return;
+    }
+
+    const date = this.parseLocalDate(dateString);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const maxDate = new Date(today);
+    maxDate.setDate(maxDate.getDate() + 16);
+
+    if (date < today || date > maxDate) {
+      return;
+    }
+
+    this.debugPanel.log(`Forecast day selected: ${this.currentDate} → ${dateString}`);
+    this.currentDate = dateString;
+    this.historyMode = false;
+    this.latestWeatherData = null;
+    this.weatherHistory = [];
+    this.updateHistoryControls();
+    this.loadData();
   }
 
   private updateForecastCalendarMetadata(calendar: DailyCalendarData): void {
@@ -878,6 +931,12 @@ export class SolarSentinelApp {
 
     document.getElementById('prev-day')?.classList.toggle('hidden', selectedDate <= today);
     document.getElementById('next-day')?.classList.toggle('hidden', selectedDate >= maxDate);
+  }
+
+  private switchEnvironment(): void {
+    const { protocol, hostname, port, pathname, search, hash } = window.location;
+    const targetPort = port === '5173' ? '9890' : '5173';
+    window.location.href = `${protocol}//${hostname}:${targetPort}${pathname}${search}${hash}`;
   }
 
   private parseLocalDate(dateString: string): Date {
