@@ -97,6 +97,51 @@ const selectApiHistoryStatement = apiHistoryDb.prepare(`
   ORDER BY fetched_at ASC, id ASC
 `);
 
+const selectApiHistoryBeforeStatement = apiHistoryDb.prepare(`
+  SELECT * FROM (
+    SELECT
+      id,
+      fetched_at,
+      route,
+      lat,
+      lon,
+      date,
+      cache_status,
+      status_code,
+      response_json
+    FROM api_call_history
+    WHERE route = ?
+      AND location_key = ?
+      AND date = ?
+      AND status_code = 200
+      AND fetched_at < ?
+    ORDER BY fetched_at DESC, id DESC
+    LIMIT ?
+  )
+  ORDER BY fetched_at ASC, id ASC
+`);
+
+const selectApiHistoryAfterStatement = apiHistoryDb.prepare(`
+  SELECT
+    id,
+    fetched_at,
+    route,
+    lat,
+    lon,
+    date,
+    cache_status,
+    status_code,
+    response_json
+  FROM api_call_history
+  WHERE route = ?
+    AND location_key = ?
+    AND date = ?
+    AND status_code = 200
+    AND fetched_at > ?
+  ORDER BY fetched_at ASC, id ASC
+  LIMIT ?
+`);
+
 const pruneApiHistoryStatement = apiHistoryDb.prepare(`
   DELETE FROM api_call_history
   WHERE fetched_at < ?
@@ -344,9 +389,13 @@ function recordApiCall({ req, lat, lon, date, cacheKey, cacheStatus, statusCode,
   }
 }
 
-function getApiHistoryEntries({ route, lat, lon, date, limit }) {
+function getApiHistoryEntries({ route, lat, lon, date, limit, before, after }) {
   const locationKey = getForecastCacheKey(lat, lon);
-  const rows = selectApiHistoryStatement.all(route, locationKey, date, limit);
+  const rows = before
+    ? selectApiHistoryBeforeStatement.all(route, locationKey, date, before, limit)
+    : after
+      ? selectApiHistoryAfterStatement.all(route, locationKey, date, after, limit)
+      : selectApiHistoryStatement.all(route, locationKey, date, limit);
 
   return rows
     .map(row => {
@@ -434,6 +483,8 @@ function parseHistoryRequest(req) {
   const requestedDate = getStringQueryParam(req.query.date) || getTodayInNewYork();
   const limitParam = parseInt(getStringQueryParam(req.query.limit), 10);
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 200;
+  const before = getStringQueryParam(req.query.before);
+  const after = getStringQueryParam(req.query.after);
 
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
     return { error: { status: 400, message: 'Invalid coordinates' } };
@@ -450,6 +501,8 @@ function parseHistoryRequest(req) {
     lon,
     requestedDate,
     limit,
+    before,
+    after,
   };
 }
 
@@ -770,13 +823,15 @@ app.get('/api/history', (req, res) => {
     return res.status(request.error.status).json({ error: request.error.message });
   }
 
-  const { route, lat, lon, requestedDate, limit } = request;
+  const { route, lat, lon, requestedDate, limit, before, after } = request;
   const entries = getApiHistoryEntries({
     route,
     lat,
     lon,
     date: requestedDate,
     limit,
+    before,
+    after,
   });
 
   res.json({

@@ -36,6 +36,14 @@ export class SolarSentinelApp {
   private historyMode = false;
   private weatherHistory: WeatherHistoryEntry[] = [];
   private calendarHistory: DailyCalendarHistoryEntry[] = [];
+  private weatherHistoryCache = new Map<
+    string,
+    { entries: WeatherHistoryEntry[]; loadedAllOlder: boolean }
+  >();
+  private calendarHistoryCache = new Map<
+    string,
+    { entries: DailyCalendarHistoryEntry[]; loadedAllOlder: boolean }
+  >();
   private latestWeatherData: WeatherData | null = null;
   private latestCalendarData: DailyCalendarData | null = null;
   private historyRefreshPromise: Promise<void> | null = null;
@@ -609,12 +617,85 @@ export class SolarSentinelApp {
   private async refreshHistoryState(): Promise<void> {
     const startDate = new Date().toLocaleDateString('en-CA');
     const [weatherHistory, calendarHistory] = await Promise.all([
-      this.api.fetchWeatherHistory(this.currentLocation, this.currentDate),
-      this.api.fetchDailyCalendarHistory(this.currentLocation, startDate),
+      this.loadWeatherHistory(this.currentDate),
+      this.loadCalendarHistory(startDate),
     ]);
     this.weatherHistory = weatherHistory;
     this.calendarHistory = calendarHistory;
     this.updateHistoryControls();
+  }
+
+  private async loadWeatherHistory(date: string): Promise<WeatherHistoryEntry[]> {
+    const cacheKey = this.getHistoryCacheKey('/api/weather', date);
+    const cache = this.weatherHistoryCache.get(cacheKey) || { entries: [], loadedAllOlder: false };
+
+    if (cache.entries.length > 0) {
+      const newest = cache.entries[cache.entries.length - 1];
+      cache.entries = this.mergeHistoryEntries(
+        cache.entries,
+        await this.api.fetchWeatherHistory(this.currentLocation, date, { after: newest.fetchedAt })
+      );
+    } else {
+      cache.entries = await this.api.fetchWeatherHistory(this.currentLocation, date);
+    }
+
+    while (!cache.loadedAllOlder && cache.entries.length > 0) {
+      const oldest = cache.entries[0];
+      const older = await this.api.fetchWeatherHistory(this.currentLocation, date, {
+        before: oldest.fetchedAt,
+      });
+      cache.entries = this.mergeHistoryEntries(older, cache.entries);
+      cache.loadedAllOlder = older.length < 500;
+    }
+
+    this.weatherHistoryCache.set(cacheKey, cache);
+    return cache.entries;
+  }
+
+  private async loadCalendarHistory(startDate: string): Promise<DailyCalendarHistoryEntry[]> {
+    const cacheKey = this.getHistoryCacheKey('/api/daily-calendar', startDate);
+    const cache = this.calendarHistoryCache.get(cacheKey) || { entries: [], loadedAllOlder: false };
+
+    if (cache.entries.length > 0) {
+      const newest = cache.entries[cache.entries.length - 1];
+      cache.entries = this.mergeHistoryEntries(
+        cache.entries,
+        await this.api.fetchDailyCalendarHistory(this.currentLocation, startDate, {
+          after: newest.fetchedAt,
+        })
+      );
+    } else {
+      cache.entries = await this.api.fetchDailyCalendarHistory(this.currentLocation, startDate);
+    }
+
+    while (!cache.loadedAllOlder && cache.entries.length > 0) {
+      const oldest = cache.entries[0];
+      const older = await this.api.fetchDailyCalendarHistory(this.currentLocation, startDate, {
+        before: oldest.fetchedAt,
+      });
+      cache.entries = this.mergeHistoryEntries(older, cache.entries);
+      cache.loadedAllOlder = older.length < 500;
+    }
+
+    this.calendarHistoryCache.set(cacheKey, cache);
+    return cache.entries;
+  }
+
+  private mergeHistoryEntries<T extends { id?: number; fetchedAt: string }>(
+    existing: T[],
+    incoming: T[]
+  ): T[] {
+    const entriesByKey = new Map<string, T>();
+    [...existing, ...incoming].forEach(entry => {
+      entriesByKey.set(String(entry.id ?? entry.fetchedAt), entry);
+    });
+    return [...entriesByKey.values()].sort(
+      (a, b) => new Date(a.fetchedAt).getTime() - new Date(b.fetchedAt).getTime()
+    );
+  }
+
+  private getHistoryCacheKey(route: '/api/weather' | '/api/daily-calendar', date: string): string {
+    return `${route}:${this.currentLocation.lat.toFixed(2)},${this.currentLocation.lon.toFixed(2)}:${date}`;
   }
 
   private updateHistoryControls(): void {

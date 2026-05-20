@@ -16,6 +16,8 @@ export class WeatherAPI {
   private readonly WEATHER_CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
   private readonly inFlightRequests = new Map<string, Promise<unknown>>();
 
+  private readonly HISTORY_PAGE_SIZE = 500;
+
   async fetchWeatherData(
     location: Location,
     date: string
@@ -205,8 +207,12 @@ export class WeatherAPI {
     return `${this.CALENDAR_CACHE_PREFIX}_${location.lat.toFixed(2)},${location.lon.toFixed(2)},${startDate}`;
   }
 
-  async fetchWeatherHistory(location: Location, date: string): Promise<WeatherHistoryEntry[]> {
-    const history = await this.fetchHistory<WeatherData>('/api/weather', location, date);
+  async fetchWeatherHistory(
+    location: Location,
+    date: string,
+    options: { before?: string; after?: string } = {}
+  ): Promise<WeatherHistoryEntry[]> {
+    const history = await this.fetchHistory<WeatherData>('/api/weather', location, date, options);
     return history.entries.map(entry => ({
       id: entry.id,
       fetchedAt: entry.fetchedAt,
@@ -220,12 +226,14 @@ export class WeatherAPI {
 
   async fetchDailyCalendarHistory(
     location: Location,
-    startDate: string
+    startDate: string,
+    options: { before?: string; after?: string } = {}
   ): Promise<DailyCalendarHistoryEntry[]> {
     const history = await this.fetchHistory<DailyCalendarData>(
       '/api/daily-calendar',
       location,
-      startDate
+      startDate,
+      options
     );
     return history.entries.map(entry => ({
       id: entry.id,
@@ -241,15 +249,18 @@ export class WeatherAPI {
   private async fetchHistory<T>(
     route: '/api/weather' | '/api/daily-calendar',
     location: Location,
-    date: string
+    date: string,
+    options: { before?: string; after?: string } = {}
   ): Promise<ApiHistoryResponse<T>> {
     const params = new URLSearchParams({
       route,
       lat: String(location.lat),
       lon: String(location.lon),
       date,
-      limit: '500',
+      limit: String(this.HISTORY_PAGE_SIZE),
     });
+    if (options.before) params.set('before', options.before);
+    if (options.after) params.set('after', options.after);
     const response = await this.fetchOnce(`${this.baseURL}/api/history?${params.toString()}`);
 
     if (!response.ok) {
