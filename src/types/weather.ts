@@ -8,6 +8,7 @@ export interface WeatherData {
   apparentTemperature: number[];
   cloudCover: number[];
   humidity: number[];
+  weatherCode?: Array<number | undefined>;
   date: string;
   daily?: DailyData;
   metadata?: {

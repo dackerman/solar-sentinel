@@ -48,14 +48,17 @@ describe('Last updated display', () => {
   it('renders formatted lastUpdated time when provided by API', async () => {
     const lastUpdatedIso = '2025-08-31T20:30:00.000Z';
 
-    vi.mocked(global.fetch).mockResolvedValueOnce({
+    const response = {
       ok: true,
       headers: { get: vi.fn().mockReturnValue('hit') },
       json: vi.fn().mockResolvedValue({
         ...baseData,
         metadata: { cached: true, cacheAge: 0, lastUpdated: lastUpdatedIso },
       }),
-    } as any);
+      clone: vi.fn(),
+    };
+    response.clone.mockReturnValue(response);
+    vi.mocked(global.fetch).mockResolvedValueOnce(response as any);
 
     const app = new SolarSentinelApp();
 

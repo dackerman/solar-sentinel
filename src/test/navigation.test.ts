@@ -38,6 +38,17 @@ describe('Date navigation bounds', () => {
     daily: { date, tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 },
   });
 
+  const mkResponse = (data: WeatherData) => {
+    const response = {
+      ok: true,
+      headers: { get: vi.fn().mockReturnValue('hit') },
+      json: vi.fn().mockResolvedValue(data),
+      clone: vi.fn(),
+    };
+    response.clone.mockReturnValue(response);
+    return response;
+  };
+
   beforeEach(() => {
     setupDOM();
     vi.clearAllMocks();
@@ -49,11 +60,7 @@ describe('Date navigation bounds', () => {
     const fmt = (d: Date) => d.toLocaleDateString('en-CA');
 
     // First load for today
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      headers: { get: vi.fn().mockReturnValue('hit') },
-      json: vi.fn().mockResolvedValue(mkData(fmt(today))),
-    } as any);
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(fmt(today))) as any);
     const app = new SolarSentinelApp();
     const init = app.initialize();
     // End geolocation immediately to avoid wait
@@ -67,15 +74,11 @@ describe('Date navigation bounds', () => {
 
     // Navigate forward up to bounds (best-effort; clicks that exceed bounds are ignored by app)
     for (let i = 0; i < 16; i++) {
-      vi.mocked(global.fetch).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: vi.fn().mockReturnValue('hit') },
-        json: vi
-          .fn()
-          .mockResolvedValue(
-            mkData(fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + (i + 1))))
-          ),
-      } as any);
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        mkResponse(
+          mkData(fmt(new Date(today.getFullYear(), today.getMonth(), today.getDate() + (i + 1))))
+        ) as any
+      );
       (document.getElementById('next-day') as HTMLButtonElement).click();
       // Allow the microtask queue to process the async loadData
       await Promise.resolve();

@@ -39,16 +39,23 @@ describe('Auto-refresh behavior', () => {
     metadata: { cached: true, cacheAge: 0, lastUpdated: new Date().toISOString() },
   });
 
+  const mkResponse = (data = mkData()) => {
+    const response = {
+      ok: true,
+      headers: { get: vi.fn().mockReturnValue('hit') },
+      json: vi.fn().mockResolvedValue(data),
+      clone: vi.fn(),
+    };
+    response.clone.mockReturnValue(response);
+    return response;
+  };
+
   const mockWeatherFetch = () => {
     vi.mocked(global.fetch).mockImplementation(async input => {
       const url = new URL(input.toString(), 'http://localhost');
       const date = url.searchParams.get('date') || new Date().toLocaleDateString('en-CA');
 
-      return {
-        ok: true,
-        headers: { get: vi.fn().mockReturnValue('hit') },
-        json: vi.fn().mockResolvedValue(mkData(date)),
-      } as any;
+      return mkResponse(mkData(date)) as any;
     });
   };
 
@@ -66,11 +73,7 @@ describe('Auto-refresh behavior', () => {
   });
 
   it('skips refresh when a request is already in flight', async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce({
-      ok: true,
-      headers: { get: vi.fn().mockReturnValue('hit') },
-      json: vi.fn().mockResolvedValue(mkData()),
-    } as any);
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse() as any);
 
     let resolveRefresh!: (value: any) => void;
     vi.mocked(global.fetch).mockImplementationOnce(
@@ -88,11 +91,7 @@ describe('Auto-refresh behavior', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
 
-    resolveRefresh({
-      ok: true,
-      headers: { get: vi.fn().mockReturnValue('hit') },
-      json: vi.fn().mockResolvedValue(mkData()),
-    });
+    resolveRefresh(mkResponse());
     await Promise.resolve();
   });
 

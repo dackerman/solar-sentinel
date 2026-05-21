@@ -42,7 +42,9 @@ describe('WeatherAPI', () => {
       ok: true,
       headers: { get: vi.fn().mockReturnValue('hit') },
       json: vi.fn().mockResolvedValue(mockData),
+      clone: vi.fn(),
     };
+    mockResponse.clone.mockReturnValue(mockResponse);
     vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
     mockResponse.headers.get.mockImplementation((header: string) =>
       header === 'Server-Timing' ? 'parseRequest;dur=1, total;dur=2' : 'hit'
@@ -65,7 +67,9 @@ describe('WeatherAPI', () => {
     const mockResponse = {
       ok: false,
       status: 500,
+      clone: vi.fn(),
     };
+    mockResponse.clone.mockReturnValue(mockResponse);
     vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
 
     await expect(api.fetchWeatherData(mockLocation, '2025-08-31')).rejects.toThrow(

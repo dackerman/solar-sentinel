@@ -33,6 +33,7 @@ function getMockHourlyData(date: string) {
       apparent_temperature: [28.3, 26.1, 24.7, 67.1, 69.8, 68.2],
       cloud_cover: [75, 60, 40, 30, 55, 45],
       relative_humidity_2m: [85, 88, 92, 45, 38, 42],
+      weather_code: [3, 3, 45, 1, 2, 2],
     },
   };
 }
@@ -86,6 +87,7 @@ describe('Server API Endpoints', () => {
       expect(response.body).toHaveProperty('uv');
       expect(response.body).toHaveProperty('precipitation');
       expect(response.body).toHaveProperty('temperature');
+      expect(response.body).toHaveProperty('weatherCode');
       expect(response.body).toHaveProperty('metadata');
       expect(response.body.metadata.cached).toBe(false);
       expect(response.body.date).toBe(testDate);

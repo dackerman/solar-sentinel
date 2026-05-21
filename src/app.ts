@@ -9,6 +9,11 @@ import {
   getTempLineColor,
   type ChartInstance,
 } from './utils/charts.js';
+import {
+  getWeatherArt,
+  type WeatherArtDaypart,
+  type WeatherArtResult,
+} from './utils/weatherArt.js';
 import type {
   WeatherData,
   DailyData,
@@ -345,10 +350,7 @@ export class SolarSentinelApp {
       let currentIndex = 0;
 
       for (let i = 0; i < data.labels.length; i++) {
-        const label = data.labels[i];
-        const hour = parseInt(label.split(':')[0]);
-        const isPM = label.includes('PM');
-        const hour24 = isPM && hour !== 12 ? hour + 12 : !isPM && hour === 12 ? 0 : hour;
+        const hour24 = this.getWeatherHour(data, i) ?? 0;
 
         if (hour24 === currentHour) {
           currentIndex = i;
@@ -360,10 +362,12 @@ export class SolarSentinelApp {
       }
 
       // Update current values
-      const temp = Math.round(data.temperature[currentIndex] || 0);
-      const uv = (data.uv[currentIndex] || 0).toFixed(1);
-      const precip = Math.round(data.precipitation[currentIndex] || 0);
-      const humidity = Math.round(data.humidity[currentIndex] || 0);
+      const temp = Math.round(data.temperature[currentIndex] ?? 0);
+      const uvValue = data.uv[currentIndex] ?? 0;
+      const uv = uvValue.toFixed(1);
+      const precip = Math.round(data.precipitation[currentIndex] ?? 0);
+      const humidity = Math.round(data.humidity[currentIndex] ?? 0);
+      const currentHourForArt = this.getWeatherHour(data, currentIndex) ?? currentHour;
 
       this.updateElement('current-temp-dual', `${temp}°F`);
       this.updateElement('current-uv-dual', uv);
@@ -374,8 +378,21 @@ export class SolarSentinelApp {
       this.setElementColor('current-uv-dual', getUVColor(parseFloat(uv)));
       this.setElementColor('current-temp-dual', getTempLineColor(temp));
 
+      this.updateWeatherArtImage(
+        'current-weather-art',
+        getWeatherArt({
+          tempF: temp,
+          uv: uvValue,
+          precipChance: precip,
+          humidity,
+          cloudCover: data.cloudCover[currentIndex],
+          weatherCode: data.weatherCode?.[currentIndex],
+          daypart: this.getWeatherArtDaypart(currentHourForArt),
+        })
+      );
+
       // Update today's forecast
-      this.updateTodaysForecast(data.daily);
+      this.updateTodaysForecast(data);
     } else {
       // Show daily summary for future days
       document.getElementById('dual-display')?.classList.add('hidden');
@@ -384,9 +401,12 @@ export class SolarSentinelApp {
     }
   }
 
-  private updateTodaysForecast(dailyData?: DailyData): void {
+  private updateTodaysForecast(data: WeatherData): void {
+    const dailyData = data.daily;
+
     if (!dailyData) {
       this.debugPanel.log('Today forecast missing from weather response');
+      this.hideWeatherArtImage('today-weather-art');
       return;
     }
 
@@ -401,6 +421,19 @@ export class SolarSentinelApp {
 
     this.setElementColor('today-uv-dual', getUVColor(parseFloat(uvMax)));
     this.setElementColor('today-temp-dual', getTempLineColor(tempHigh));
+
+    this.updateWeatherArtImage(
+      'today-weather-art',
+      getWeatherArt({
+        tempF: tempHigh,
+        uv: dailyData.uvMax,
+        precipChance: precipMax,
+        humidity: dailyData.humidityMax,
+        cloudCover: this.getDaytimeAverage(data.cloudCover, data),
+        weatherCode: dailyData.weatherCode,
+        daypart: 'day',
+      })
+    );
   }
 
   private updateDailySummary(dailyData?: DailyData): void {
@@ -422,6 +455,66 @@ export class SolarSentinelApp {
 
     this.setElementColor('current-uv', getUVColor(parseFloat(uvMax)));
     this.setElementColor('current-temp', getTempLineColor(tempHigh));
+  }
+
+  private updateWeatherArtImage(elementId: string, art: WeatherArtResult): void {
+    const image = document.getElementById(elementId) as HTMLImageElement | null;
+    if (!image) return;
+
+    image.classList.add('hidden');
+    image.alt = art.alt;
+    image.title = art.label;
+    image.dataset.weatherArtKey = art.key;
+    image.onload = () => {
+      image.classList.remove('hidden');
+    };
+    image.onerror = () => {
+      image.classList.add('hidden');
+      image.removeAttribute('src');
+    };
+    image.src = art.path;
+  }
+
+  private hideWeatherArtImage(elementId: string): void {
+    const image = document.getElementById(elementId) as HTMLImageElement | null;
+    if (!image) return;
+
+    image.classList.add('hidden');
+    image.removeAttribute('src');
+    image.removeAttribute('title');
+    delete image.dataset.weatherArtKey;
+  }
+
+  private getWeatherArtDaypart(hour: number): WeatherArtDaypart {
+    return hour >= 6 && hour < 20 ? 'day' : 'night';
+  }
+
+  private getDaytimeAverage(values: number[], data: WeatherData): number | undefined {
+    const daytimeValues = values.filter((value, index) => {
+      const hour = this.getWeatherHour(data, index);
+      return Number.isFinite(value) && hour !== null && hour >= 10 && hour <= 16;
+    });
+    const relevantValues = daytimeValues.length > 0 ? daytimeValues : values;
+    const validValues = relevantValues.filter(value => Number.isFinite(value));
+
+    if (validValues.length === 0) return undefined;
+    return validValues.reduce((total, value) => total + value, 0) / validValues.length;
+  }
+
+  private getWeatherHour(data: WeatherData, index: number): number | null {
+    const timestampHour = data.timestamps?.[index]?.match(/T(\d{2}):/)?.[1];
+    if (timestampHour) return parseInt(timestampHour, 10);
+
+    const label = data.labels[index];
+    if (!label) return null;
+
+    const hour = parseInt(label.split(':')[0], 10);
+    if (!Number.isFinite(hour)) return null;
+
+    const isPM = label.includes('PM');
+    if (isPM && hour !== 12) return hour + 12;
+    if (!isPM && hour === 12) return 0;
+    return hour;
   }
 
   private async renderCharts(data: WeatherData): Promise<void> {

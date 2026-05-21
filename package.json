@@ -17,6 +17,8 @@
     "test:ui": "vitest --ui",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
+    "generate:weather-art": "node scripts/generate-weather-art-manifest.mjs",
+    "generate:weather-art:images": "node scripts/generate-weather-art-images.mjs",
     "format:check": "prettier --check ."
   },
   "engines": {

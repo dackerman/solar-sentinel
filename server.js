@@ -248,7 +248,7 @@ app.use(
         });
       }
       // Longer cache for static assets (icons, images)
-      else if (path.match(/\.(png|jpg|jpeg|gif|ico|svg)$/)) {
+      else if (path.match(/\.(png|jpg|jpeg|gif|ico|svg|webp)$/)) {
         res.set({
           'Cache-Control': 'public, max-age=86400', // 1 day
         });
@@ -296,6 +296,9 @@ function filterDateData(hourlyData, targetDate) {
   const apparentTempValues = todayIndices.map(i => hourlyData.apparent_temperature[i]);
   const cloudValues = todayIndices.map(i => hourlyData.cloud_cover[i]);
   const humidityValues = todayIndices.map(i => hourlyData.relative_humidity_2m[i]);
+  const weatherCodeValues = hourlyData.weather_code
+    ? todayIndices.map(i => hourlyData.weather_code[i])
+    : todayIndices.map(() => undefined);
 
   return {
     labels,
@@ -307,6 +310,7 @@ function filterDateData(hourlyData, targetDate) {
     apparentTemperature: apparentTempValues,
     cloudCover: cloudValues,
     humidity: humidityValues,
+    weatherCode: weatherCodeValues,
     date: targetDate,
   };
 }
@@ -525,7 +529,7 @@ function hasUsableForecast(data, requestedDate, requiredFields) {
 async function fetchForecastFromOpenMeteo(lat, lon, timezone) {
   const upstreamStart = performance.now();
   const response = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max,weather_code&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max,weather_code&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
   );
   const responseMs = roundTiming(performance.now() - upstreamStart);
 
