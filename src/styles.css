@@ -20,6 +20,18 @@
     touch-action: pan-y;
   }
 
+  .weather-art-frame {
+    overflow: hidden;
+  }
+
+  .weather-art-image {
+    height: 100%;
+    width: 100%;
+    object-fit: cover;
+    transform: scale(1.25);
+    transform-origin: center;
+  }
+
   @media (min-width: 640px) {
     .history-floating-panel {
       right: 5rem;

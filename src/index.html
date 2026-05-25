@@ -104,19 +104,23 @@
           </div>
 
           <!-- Dual Display: Current + Today's Forecast -->
-          <div id="dual-display" class="hidden grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div id="dual-display" class="hidden grid grid-cols-2 gap-0">
             <!-- Now panel -->
-            <div class="bg-gray-50 rounded-lg p-3">
-              <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            <div>
+              <div
+                class="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 md:text-left"
+              >
                 Now
               </div>
-              <div class="flex items-center gap-3">
-                <img
-                  id="current-weather-art"
-                  class="hidden h-16 w-16 shrink-0 rounded-xl bg-white object-cover shadow-sm ring-1 ring-gray-200 sm:h-20 sm:w-20"
-                  alt=""
-                />
-                <div class="grid min-w-0 flex-1 grid-cols-2 gap-y-2 gap-x-3 text-sm">
+              <div class="flex flex-col items-center gap-3 md:flex-row">
+                <div
+                  class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
+                >
+                  <img id="current-weather-art" class="weather-art-image hidden" alt="" />
+                </div>
+                <div
+                  class="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-2 text-xs sm:text-sm md:gap-x-3"
+                >
                   <div class="flex items-center gap-1.5">
                     <span>🌡️</span>
                     <span id="current-temp-dual" class="font-semibold text-gray-800">--°F</span>
@@ -138,17 +142,21 @@
             </div>
 
             <!-- Today panel -->
-            <div class="bg-gray-50 rounded-lg p-3">
-              <div class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            <div>
+              <div
+                class="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 md:text-left"
+              >
                 Today
               </div>
-              <div class="flex items-center gap-3">
-                <img
-                  id="today-weather-art"
-                  class="hidden h-16 w-16 shrink-0 rounded-xl bg-white object-cover shadow-sm ring-1 ring-gray-200 sm:h-20 sm:w-20"
-                  alt=""
-                />
-                <div class="grid min-w-0 flex-1 grid-cols-2 gap-y-2 gap-x-3 text-sm">
+              <div class="flex flex-col items-center gap-3 md:flex-row">
+                <div
+                  class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
+                >
+                  <img id="today-weather-art" class="weather-art-image hidden" alt="" />
+                </div>
+                <div
+                  class="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-2 text-xs sm:text-sm md:gap-x-3"
+                >
                   <div class="flex items-center gap-1.5 col-span-2">
                     <span>🌡️</span>
                     <span id="today-temp-dual" class="font-semibold text-gray-800">--°/--°F</span>
