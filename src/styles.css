@@ -3,6 +3,32 @@
 @source './**/*.{html,ts}';
 
 @layer components {
+  .history-floating-panel {
+    position: fixed;
+    right: max(0.75rem, env(safe-area-inset-right));
+    bottom: max(1rem, env(safe-area-inset-bottom));
+    left: max(0.75rem, env(safe-area-inset-left));
+    z-index: 40;
+    margin: 0;
+    box-shadow:
+      0 18px 45px rgba(15, 23, 42, 0.22),
+      0 6px 18px rgba(15, 23, 42, 0.14);
+  }
+
+  .history-floating-panel input[type='range'] {
+    min-height: 2.75rem;
+    touch-action: pan-y;
+  }
+
+  @media (min-width: 640px) {
+    .history-floating-panel {
+      right: 5rem;
+      left: auto;
+      bottom: max(1rem, env(safe-area-inset-bottom));
+      width: min(32rem, calc(100vw - 6.5rem));
+    }
+  }
+
   .forecast-day-cell {
     position: relative;
     isolation: isolate;
