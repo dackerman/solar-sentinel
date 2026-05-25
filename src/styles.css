@@ -55,6 +55,23 @@
       var(--forecast-temp-color);
   }
 
+  .forecast-day-cell-art {
+    background-position: center;
+    background-size: 130%;
+  }
+
+  .forecast-day-cell-art .forecast-day-content {
+    display: inline-block;
+    padding: 0.35rem 0.45rem;
+    border-radius: 0.5rem;
+    background: rgba(15, 23, 42, 0.58);
+    text-shadow: 0 1px 6px rgba(15, 23, 42, 0.72);
+  }
+
+  .forecast-day-cell-art .forecast-day-content * {
+    color: inherit !important;
+  }
+
   .forecast-day-content {
     position: relative;
     z-index: 1;

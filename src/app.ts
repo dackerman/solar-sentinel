@@ -16,7 +16,6 @@ import {
 } from './utils/weatherArt.js';
 import type {
   WeatherData,
-  DailyData,
   DailyCalendarData,
   DailyCalendarDay,
   DailyCalendarHistoryEntry,
@@ -52,6 +51,7 @@ export class SolarSentinelApp {
   private latestWeatherData: WeatherData | null = null;
   private latestCalendarData: DailyCalendarData | null = null;
   private historyRefreshPromise: Promise<void> | null = null;
+  private forecastArtMode = false;
   private chartRenderToken = 0;
   private readonly appStartTime = performance.now();
   private lastPerformanceMark = this.appStartTime;
@@ -109,6 +109,14 @@ export class SolarSentinelApp {
       const dayCell = (event.target as HTMLElement).closest<HTMLElement>('[data-forecast-date]');
       if (dayCell?.dataset.forecastDate) {
         this.selectForecastDate(dayCell.dataset.forecastDate);
+      }
+    });
+
+    document.getElementById('forecast-art-toggle')?.addEventListener('click', () => {
+      this.forecastArtMode = !this.forecastArtMode;
+      this.updateForecastArtToggle();
+      if (this.latestCalendarData) {
+        this.renderForecastCalendar(this.latestCalendarData);
       }
     });
   }
@@ -397,7 +405,7 @@ export class SolarSentinelApp {
       // Show daily summary for future days
       document.getElementById('dual-display')?.classList.add('hidden');
       document.getElementById('single-display')?.classList.remove('hidden');
-      this.updateDailySummary(data.daily);
+      this.updateDailySummary(data);
     }
   }
 
@@ -436,9 +444,12 @@ export class SolarSentinelApp {
     );
   }
 
-  private updateDailySummary(dailyData?: DailyData): void {
+  private updateDailySummary(data: WeatherData): void {
+    const dailyData = data.daily;
+
     if (!dailyData) {
       this.debugPanel.log('Daily summary missing from weather response');
+      this.hideWeatherArtImage('daily-weather-art');
       return;
     }
 
@@ -455,6 +466,19 @@ export class SolarSentinelApp {
 
     this.setElementColor('current-uv', getUVColor(parseFloat(uvMax)));
     this.setElementColor('current-temp', getTempLineColor(tempHigh));
+
+    this.updateWeatherArtImage(
+      'daily-weather-art',
+      getWeatherArt({
+        tempF: tempHigh,
+        uv: dailyData.uvMax,
+        precipChance: precipMax,
+        humidity: dailyData.humidityMax,
+        cloudCover: this.getDaytimeAverage(data.cloudCover, data),
+        weatherCode: dailyData.weatherCode,
+        daypart: 'day',
+      })
+    );
   }
 
   private updateWeatherArtImage(elementId: string, art: WeatherArtResult): void {
@@ -704,6 +728,7 @@ export class SolarSentinelApp {
     `;
 
     this.updateForecastCalendarMetadata(calendar);
+    this.updateForecastArtToggle();
     container.classList.remove('hidden');
   }
 
@@ -924,6 +949,16 @@ export class SolarSentinelApp {
     const highColor = getTempLineColor(high);
     const lowColor = getTempLineColor(low);
     const backgroundColor = getForecastTempBackgroundColor(high);
+    const art = getWeatherArt({
+      tempF: high,
+      uv: day.uvMax,
+      precipChance: precip,
+      humidity: day.humidityMax,
+      weatherCode: day.weatherCode,
+      daypart: 'day',
+    });
+    const artModeClass = this.forecastArtMode ? 'forecast-day-cell-art text-white' : '';
+    const artStyle = this.forecastArtMode ? `background-image: url('${art.path}')` : '';
     const highlightClass = isToday
       ? 'ring-2 ring-blue-500 ring-inset'
       : isSelected
@@ -931,8 +966,8 @@ export class SolarSentinelApp {
         : '';
 
     return `
-      <article class="forecast-day-cell min-h-24 cursor-pointer sm:min-h-32 p-1.5 sm:p-3 ${highlightClass}" data-forecast-date="${day.date}" style="--forecast-temp-color: ${backgroundColor}">
-        ${precip > 10 ? `<div class="forecast-day-water" style="--rain-fill: ${precip}%" aria-hidden="true"></div>` : ''}
+      <article class="forecast-day-cell min-h-24 cursor-pointer sm:min-h-32 p-1.5 sm:p-3 ${artModeClass} ${highlightClass}" data-forecast-date="${day.date}" style="--forecast-temp-color: ${backgroundColor}; ${artStyle}">
+        ${!this.forecastArtMode && precip > 10 ? `<div class="forecast-day-water" style="--rain-fill: ${precip}%" aria-hidden="true"></div>` : ''}
         <div class="forecast-day-content">
           <div class="flex items-start justify-between gap-1">
             <div>
@@ -941,17 +976,32 @@ export class SolarSentinelApp {
             </div>
             ${isToday ? '<span class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] sm:text-[10px] font-semibold text-blue-700">Today</span>' : ''}
           </div>
-          <div class="mt-1 sm:mt-2 flex flex-col items-center text-center">
-            <div class="text-2xl sm:text-3xl leading-none" title="${label}" aria-label="${label}">${icon}</div>
-            <div class="mt-1 text-sm sm:text-base font-bold" style="color: ${highColor}">${high}°</div>
-            <div class="text-[10px] sm:text-xs font-semibold" style="color: ${lowColor}">Low ${low}°</div>
-          </div>
-          <div class="mt-1 sm:mt-2 flex justify-center text-[10px] sm:text-xs text-gray-600">
-            <span>🌧 ${precip}%</span>
-          </div>
+          ${
+            this.forecastArtMode
+              ? ''
+              : `<div class="mt-1 sm:mt-2 flex flex-col items-center text-center">
+                  <div class="text-2xl sm:text-3xl leading-none" title="${label}" aria-label="${label}">${icon}</div>
+                  <div class="mt-1 text-sm sm:text-base font-bold" style="color: ${highColor}">${high}°</div>
+                  <div class="text-[10px] sm:text-xs font-semibold" style="color: ${lowColor}">Low ${low}°</div>
+                </div>
+                <div class="mt-1 sm:mt-2 flex justify-center text-[10px] sm:text-xs text-gray-600">
+                  <span>🌧 ${precip}%</span>
+                </div>`
+          }
         </div>
       </article>
     `;
+  }
+
+  private updateForecastArtToggle(): void {
+    const toggle = document.getElementById('forecast-art-toggle');
+    if (!toggle) return;
+
+    toggle.setAttribute('aria-pressed', String(this.forecastArtMode));
+    toggle.textContent = this.forecastArtMode ? 'Show color backgrounds' : 'Show day images';
+    toggle.classList.toggle('border-blue-300', this.forecastArtMode);
+    toggle.classList.toggle('bg-blue-50', this.forecastArtMode);
+    toggle.classList.toggle('text-blue-700', this.forecastArtMode);
   }
 
   private selectForecastDate(dateString: string): void {
