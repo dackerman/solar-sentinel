@@ -43,6 +43,7 @@ export interface DailyCalendarDay {
   tempMin: number;
   uvMax: number;
   precipMax: number;
+  precipitation: number[];
   humidityMax: number;
   weatherCode?: number;
 }

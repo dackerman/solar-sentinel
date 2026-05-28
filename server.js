@@ -334,7 +334,21 @@ function extractDailyData(dailyData, targetDate) {
   };
 }
 
-function buildDailyCalendarData(dailyData, startDate) {
+function getHourlyPrecipitationByDate(hourlyData) {
+  const precipitationByDate = new Map();
+
+  hourlyData.time.forEach((timestamp, index) => {
+    const date = timestamp.split('T')[0];
+    const values = precipitationByDate.get(date) || [];
+    values.push(hourlyData.precipitation_probability[index]);
+    precipitationByDate.set(date, values);
+  });
+
+  return precipitationByDate;
+}
+
+function buildDailyCalendarData(dailyData, hourlyData, startDate) {
+  const hourlyPrecipitationByDate = getHourlyPrecipitationByDate(hourlyData);
   const days = dailyData.time
     .map((date, index) => ({
       date,
@@ -342,6 +356,7 @@ function buildDailyCalendarData(dailyData, startDate) {
       tempMin: dailyData.temperature_2m_min[index],
       uvMax: dailyData.uv_index_max[index],
       precipMax: dailyData.precipitation_probability_max[index],
+      precipitation: hourlyPrecipitationByDate.get(date) || [],
       humidityMax: dailyData.relative_humidity_2m_max[index],
       weatherCode: dailyData.weather_code?.[index],
     }))
@@ -813,8 +828,9 @@ app.get('/api/daily-calendar', async (req, res) => {
   await handleForecastRequest(
     req,
     res,
-    ['daily'],
-    (forecastData, requestedDate) => buildDailyCalendarData(forecastData.daily, requestedDate),
+    ['hourly', 'daily'],
+    (forecastData, requestedDate) =>
+      buildDailyCalendarData(forecastData.daily, forecastData.hourly, requestedDate),
     'Daily calendar API',
     'Failed to fetch daily calendar data. Please try again later.'
   );

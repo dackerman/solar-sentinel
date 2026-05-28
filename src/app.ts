@@ -702,6 +702,8 @@ export class SolarSentinelApp {
       return;
     }
 
+    const previousDayState = this.getForecastCalendarVisualState(calendarElement);
+
     const leadingCellCount = new Date(calendar.startDate + 'T00:00:00').getDay();
     const totalCells = Math.ceil((leadingCellCount + calendar.days.length) / 7) * 7;
     const trailingCellCount = totalCells - leadingCellCount - calendar.days.length;
@@ -729,7 +731,59 @@ export class SolarSentinelApp {
 
     this.updateForecastCalendarMetadata(calendar);
     this.updateForecastArtToggle();
+    this.animateForecastCalendarVisualState(calendarElement, previousDayState);
     container.classList.remove('hidden');
+  }
+
+  private getForecastCalendarVisualState(
+    calendarElement: HTMLElement
+  ): Map<string, { tempColor: string }> {
+    const state = new Map<string, { tempColor: string }>();
+
+    calendarElement.querySelectorAll<HTMLElement>('[data-forecast-date]').forEach(dayCell => {
+      const date = dayCell.dataset.forecastDate;
+      if (!date) return;
+
+      state.set(date, {
+        tempColor: dayCell.style.getPropertyValue('--forecast-temp-color'),
+      });
+    });
+
+    return state;
+  }
+
+  private animateForecastCalendarVisualState(
+    calendarElement: HTMLElement,
+    previousDayState: Map<string, { tempColor: string }>
+  ): void {
+    if (previousDayState.size === 0) return;
+
+    const dayCells = Array.from(
+      calendarElement.querySelectorAll<HTMLElement>('[data-forecast-date]')
+    );
+    const transitions: Array<{
+      dayCell: HTMLElement;
+      nextTempColor: string;
+    }> = [];
+
+    dayCells.forEach(dayCell => {
+      const date = dayCell.dataset.forecastDate;
+      const previous = date ? previousDayState.get(date) : null;
+      if (!previous) return;
+
+      const nextTempColor = dayCell.style.getPropertyValue('--forecast-temp-color');
+
+      dayCell.style.setProperty('--forecast-temp-color', previous.tempColor);
+      transitions.push({ dayCell, nextTempColor });
+    });
+
+    if (transitions.length === 0) return;
+
+    requestAnimationFrame(() => {
+      transitions.forEach(({ dayCell, nextTempColor }) => {
+        dayCell.style.setProperty('--forecast-temp-color', nextTempColor);
+      });
+    });
   }
 
   private async refreshHistoryState(): Promise<void> {
@@ -967,7 +1021,7 @@ export class SolarSentinelApp {
 
     return `
       <article class="forecast-day-cell min-h-24 cursor-pointer sm:min-h-32 p-1.5 sm:p-3 ${artModeClass} ${highlightClass}" data-forecast-date="${day.date}" style="--forecast-temp-color: ${backgroundColor}; ${artStyle}">
-        ${!this.forecastArtMode && precip > 10 ? `<div class="forecast-day-water" style="--rain-fill: ${precip}%" aria-hidden="true"></div>` : ''}
+        ${!this.forecastArtMode ? this.renderForecastPrecipitationGraph(day.precipitation, precip) : ''}
         <div class="forecast-day-content">
           <div class="flex items-start justify-between gap-1">
             <div>
@@ -990,6 +1044,36 @@ export class SolarSentinelApp {
           }
         </div>
       </article>
+    `;
+  }
+
+  private renderForecastPrecipitationGraph(
+    values: number[] | undefined,
+    fallbackValue: number
+  ): string {
+    const precipitation = values && values.length > 0 ? values : [fallbackValue, fallbackValue];
+    const width = 100;
+    const height = 36;
+    const points = precipitation.map((value, index) => {
+      const x = precipitation.length === 1 ? width : (index / (precipitation.length - 1)) * width;
+      const y = height - (Math.max(0, Math.min(100, value)) / 100) * height;
+      return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+    });
+    const linePath = points
+      .map((point, index) => `${index === 0 ? 'M' : 'L'}${point.x},${point.y}`)
+      .join(' ');
+    const firstPoint = points[0];
+    const lastPoint = points[points.length - 1];
+    const areaPath = `M${firstPoint.x},${height} L${firstPoint.x},${firstPoint.y} ${points
+      .slice(1)
+      .map(point => `L${point.x},${point.y}`)
+      .join(' ')} L${lastPoint.x},${height} Z`;
+
+    return `
+      <svg class="forecast-day-precip-graph" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+        <path d="${areaPath}" class="forecast-day-precip-area"></path>
+        <path d="${linePath}" class="forecast-day-precip-line"></path>
+      </svg>
     `;
   }
 
