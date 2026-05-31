@@ -101,6 +101,9 @@ export class SolarSentinelApp {
     document
       .getElementById('history-toggle')
       ?.addEventListener('click', () => this.toggleHistoryMode());
+    document
+      .getElementById('history-close')
+      ?.addEventListener('click', () => this.exitHistoryMode());
     document.getElementById('history-scrubber')?.addEventListener('input', event => {
       this.renderHistoryAt(Number((event.target as HTMLInputElement).value));
     });

@@ -6,7 +6,7 @@
   .history-floating-panel {
     position: fixed;
     right: max(0.75rem, env(safe-area-inset-right));
-    bottom: max(1rem, env(safe-area-inset-bottom));
+    bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.75rem);
     left: max(0.75rem, env(safe-area-inset-left));
     z-index: 40;
     margin: 0;
