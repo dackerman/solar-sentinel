@@ -1003,6 +1003,7 @@ export class SolarSentinelApp {
     const high = Math.round(day.tempMax);
     const low = Math.round(day.tempMin);
     const precip = Math.max(0, Math.min(100, Math.round(day.precipMax || 0)));
+    const cloudCover = this.getForecastDaytimeAverage(day.cloudCover);
     const highColor = getTempLineColor(high);
     const lowColor = getTempLineColor(low);
     const backgroundColor = getForecastTempBackgroundColor(high);
@@ -1011,6 +1012,7 @@ export class SolarSentinelApp {
       uv: day.uvMax,
       precipChance: precip,
       humidity: day.humidityMax,
+      cloudCover,
       weatherCode: day.weatherCode,
       daypart: 'day',
     });
@@ -1024,6 +1026,7 @@ export class SolarSentinelApp {
 
     return `
       <article class="forecast-day-cell min-h-24 cursor-pointer sm:min-h-32 p-1.5 sm:p-3 ${artModeClass} ${highlightClass}" data-forecast-date="${day.date}" style="--forecast-temp-color: ${backgroundColor}; ${artStyle}">
+        ${!this.forecastArtMode ? this.renderForecastCloudCoverGraph(day.cloudCover, cloudCover) : ''}
         ${!this.forecastArtMode ? this.renderForecastPrecipitationGraph(day.precipitation, precip) : ''}
         <div class="forecast-day-content">
           <div class="flex items-start justify-between gap-1">
@@ -1078,6 +1081,34 @@ export class SolarSentinelApp {
         <path d="${linePath}" class="forecast-day-precip-line"></path>
       </svg>
     `;
+  }
+
+  private renderForecastCloudCoverGraph(values: number[] | undefined, fallbackValue: number): string {
+    const cloudCover = values && values.length > 0 ? values : [fallbackValue, fallbackValue];
+    const width = 100;
+    const height = 36;
+    const barWidth = width / cloudCover.length;
+    const bars = cloudCover
+      .map((value, index) => {
+        const boundedValue = Math.max(0, Math.min(100, value));
+        const barHeight = (boundedValue / 100) * height;
+        return `<rect x="${Math.round(index * barWidth * 10) / 10}" y="${Math.round((height - barHeight) * 10) / 10}" width="${Math.ceil(barWidth * 10) / 10}" height="${Math.round(barHeight * 10) / 10}"></rect>`;
+      })
+      .join('');
+
+    return `
+      <svg class="forecast-day-cloud-graph" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+        ${bars}
+      </svg>
+    `;
+  }
+
+  private getForecastDaytimeAverage(values: number[] | undefined): number {
+    const candidates = values && values.length >= 17 ? values.slice(10, 17) : values || [];
+    const validValues = candidates.filter(value => Number.isFinite(value));
+
+    if (validValues.length === 0) return 0;
+    return validValues.reduce((total, value) => total + value, 0) / validValues.length;
   }
 
   private updateForecastArtToggle(): void {

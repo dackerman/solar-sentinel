@@ -285,6 +285,7 @@ describe('Server API Endpoints', () => {
         tempMax: 68.1,
         tempMin: 28.9,
         precipitation: [10, 5, 0, 20, 35, 15],
+        cloudCover: [75, 60, 40, 30, 55, 45],
         weatherCode: 61,
       });
       expect(response.headers['x-cache-status']).toBe('miss');

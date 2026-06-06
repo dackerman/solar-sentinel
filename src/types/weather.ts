@@ -44,6 +44,7 @@ export interface DailyCalendarDay {
   uvMax: number;
   precipMax: number;
   precipitation: number[];
+  cloudCover: number[];
   humidityMax: number;
   weatherCode?: number;
 }

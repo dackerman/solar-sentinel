@@ -334,21 +334,22 @@ function extractDailyData(dailyData, targetDate) {
   };
 }
 
-function getHourlyPrecipitationByDate(hourlyData) {
-  const precipitationByDate = new Map();
+function getHourlyValuesByDate(hourlyData, field) {
+  const valuesByDate = new Map();
 
   hourlyData.time.forEach((timestamp, index) => {
     const date = timestamp.split('T')[0];
-    const values = precipitationByDate.get(date) || [];
-    values.push(hourlyData.precipitation_probability[index]);
-    precipitationByDate.set(date, values);
+    const values = valuesByDate.get(date) || [];
+    values.push(hourlyData[field][index]);
+    valuesByDate.set(date, values);
   });
 
-  return precipitationByDate;
+  return valuesByDate;
 }
 
 function buildDailyCalendarData(dailyData, hourlyData, startDate) {
-  const hourlyPrecipitationByDate = getHourlyPrecipitationByDate(hourlyData);
+  const hourlyPrecipitationByDate = getHourlyValuesByDate(hourlyData, 'precipitation_probability');
+  const hourlyCloudCoverByDate = getHourlyValuesByDate(hourlyData, 'cloud_cover');
   const days = dailyData.time
     .map((date, index) => ({
       date,
@@ -357,6 +358,7 @@ function buildDailyCalendarData(dailyData, hourlyData, startDate) {
       uvMax: dailyData.uv_index_max[index],
       precipMax: dailyData.precipitation_probability_max[index],
       precipitation: hourlyPrecipitationByDate.get(date) || [],
+      cloudCover: hourlyCloudCoverByDate.get(date) || [],
       humidityMax: dailyData.relative_humidity_2m_max[index],
       weatherCode: dailyData.weather_code?.[index],
     }))
