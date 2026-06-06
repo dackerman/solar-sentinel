@@ -412,9 +412,10 @@ export async function createWeatherChart(
           label: 'Cloud Cover (%)',
           data: data.cloudCover,
           type: 'bar',
-          borderColor: '#d1d5db',
           backgroundColor: 'rgba(209, 213, 219, 0.6)',
-          borderWidth: 1,
+          borderWidth: 0,
+          barPercentage: 1,
+          categoryPercentage: 1,
           yAxisID: 'y1',
         },
         {
