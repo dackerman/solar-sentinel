@@ -1026,13 +1026,11 @@ export class SolarSentinelApp {
       day: 'numeric',
     });
     notice.textContent = `No saved forecast for ${dayLabel} at this point in time.`;
-    [
-      'dual-display',
-      'single-display',
-      'current-conditions',
-      'chart-container',
-      'weather-chart-container',
-    ].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    // Never hide #current-conditions here: it contains the history scrubber,
+    // close button, and this notice — hiding it locks the user out of history mode.
+    ['dual-display', 'single-display', 'chart-container', 'weather-chart-container'].forEach(id =>
+      document.getElementById(id)?.classList.add('hidden')
+    );
     this.updateElement('date-display', dayLabel);
     this.updateDateNavigationControls();
   }
