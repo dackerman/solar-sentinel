@@ -34,6 +34,9 @@
 - Compatibility endpoints remain: `GET /api/uv-today`, `GET /api/daily-summary`, `GET /api/uv-today/poll`
 - Async forecast endpoint is `GET /api/daily-calendar`; it returns the available daily range starting at the requested date
 - Server caches the full 16-day Open-Meteo forecast by rounded coordinates, not individual dates
+- Every upstream fetch records deduped per-date history snapshots (all 16 days + a daily-calendar snapshot) into SQLite; the request path never writes history
+- `GET /api/history?route=&lat=&lon=&date=` serves stored snapshots; `GET /api/history/timeline?lat=&lon=` serves the distinct snapshot times the scrubber slides over
+- History scrubbing keeps the selected day fixed and resolves entries as-of the scrub time; instant load of current conditions is the top product priority — nothing may slow the cache-hit path
 - Express uses `compression()` and immutable one-year cache headers for Vite `/assets/*` files
 - Windham, NH is the optimized home path: `42.8006, -71.3048`
 - Home forecast is prewarmed and refreshed every 10 minutes while the server is running

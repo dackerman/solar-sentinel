@@ -20,7 +20,7 @@
 - Modify: `server.js` (`fetchAndCacheForecast` ~line 707; new `recordForecastSnapshots` next to `recordApiCall` ~line 466; delete `recordApiCall` and its call sites in `sendForecastResponse` ~797 and `handleForecastRequest` ~833/~900)
 - Test: `src/test/server.api.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to the `describe('GET /api/history - Persisted Snapshots')` block (coordinates `40.77, -73.97` are unique in this file):
 
@@ -98,12 +98,12 @@ it('does not duplicate snapshots when an upstream refetch returns identical data
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `pnpm exec vitest run src/test/server.api.test.ts -t "snapshots"`
 Expected: FAIL — horizon test gets 0 entries for `dateB`; refetch test gets 3+ entries (request-path recording still active)
 
-- [ ] **Step 3: Implement `recordForecastSnapshots` and call it from `fetchAndCacheForecast`**
+- [x] **Step 3: Implement `recordForecastSnapshots` and call it from `fetchAndCacheForecast`**
 
 Add after `getSafeNumber` (where `recordApiCall` currently lives). Guard on both field
 groups: `/api/uv-today` can populate the forecast cache with hourly-only payloads.
@@ -177,7 +177,7 @@ tests, off the cache-hit path, a few ms on an already-slow upstream fetch):
     })
 ```
 
-- [ ] **Step 4: Delete `recordApiCall` and its call sites**
+- [x] **Step 4: Delete `recordApiCall` and its call sites**
 
 Remove the whole `recordApiCall` function. Remove its three call sites:
 
@@ -188,13 +188,13 @@ Remove the whole `recordApiCall` function. Remove its three call sites:
 `sendForecastResponse`'s `historyContext` argument becomes unused — remove the
 parameter and the object passed at its call site in `handleForecastRequest`.
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `pnpm exec vitest run`
 Expected: PASS. Existing history tests still pass because a request's upstream fetch
 now records the requested date's partition (among others) at the same moment.
 
-- [ ] **Step 6: Format and commit**
+- [x] **Step 6: Format and commit**
 
 ```bash
 pnpm run format
@@ -210,7 +210,7 @@ git commit -m "Record full-horizon history snapshots at fetch time"
 - Modify: `server.js` (statement near the other history statements; route before `app.get('/api/history', ...)`)
 - Test: `src/test/server.api.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add inside the `/api/history` describe block (coordinates `39.95, -75.17` unique):
 
@@ -242,12 +242,12 @@ it('returns the distinct snapshot timeline for a location', async () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm exec vitest run src/test/server.api.test.ts -t "distinct snapshot timeline"`
 Expected: FAIL — 404 (route does not exist; Express serves the static fallback or 404)
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Statement (next to `selectApiHistoryAllDatesAfterStatement`):
 
@@ -285,12 +285,12 @@ app.get('/api/history/timeline', (req, res) => {
 });
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `pnpm exec vitest run`
 Expected: PASS
 
-- [ ] **Step 5: Format and commit**
+- [x] **Step 5: Format and commit**
 
 ```bash
 pnpm run format
@@ -305,7 +305,7 @@ git commit -m "Add history timeline endpoint"
 **Files:**
 - Modify: `src/services/api.ts` (history methods, ~line 209)
 
-- [ ] **Step 1: Add `fetchHistoryTimeline`**
+- [x] **Step 1: Add `fetchHistoryTimeline`**
 
 Next to the other history methods:
 
@@ -328,12 +328,12 @@ async fetchHistoryTimeline(location: Location): Promise<string[]> {
 optional-`date` signatures unchanged — weather callers will now always pass a date,
 calendar callers won't.
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `pnpm run typecheck`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 pnpm run format
@@ -349,7 +349,7 @@ git commit -m "Add history timeline API client method"
 - Modify: `src/app.ts`
 - Modify: `src/index.html` (unavailable notice, after the `#history-panel` div ~line 113)
 
-- [ ] **Step 1: Add the unavailable notice to `src/index.html`**
+- [x] **Step 1: Add the unavailable notice to `src/index.html`**
 
 Directly after the closing `</div>` of `#history-panel` (before the
 `<!-- Dual Display ... -->` comment):
@@ -361,7 +361,7 @@ Directly after the closing `</div>` of `#history-panel` (before the
 ></div>
 ```
 
-- [ ] **Step 2: State + history loading changes in `src/app.ts`**
+- [x] **Step 2: State + history loading changes in `src/app.ts`**
 
 Add field next to the other history fields:
 
@@ -429,7 +429,7 @@ In `refreshLocationInBackground`'s location-change branch (where `weatherHistory
 and `calendarHistory` are reset), also add `this.historyTimeline = [];` and
 `this.weatherHistoryCache.clear();` is NOT needed (cache is keyed by location).
 
-- [ ] **Step 3: Scrub over the timeline with as-of resolution**
+- [x] **Step 3: Scrub over the timeline with as-of resolution**
 
 `updateHistoryControls`: replace the `weatherHistory`-based slider sizing with the
 timeline —
@@ -559,7 +559,7 @@ this.updateHistoryLabel(index, this.getLatestEntryAt(this.weatherHistory, this.h
 
 `exitHistoryMode`: add `this.setHistoryUnavailable(false);` as the first line.
 
-- [ ] **Step 4: Keep date navigation live in history mode**
+- [x] **Step 4: Keep date navigation live in history mode**
 
 In both `navigateDate` and `selectForecastDate`, the current code does:
 
@@ -606,7 +606,7 @@ private async refreshHistoryForDateChange(): Promise<void> {
 }
 ```
 
-- [ ] **Step 5: Typecheck and run the full suite**
+- [x] **Step 5: Typecheck and run the full suite**
 
 Run: `pnpm run typecheck && pnpm exec vitest run`
 Expected: PASS. If `src/test/app.test.ts` or `navigation.test.ts` assert the old
@@ -614,7 +614,7 @@ Expected: PASS. If `src/test/app.test.ts` or `navigation.test.ts` assert the old
 stay-in-history behavior (check failures individually — do not weaken unrelated
 assertions).
 
-- [ ] **Step 6: Format and commit**
+- [x] **Step 6: Format and commit**
 
 ```bash
 pnpm run format
@@ -629,7 +629,7 @@ git commit -m "Scrub history by time with the selected day fixed"
 **Files:**
 - Modify: `CLAUDE.md` (Architecture section)
 
-- [ ] **Step 1: Update `CLAUDE.md` architecture notes**
+- [x] **Step 1: Update `CLAUDE.md` architecture notes**
 
 In the `## Architecture` section, replace the line
 `- Server caches the full 16-day Open-Meteo forecast by rounded coordinates, not individual dates`
@@ -642,19 +642,19 @@ with:
 - History scrubbing keeps the selected day fixed and resolves entries as-of the scrub time; instant load of current conditions is the top product priority — nothing may slow the cache-hit path
 ```
 
-- [ ] **Step 2: Full check**
+- [x] **Step 2: Full check**
 
 Run: `pnpm exec vitest run && pnpm run typecheck && pnpm run format:check && pnpm run build`
 Expected: all PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add CLAUDE.md
 git commit -m "Document history snapshot architecture"
 ```
 
-- [ ] **Step 4: Report**
+- [x] **Step 4: Report**
 
 Summarize for David. Deployment (`git push`, then
 `docker compose down && docker compose up -d --build`) was explicitly requested for
