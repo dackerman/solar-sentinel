@@ -232,7 +232,33 @@ function pruneApiHistory() {
   }
 }
 
+const dedupeApiHistoryStatement = apiHistoryDb.prepare(`
+  DELETE FROM api_call_history WHERE id IN (
+    SELECT id FROM (
+      SELECT id,
+             json_remove(response_json, '$.metadata') AS content,
+             LAG(json_remove(response_json, '$.metadata')) OVER (
+               PARTITION BY route, location_key, date
+               ORDER BY fetched_at, id
+             ) AS prevContent
+      FROM api_call_history
+      WHERE status_code = 200
+    )
+    WHERE content = prevContent
+  )
+`);
+
+// One-time cleanup of duplicates recorded before dedup-on-insert existed.
+function dedupeApiHistory() {
+  try {
+    dedupeApiHistoryStatement.run();
+  } catch (error) {
+    console.error('API history dedupe error:', error.message);
+  }
+}
+
 pruneApiHistory();
+dedupeApiHistory();
 setInterval(pruneApiHistory, 24 * 60 * 60 * 1000);
 
 // Cache cleanup function - removes old location forecasts
@@ -1027,6 +1053,7 @@ app.get('/api/uv-today/poll', async (req, res) => {
 });
 
 // Export the app for testing
+export { apiHistoryDb, dedupeApiHistory };
 export default app;
 
 // Only start server if this file is run directly (not imported)

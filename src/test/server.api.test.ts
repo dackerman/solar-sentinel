@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 // @ts-ignore - server.js doesn't have TypeScript declarations
-import app from '../../server.js';
+import app, { apiHistoryDb, dedupeApiHistory } from '../../server.js';
 
 // Mock global fetch to avoid real network calls
 const mockFetch = vi.fn();
@@ -337,6 +337,76 @@ describe('Server API Endpoints', () => {
       const dates = response.body.entries.map((entry: { date: string }) => entry.date);
       expect(dates).toContain(dateA);
       expect(dates).toContain(dateB);
+    });
+  });
+
+  describe('History duplicate cleanup', () => {
+    it('removes consecutive duplicate snapshots, keeping the first occurrence', () => {
+      const insert = apiHistoryDb.prepare(`
+        INSERT INTO api_call_history (
+          fetched_at, route, request_query_json, lat, lon, location_key,
+          date, cache_key, cache_status, status_code, response_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const locationKey = '40.10,-70.10';
+      const date = '2026-06-10';
+      const payloadA = (cacheAge: number) =>
+        JSON.stringify({ uv: [1, 2], metadata: { cached: true, cacheAge } });
+      const payloadB = JSON.stringify({ uv: [9, 9], metadata: { cached: true, cacheAge: 3 } });
+
+      insert.run(
+        '2026-06-10T10:00:00.000Z',
+        '/api/weather',
+        '{}',
+        40.1,
+        -70.1,
+        locationKey,
+        date,
+        null,
+        'hit',
+        200,
+        payloadA(1)
+      );
+      insert.run(
+        '2026-06-10T10:10:00.000Z',
+        '/api/weather',
+        '{}',
+        40.1,
+        -70.1,
+        locationKey,
+        date,
+        null,
+        'hit',
+        200,
+        payloadA(2)
+      );
+      insert.run(
+        '2026-06-10T10:20:00.000Z',
+        '/api/weather',
+        '{}',
+        40.1,
+        -70.1,
+        locationKey,
+        date,
+        null,
+        'hit',
+        200,
+        payloadB
+      );
+
+      dedupeApiHistory();
+
+      const rows = apiHistoryDb
+        .prepare(
+          'SELECT fetched_at FROM api_call_history WHERE location_key = ? ORDER BY fetched_at'
+        )
+        .all(locationKey);
+
+      expect(rows.map((row: { fetched_at: string }) => row.fetched_at)).toEqual([
+        '2026-06-10T10:00:00.000Z',
+        '2026-06-10T10:20:00.000Z',
+      ]);
     });
   });
 
