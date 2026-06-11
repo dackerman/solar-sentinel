@@ -487,41 +487,48 @@ function getSafeNumber(value) {
   return Number.isFinite(value) ? value : null;
 }
 
-function recordApiCall({ req, lat, lon, date, cacheKey, cacheStatus, statusCode, responseBody }) {
+function recordForecastSnapshots(lat, lon, cacheKey, forecastData) {
   try {
-    const safeLat = getSafeNumber(lat);
-    const safeLon = getSafeNumber(lon);
-    const locationKey =
-      safeLat !== null && safeLon !== null ? getForecastCacheKey(safeLat, safeLon) : null;
-    const responseJson = JSON.stringify(responseBody);
+    if (!forecastData?.hourly?.time || !forecastData?.daily?.time) return;
 
-    if (statusCode === 200) {
+    const fetchedAt = new Date().toISOString();
+    const startDate = forecastData.daily.time[0];
+    const snapshots = forecastData.daily.time.map(date => ({
+      route: '/api/weather',
+      date,
+      body: buildWeatherData(forecastData, date),
+    }));
+    snapshots.push({
+      route: '/api/daily-calendar',
+      date: startDate,
+      body: buildDailyCalendarData(forecastData.daily, forecastData.hourly, startDate),
+    });
+
+    for (const snapshot of snapshots) {
+      const responseJson = JSON.stringify(snapshot.body);
       const latest = selectApiHistoryIsDuplicateStatement.get(
         responseJson,
-        req.path,
-        locationKey,
-        date || null
+        snapshot.route,
+        cacheKey,
+        snapshot.date
       );
-      if (latest?.isDuplicate) {
-        return;
-      }
+      if (latest?.isDuplicate) continue;
+      insertApiHistoryStatement.run(
+        fetchedAt,
+        snapshot.route,
+        '{}',
+        lat,
+        lon,
+        cacheKey,
+        snapshot.date,
+        cacheKey,
+        'snapshot',
+        200,
+        responseJson
+      );
     }
-
-    insertApiHistoryStatement.run(
-      new Date().toISOString(),
-      req.path,
-      JSON.stringify(req.query || {}),
-      safeLat,
-      safeLon,
-      locationKey,
-      date || null,
-      cacheKey || null,
-      cacheStatus || null,
-      statusCode,
-      responseJson
-    );
   } catch (error) {
-    console.error('API history write error:', error.message);
+    console.error('Forecast snapshot record error:', error.message);
   }
 }
 
@@ -704,6 +711,7 @@ async function fetchAndCacheForecast(lat, lon, timezone, cacheKey) {
         timestamp: Date.now(),
       };
       forecastCache.set(cacheKey, entry);
+      recordForecastSnapshots(lat, lon, cacheKey, data);
       return entry;
     })
     .finally(() => {
@@ -781,17 +789,10 @@ function addMetadata(data, entry, cacheStatus, performanceMetadata) {
   };
 }
 
-function sendForecastResponse(req, res, data, entry, cacheStatus, timer, historyContext) {
+function sendForecastResponse(req, res, data, entry, cacheStatus, timer) {
   const responseBody = addMetadata(data, entry, cacheStatus, timer.metadata());
   res.set('X-Cache-Status', cacheStatus);
   res.set('Server-Timing', timer.serverTiming());
-  recordApiCall({
-    req,
-    ...historyContext,
-    cacheStatus,
-    statusCode: 200,
-    responseBody,
-  });
   res.json(responseBody);
 }
 
@@ -821,15 +822,6 @@ async function handleForecastRequest(req, res, requiredFields, buildData, logLab
         ...responseContext,
         error: request.error.message,
       };
-      recordApiCall({
-        req,
-        lat: parseFloat(getStringQueryParam(req.query.lat)),
-        lon: parseFloat(getStringQueryParam(req.query.lon)),
-        date: getStringQueryParam(req.query.date),
-        cacheStatus: 'error',
-        statusCode: request.error.status,
-        responseBody,
-      });
       return res.status(request.error.status).json(responseBody);
     }
 
@@ -869,12 +861,7 @@ async function handleForecastRequest(req, res, requiredFields, buildData, logLab
       timer.measure('refreshCheck', refreshStart);
     }
 
-    sendForecastResponse(req, res, data, entry, cacheStatus, timer, {
-      lat,
-      lon,
-      date: requestedDate,
-      cacheKey,
-    });
+    sendForecastResponse(req, res, data, entry, cacheStatus, timer);
   } catch (error) {
     console.error(`${logLabel} error:`, error.message);
     const responseBody = {
@@ -884,16 +871,6 @@ async function handleForecastRequest(req, res, requiredFields, buildData, logLab
       ...responseContext,
       error: error.message,
     };
-    recordApiCall({
-      req,
-      lat: responseContext.lat,
-      lon: responseContext.lon,
-      date: responseContext.date,
-      cacheKey: responseContext.cacheKey,
-      cacheStatus: 'error',
-      statusCode: 502,
-      responseBody,
-    });
     res.status(502).json(responseBody);
   }
 }
@@ -1003,52 +980,20 @@ app.get('/api/uv-today/poll', async (req, res) => {
     const cached = forecastCache.get(cacheKey);
 
     if (cached && cached.timestamp > clientTimestamp) {
-      const responseBody = {
+      res.json({
         hasUpdate: true,
         timestamp: cached.timestamp,
         lastUpdated: new Date(cached.timestamp).toISOString(),
-      };
-      recordApiCall({
-        req,
-        lat,
-        lon,
-        date: getStringQueryParam(req.query.date),
-        cacheKey,
-        cacheStatus: 'hit',
-        statusCode: 200,
-        responseBody,
       });
-      res.json(responseBody);
     } else {
-      const responseBody = {
+      res.json({
         hasUpdate: false,
         timestamp: cached ? cached.timestamp : null,
-      };
-      recordApiCall({
-        req,
-        lat,
-        lon,
-        date: getStringQueryParam(req.query.date),
-        cacheKey,
-        cacheStatus: cached ? 'hit' : 'miss',
-        statusCode: 200,
-        responseBody,
       });
-      res.json(responseBody);
     }
   } catch (error) {
     console.error('Poll error:', error.message);
-    const responseBody = { error: 'Poll failed' };
-    recordApiCall({
-      req,
-      lat: parseFloat(getStringQueryParam(req.query.lat)),
-      lon: parseFloat(getStringQueryParam(req.query.lon)),
-      date: getStringQueryParam(req.query.date),
-      cacheStatus: 'error',
-      statusCode: 500,
-      responseBody,
-    });
-    res.status(500).json(responseBody);
+    res.status(500).json({ error: 'Poll failed' });
   }
 });
 

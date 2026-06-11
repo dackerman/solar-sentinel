@@ -312,11 +312,11 @@ describe('Server API Endpoints', () => {
       ).toBe(true);
     });
 
-    it('skips recording history snapshots when the payload is unchanged', async () => {
-      const dateA = getTestDate(5);
-      const dateB = getTestDate(6);
-      const lat = 41.42;
-      const lon = -72.42;
+    it('records snapshots for every date in the forecast horizon on upstream fetch', async () => {
+      const dateA = getTestDate(7);
+      const dateB = getTestDate(8);
+      const lat = 40.77;
+      const lon = -73.97;
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -325,8 +325,45 @@ describe('Server API Endpoints', () => {
       });
 
       await request(app).get('/api/weather').query({ lat, lon, date: dateA }).expect(200);
-      await request(app).get('/api/weather').query({ lat, lon, date: dateB }).expect(200);
+
+      const responseB = await request(app)
+        .get('/api/history')
+        .query({ route: '/api/weather', lat, lon, date: dateB })
+        .expect(200);
+
+      expect(responseB.body.entries).toHaveLength(1);
+      expect(responseB.body.entries[0].data.daily.tempMax).toBe(57.4);
+      expect(responseB.body.entries[0].cacheStatus).toBe('snapshot');
+
+      const calendar = await request(app)
+        .get('/api/history')
+        .query({ route: '/api/daily-calendar', lat, lon })
+        .expect(200);
+
+      expect(calendar.body.entries).toHaveLength(1);
+      expect(calendar.body.entries[0].data.days).toHaveLength(2);
+    });
+
+    it('does not duplicate snapshots when an upstream refetch returns identical data', async () => {
+      const dateA = getTestDate(5);
+      const dateB = getTestDate(6);
+      const dateC = getTestDate(9);
+      const lat = 41.42;
+      const lon = -72.42;
+
+      const payload = getMockTwoDayData(dateA, dateB);
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(payload),
+      });
+
       await request(app).get('/api/weather').query({ lat, lon, date: dateA }).expect(200);
+      // dateC is outside the cached payload, forcing a second upstream fetch of identical
+      // data. Snapshots are recorded in fetchAndCacheForecast before buildData runs;
+      // the request itself then 502s because extractDailyData can't find dateC.
+      await request(app).get('/api/weather').query({ lat, lon, date: dateC }).expect(502);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
 
       const response = await request(app)
         .get('/api/history')
