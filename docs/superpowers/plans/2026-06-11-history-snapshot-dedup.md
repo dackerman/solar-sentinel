@@ -21,17 +21,17 @@ The working tree already contains the change that lets `/api/history` serve all 
 **Files:**
 - Already modified: `server.js`, `src/app.ts`, `src/services/api.ts`, `src/test/server.api.test.ts`
 
-- [ ] **Step 1: Run the full test suite**
+- [x] **Step 1: Run the full test suite**
 
 Run: `pnpm test`
 Expected: PASS (all suites; includes the new "returns stored weather snapshots without a date filter" test)
 
-- [ ] **Step 2: Run typecheck and format check**
+- [x] **Step 2: Run typecheck and format check**
 
 Run: `pnpm run typecheck && pnpm run format:check`
 Expected: both succeed
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add server.js src/app.ts src/services/api.ts src/test/server.api.test.ts
@@ -47,7 +47,7 @@ git commit -m "Let history scrubber page through all dates"
 - Test: `src/test/server.api.test.ts` (inside `describe('GET /api/history'...)` block, after the "without a date filter" test near line 286)
 - Modify: `docs/superpowers/specs/2026-06-11-history-snapshot-dedup-design.md` (corrected comparison SQL, see Step 3)
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add a mock helper next to `getMockCombinedData` (near line 60 of `src/test/server.api.test.ts`):
 
@@ -111,12 +111,12 @@ it('skips recording history snapshots when the payload is unchanged', async () =
 
 The repeat `dateA` request is identical to the latest `dateA` row (only `metadata` differs) → must be skipped. `dateB` is a different payload and date partition → must be recorded. This also proves the comparison is partitioned per date: a global latest-row comparison would see `dateB` as latest and wrongly re-record `dateA`.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm test src/test/server.api.test.ts -t "skips recording history snapshots"`
 Expected: FAIL — `entries` has length 3 (every request currently inserts a row)
 
-- [ ] **Step 3: Implement dedup in `server.js`**
+- [x] **Step 3: Implement dedup in `server.js`**
 
 Add the prepared statement after `selectApiHistoryAllDatesAfterStatement` (near line 208). It fetches only the latest row for the key and compares in SQL so both sides pass through SQLite's JSON normalizer. `IS` handles NULL `location_key`/`date`:
 
@@ -177,12 +177,12 @@ function recordApiCall({ req, lat, lon, date, cacheKey, cacheStatus, statusCode,
 }
 ```
 
-- [ ] **Step 4: Run the full test suite**
+- [x] **Step 4: Run the full test suite**
 
 Run: `pnpm test`
 Expected: PASS — including the new test and all existing history tests (their mock payloads differ per fetch, so nothing else gets deduped)
 
-- [ ] **Step 5: Format and commit**
+- [x] **Step 5: Format and commit**
 
 ```bash
 pnpm run format
@@ -198,7 +198,7 @@ git commit -m "Skip history snapshots with unchanged payloads"
 - Modify: `server.js` (after `pruneApiHistory` wiring near line 225; exports near line 1006)
 - Test: `src/test/server.api.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Update the server import at the top of `src/test/server.api.test.ts` (line 3–4):
 
@@ -256,12 +256,12 @@ describe('History duplicate cleanup', () => {
 
 Rows 1 and 2 differ only in `metadata.cacheAge` → row 2 must be deleted. Row 3 has different data → kept. Row 1 (earliest `fetched_at`) must survive, preserving the timestamp of the last real change.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `pnpm test src/test/server.api.test.ts -t "removes consecutive duplicate snapshots"`
 Expected: FAIL — `dedupeApiHistory` is not exported (undefined is not a function)
 
-- [ ] **Step 3: Implement cleanup in `server.js`**
+- [x] **Step 3: Implement cleanup in `server.js`**
 
 Add after `pruneApiHistoryStatement` (near line 213):
 
@@ -306,12 +306,12 @@ export { apiHistoryDb, dedupeApiHistory };
 export default app;
 ```
 
-- [ ] **Step 4: Run the full test suite**
+- [x] **Step 4: Run the full test suite**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: Format and commit**
+- [x] **Step 5: Format and commit**
 
 ```bash
 pnpm run format
@@ -328,7 +328,7 @@ No unit test: the scrubber DOM wiring has no existing test harness (nothing in `
 **Files:**
 - Modify: `src/app.ts` (input listener near line 107; new field + method near `renderHistoryAt`, line 953)
 
-- [ ] **Step 1: Add the pending-index field**
+- [x] **Step 1: Add the pending-index field**
 
 Next to the other history fields (after `historyRefreshPromise`, near line 53):
 
@@ -336,7 +336,7 @@ Next to the other history fields (after `historyRefreshPromise`, near line 53):
 private pendingHistoryRenderIndex: number | null = null;
 ```
 
-- [ ] **Step 2: Throttle the input listener**
+- [x] **Step 2: Throttle the input listener**
 
 Replace the listener at line 107:
 
@@ -364,12 +364,12 @@ private scheduleHistoryRender(index: number): void {
 }
 ```
 
-- [ ] **Step 3: Typecheck and run the full test suite**
+- [x] **Step 3: Typecheck and run the full test suite**
 
 Run: `pnpm run typecheck && pnpm test`
 Expected: PASS
 
-- [ ] **Step 4: Format and commit**
+- [x] **Step 4: Format and commit**
 
 ```bash
 pnpm run format
@@ -381,12 +381,12 @@ git commit -m "Throttle history scrubbing to one render per frame"
 
 ### Task 5: Final verification
 
-- [ ] **Step 1: Full check**
+- [x] **Step 1: Full check**
 
 Run: `pnpm test && pnpm run typecheck && pnpm run format:check && pnpm run build`
 Expected: all PASS
 
-- [ ] **Step 2: Verify the cleanup against a copy of the production DB**
+- [x] **Step 2: Verify the cleanup against a copy of the production DB**
 
 Never run against the live file (the Docker server has it open). Copy first:
 
@@ -413,6 +413,6 @@ rm /tmp/ss-dedup-check.sqlite
 
 Expected: counts drop from ~2,500 per route to roughly the distinct-payload counts (~400 weather, ~330 calendar; slightly above the global-distinct measurement of 381/309 because this only collapses *consecutive* duplicates per date partition).
 
-- [ ] **Step 3: Report deployment note**
+- [x] **Step 3: Report deployment note**
 
 The production DB gets cleaned automatically at next deploy (`docker compose down && docker compose up -d --build`). Don't deploy unprompted — note it for David.
