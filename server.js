@@ -207,6 +207,14 @@ const selectApiHistoryAllDatesAfterStatement = apiHistoryDb.prepare(`
   LIMIT ?
 `);
 
+const selectApiHistoryTimelineStatement = apiHistoryDb.prepare(`
+  SELECT DISTINCT fetched_at
+  FROM api_call_history
+  WHERE location_key = ?
+    AND status_code = 200
+  ORDER BY fetched_at ASC
+`);
+
 const selectApiHistoryIsDuplicateStatement = apiHistoryDb.prepare(`
   SELECT json_remove(response_json, '$.metadata') = json_remove(?, '$.metadata') AS isDuplicate
   FROM api_call_history
@@ -937,6 +945,26 @@ app.get('/api/daily-calendar', async (req, res) => {
 });
 
 // Persisted response snapshots for the frontend history scrubber.
+// Distinct snapshot times per location — the scrubber's slider domain.
+app.get('/api/history/timeline', (req, res) => {
+  const latParam = parseFloat(getStringQueryParam(req.query.lat));
+  const lonParam = parseFloat(getStringQueryParam(req.query.lon));
+  const lat = Number.isFinite(latParam) ? latParam : DEFAULT_LAT;
+  const lon = Number.isFinite(lonParam) ? lonParam : DEFAULT_LON;
+
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return res.status(400).json({ error: 'Invalid coordinates' });
+  }
+
+  try {
+    const rows = selectApiHistoryTimelineStatement.all(getForecastCacheKey(lat, lon));
+    res.json({ times: rows.map(row => row.fetched_at) });
+  } catch (error) {
+    console.error('History timeline error:', error.message);
+    res.status(500).json({ error: 'Failed to load history timeline' });
+  }
+});
+
 app.get('/api/history', (req, res) => {
   const request = parseHistoryRequest(req);
   if (request.error) {

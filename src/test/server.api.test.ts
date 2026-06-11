@@ -375,6 +375,32 @@ describe('Server API Endpoints', () => {
       expect(dates).toContain(dateA);
       expect(dates).toContain(dateB);
     });
+
+    it('returns the distinct snapshot timeline for a location', async () => {
+      const dateA = getTestDate(10);
+      const dateB = getTestDate(11);
+      const lat = 39.95;
+      const lon = -75.17;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockTwoDayData(dateA, dateB)),
+      });
+
+      await request(app).get('/api/weather').query({ lat, lon, date: dateA }).expect(200);
+
+      const response = await request(app)
+        .get('/api/history/timeline')
+        .query({ lat, lon })
+        .expect(200);
+
+      // One upstream fetch writes many partitions, all sharing one fetched_at
+      expect(response.body.times).toHaveLength(1);
+      expect(typeof response.body.times[0]).toBe('string');
+
+      await request(app).get('/api/history/timeline').query({ lat: 999, lon }).expect(400);
+    });
   });
 
   describe('History duplicate cleanup', () => {
