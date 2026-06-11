@@ -52,6 +52,7 @@ export class SolarSentinelApp {
   private latestCalendarData: DailyCalendarData | null = null;
   private historyRefreshPromise: Promise<void> | null = null;
   private pendingHistoryRenderIndex: number | null = null;
+  private historyTimeline: string[] = [];
   private forecastArtMode = false;
   private chartRenderToken = 0;
   private readonly appStartTime = performance.now();
@@ -273,6 +274,7 @@ export class SolarSentinelApp {
           this.latestCalendarData = null;
           this.weatherHistory = [];
           this.calendarHistory = [];
+          this.historyTimeline = [];
           this.updateHistoryControls();
           this.updateLocationDisplay();
           this.loadData(true);
@@ -791,34 +793,48 @@ export class SolarSentinelApp {
   }
 
   private async refreshHistoryState(): Promise<void> {
-    const [weatherHistory, calendarHistory] = await Promise.all([
-      this.loadWeatherHistory(),
+    const [weatherHistory, calendarHistory, timeline] = await Promise.all([
+      this.loadWeatherHistory(this.currentDate),
       this.loadCalendarHistory(),
+      this.api.fetchHistoryTimeline(this.currentLocation),
     ]);
     this.weatherHistory = weatherHistory;
     this.calendarHistory = calendarHistory;
+    this.historyTimeline = timeline;
     this.updateHistoryControls();
   }
 
-  private async loadWeatherHistory(): Promise<WeatherHistoryEntry[]> {
-    const cacheKey = this.getHistoryCacheKey('/api/weather');
+  private async refreshHistoryForDateChange(): Promise<void> {
+    try {
+      this.weatherHistory = await this.loadWeatherHistory(this.currentDate);
+      this.updateHistoryControls();
+      const scrubber = document.getElementById('history-scrubber') as HTMLInputElement | null;
+      const index = scrubber ? Number(scrubber.value) : this.historyTimeline.length - 1;
+      this.renderHistoryAt(index);
+    } catch (error) {
+      this.debugPanel.log('History date change error', { error: (error as Error).message });
+    }
+  }
+
+  private async loadWeatherHistory(date: string): Promise<WeatherHistoryEntry[]> {
+    const cacheKey = this.getHistoryCacheKey('/api/weather', date);
     const cache = this.weatherHistoryCache.get(cacheKey) || { entries: [], loadedAllOlder: false };
 
     if (cache.entries.length > 0) {
       const newest = cache.entries[cache.entries.length - 1];
       cache.entries = this.mergeHistoryEntries(
         cache.entries,
-        await this.api.fetchWeatherHistory(this.currentLocation, undefined, {
+        await this.api.fetchWeatherHistory(this.currentLocation, date, {
           after: newest.fetchedAt,
         })
       );
     } else {
-      cache.entries = await this.api.fetchWeatherHistory(this.currentLocation);
+      cache.entries = await this.api.fetchWeatherHistory(this.currentLocation, date);
     }
 
     while (!cache.loadedAllOlder && cache.entries.length > 0) {
       const oldest = cache.entries[0];
-      const older = await this.api.fetchWeatherHistory(this.currentLocation, undefined, {
+      const older = await this.api.fetchWeatherHistory(this.currentLocation, date, {
         before: oldest.fetchedAt,
       });
       cache.entries = this.mergeHistoryEntries(older, cache.entries);
@@ -871,8 +887,8 @@ export class SolarSentinelApp {
     );
   }
 
-  private getHistoryCacheKey(route: '/api/weather' | '/api/daily-calendar'): string {
-    return `${route}:${this.currentLocation.lat.toFixed(2)},${this.currentLocation.lon.toFixed(2)}:all`;
+  private getHistoryCacheKey(route: '/api/weather' | '/api/daily-calendar', date?: string): string {
+    return `${route}:${this.currentLocation.lat.toFixed(2)},${this.currentLocation.lon.toFixed(2)}:${date ?? 'all'}`;
   }
 
   private updateHistoryControls(): void {
@@ -886,7 +902,7 @@ export class SolarSentinelApp {
     if (!panel || !controls || !scrubber || !status || !detail || !toggle) return;
 
     const canLoadHistory = Boolean(this.latestWeatherData);
-    const hasHistory = this.weatherHistory.length > 0;
+    const hasHistory = this.historyTimeline.length > 0;
     toggle.classList.toggle('hidden', !canLoadHistory);
     toggle.setAttribute('aria-pressed', String(this.historyMode));
     const historyToggleLabel = this.historyMode
@@ -895,17 +911,21 @@ export class SolarSentinelApp {
     toggle.setAttribute('title', historyToggleLabel);
     toggle.setAttribute('aria-label', historyToggleLabel);
     panel.classList.toggle('hidden', !hasHistory || !this.historyMode);
-    controls.classList.toggle('hidden', !this.historyMode || this.weatherHistory.length < 2);
-    scrubber.max = String(Math.max(0, this.weatherHistory.length - 1));
+    controls.classList.toggle('hidden', !this.historyMode || this.historyTimeline.length < 2);
+    scrubber.max = String(Math.max(0, this.historyTimeline.length - 1));
 
     if (!this.historyMode) {
-      scrubber.value = String(Math.max(0, this.weatherHistory.length - 1));
+      scrubber.value = String(Math.max(0, this.historyTimeline.length - 1));
       status.textContent = '';
       detail.textContent = '';
       return;
     }
 
-    this.updateHistoryLabel(Number(scrubber.value));
+    const index = Number(scrubber.value);
+    this.updateHistoryLabel(
+      index,
+      this.getLatestEntryAt(this.weatherHistory, this.historyTimeline[index] ?? '')
+    );
   }
 
   private toggleHistoryMode(): void {
@@ -927,14 +947,15 @@ export class SolarSentinelApp {
     }
 
     await this.historyRefreshPromise;
-    if (this.weatherHistory.length === 0) return;
+    if (this.historyTimeline.length === 0) return;
 
     this.historyMode = true;
     this.updateHistoryControls();
-    this.renderHistoryAt(this.weatherHistory.length - 1);
+    this.renderHistoryAt(this.historyTimeline.length - 1);
   }
 
   private exitHistoryMode(): void {
+    this.setHistoryUnavailable(false);
     this.historyMode = false;
     this.updateHistoryControls();
 
@@ -966,45 +987,77 @@ export class SolarSentinelApp {
   }
 
   private renderHistoryAt(index: number): void {
-    const historyEntry = this.weatherHistory[index];
-    if (!historyEntry) return;
+    const asOf = this.historyTimeline[index];
+    if (!asOf) return;
 
-    const calendarEntry = this.getClosestCalendarHistoryEntry(historyEntry.fetchedAt);
-    this.renderWeatherData(historyEntry.data, false);
+    const weatherEntry = this.getLatestEntryAt(this.weatherHistory, asOf);
+    if (weatherEntry) {
+      this.setHistoryUnavailable(false);
+      this.renderWeatherData(weatherEntry.data, false);
+    } else {
+      this.setHistoryUnavailable(true);
+    }
+
+    const calendarEntry = this.getLatestEntryAt(this.calendarHistory, asOf);
     if (calendarEntry) {
       this.renderForecastCalendar(calendarEntry.data);
     }
-    this.updateHistoryLabel(index);
+    this.updateHistoryLabel(index, weatherEntry);
   }
 
-  private getClosestCalendarHistoryEntry(fetchedAt: string): DailyCalendarHistoryEntry | null {
-    if (this.calendarHistory.length === 0) return null;
+  private getLatestEntryAt<T extends { fetchedAt: string }>(entries: T[], asOf: string): T | null {
+    let latest: T | null = null;
+    for (const entry of entries) {
+      if (entry.fetchedAt > asOf) break;
+      latest = entry;
+    }
+    return latest;
+  }
 
-    const targetTime = new Date(fetchedAt).getTime();
-    return this.calendarHistory.reduce((closest, entry) => {
-      const closestDelta = Math.abs(new Date(closest.fetchedAt).getTime() - targetTime);
-      const entryDelta = Math.abs(new Date(entry.fetchedAt).getTime() - targetTime);
-      return entryDelta < closestDelta ? entry : closest;
+  private setHistoryUnavailable(unavailable: boolean): void {
+    const notice = document.getElementById('history-unavailable');
+    if (!notice) return;
+    notice.classList.toggle('hidden', !unavailable);
+    if (!unavailable) return;
+
+    const dayLabel = this.parseLocalDate(this.currentDate).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
     });
+    notice.textContent = `No saved forecast for ${dayLabel} at this point in time.`;
+    [
+      'dual-display',
+      'single-display',
+      'current-conditions',
+      'chart-container',
+      'weather-chart-container',
+    ].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    this.updateElement('date-display', dayLabel);
+    this.updateDateNavigationControls();
   }
 
-  private updateHistoryLabel(index: number): void {
-    const entry = this.weatherHistory[index];
+  private updateHistoryLabel(index: number, entry?: WeatherHistoryEntry | null): void {
+    const asOf = this.historyTimeline[index];
     const status = document.getElementById('history-status');
     const detail = document.getElementById('history-detail');
     const scrubber = document.getElementById('history-scrubber') as HTMLInputElement | null;
 
-    if (!entry || !status || !detail) return;
+    if (!asOf || !status || !detail) return;
 
-    const fetchedAt = new Date(entry.fetchedAt);
-    status.textContent = `Snapshot ${index + 1} of ${this.weatherHistory.length}`;
-    detail.textContent = `Fetched ${fetchedAt.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    })}`;
+    const formatTime = (iso: string) =>
+      new Date(iso).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+
+    status.textContent = `As of ${formatTime(asOf)} (${index + 1}/${this.historyTimeline.length})`;
+    detail.textContent = entry
+      ? `Forecast recorded ${formatTime(entry.fetchedAt)}`
+      : 'Forecast not yet available';
     if (scrubber) {
       scrubber.value = String(index);
     }
@@ -1158,11 +1211,15 @@ export class SolarSentinelApp {
 
     this.debugPanel.log(`Forecast day selected: ${this.currentDate} → ${dateString}`);
     this.currentDate = dateString;
-    this.historyMode = false;
     this.latestWeatherData = null;
-    this.weatherHistory = [];
-    this.updateHistoryControls();
-    this.loadData();
+    if (this.historyMode) {
+      void this.refreshHistoryForDateChange();
+      void this.loadData(true);
+    } else {
+      this.weatherHistory = [];
+      this.updateHistoryControls();
+      this.loadData();
+    }
   }
 
   private updateForecastCalendarMetadata(calendar: DailyCalendarData): void {
@@ -1276,11 +1333,15 @@ export class SolarSentinelApp {
       const newDate = date.toLocaleDateString('en-CA');
       this.debugPanel.log(`Date navigation: ${this.currentDate} → ${newDate}`, { direction });
       this.currentDate = newDate;
-      this.historyMode = false;
       this.latestWeatherData = null;
-      this.weatherHistory = [];
-      this.updateHistoryControls();
-      this.loadData();
+      if (this.historyMode) {
+        void this.refreshHistoryForDateChange();
+        void this.loadData(true);
+      } else {
+        this.weatherHistory = [];
+        this.updateHistoryControls();
+        this.loadData();
+      }
     }
   }
 
