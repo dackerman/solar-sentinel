@@ -207,6 +207,17 @@ const selectApiHistoryAllDatesAfterStatement = apiHistoryDb.prepare(`
   LIMIT ?
 `);
 
+const selectApiHistoryIsDuplicateStatement = apiHistoryDb.prepare(`
+  SELECT json_remove(response_json, '$.metadata') = json_remove(?, '$.metadata') AS isDuplicate
+  FROM api_call_history
+  WHERE route = ?
+    AND location_key IS ?
+    AND date IS ?
+    AND status_code = 200
+  ORDER BY fetched_at DESC, id DESC
+  LIMIT 1
+`);
+
 const pruneApiHistoryStatement = apiHistoryDb.prepare(`
   DELETE FROM api_call_history
   WHERE fetched_at < ?
@@ -456,6 +467,19 @@ function recordApiCall({ req, lat, lon, date, cacheKey, cacheStatus, statusCode,
     const safeLon = getSafeNumber(lon);
     const locationKey =
       safeLat !== null && safeLon !== null ? getForecastCacheKey(safeLat, safeLon) : null;
+    const responseJson = JSON.stringify(responseBody);
+
+    if (statusCode === 200) {
+      const latest = selectApiHistoryIsDuplicateStatement.get(
+        responseJson,
+        req.path,
+        locationKey,
+        date || null
+      );
+      if (latest?.isDuplicate) {
+        return;
+      }
+    }
 
     insertApiHistoryStatement.run(
       new Date().toISOString(),
@@ -468,7 +492,7 @@ function recordApiCall({ req, lat, lon, date, cacheKey, cacheStatus, statusCode,
       cacheKey || null,
       cacheStatus || null,
       statusCode,
-      JSON.stringify(responseBody)
+      responseJson
     );
   } catch (error) {
     console.error('API history write error:', error.message);

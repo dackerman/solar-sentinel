@@ -41,11 +41,15 @@ identical. Comparison happens in SQL so both sides go through SQLite's JSON
 normalizer:
 
 ```sql
-SELECT 1 FROM api_call_history
-WHERE route = ? AND location_key = ? AND date IS ? AND status_code = 200
-  AND json_remove(response_json, '$.metadata') = json_remove(?, '$.metadata')
+SELECT json_remove(response_json, '$.metadata') = json_remove(?, '$.metadata') AS isDuplicate
+FROM api_call_history
+WHERE route = ? AND location_key IS ? AND date IS ? AND status_code = 200
 ORDER BY fetched_at DESC, id DESC LIMIT 1
 ```
+
+The comparison must select the latest row and compare against it — not filter on
+equality (which would match *any* historical row and wrongly skip a payload that
+changed and later changed back).
 
 Keying per-date (not globally) means flipping between dates in the UI does not
 re-record unchanged forecasts. Only status-200 responses participate (matching what

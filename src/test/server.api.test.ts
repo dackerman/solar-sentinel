@@ -59,6 +59,31 @@ function getMockCombinedData(date: string) {
   };
 }
 
+function getMockTwoDayData(dateA: string, dateB: string) {
+  return {
+    hourly: {
+      time: [`${dateA}T10:00:00`, `${dateA}T11:00:00`, `${dateB}T10:00:00`, `${dateB}T11:00:00`],
+      uv_index: [3.1, 4.2, 2.5, 3.3],
+      uv_index_clear_sky: [5.0, 6.0, 4.0, 5.0],
+      precipitation_probability: [10, 20, 30, 40],
+      temperature_2m: [60.1, 62.2, 55.3, 57.4],
+      apparent_temperature: [59.0, 61.0, 54.0, 56.0],
+      cloud_cover: [20, 30, 40, 50],
+      relative_humidity_2m: [50, 55, 60, 65],
+      weather_code: [1, 2, 2, 3],
+    },
+    daily: {
+      time: [dateA, dateB],
+      temperature_2m_max: [62.2, 57.4],
+      temperature_2m_min: [40.0, 38.0],
+      uv_index_max: [4.2, 3.3],
+      precipitation_probability_max: [20, 40],
+      relative_humidity_2m_max: [55, 65],
+      weather_code: [2, 3],
+    },
+  };
+}
+
 describe('Server API Endpoints', () => {
   beforeEach(() => {
     // Reset the mock fetch
@@ -285,6 +310,33 @@ describe('Server API Endpoints', () => {
           (entry: { data: { date: string } }) => entry.data.date === testDate
         )
       ).toBe(true);
+    });
+
+    it('skips recording history snapshots when the payload is unchanged', async () => {
+      const dateA = getTestDate(5);
+      const dateB = getTestDate(6);
+      const lat = 41.42;
+      const lon = -72.42;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockTwoDayData(dateA, dateB)),
+      });
+
+      await request(app).get('/api/weather').query({ lat, lon, date: dateA }).expect(200);
+      await request(app).get('/api/weather').query({ lat, lon, date: dateB }).expect(200);
+      await request(app).get('/api/weather').query({ lat, lon, date: dateA }).expect(200);
+
+      const response = await request(app)
+        .get('/api/history')
+        .query({ route: '/api/weather', lat, lon })
+        .expect(200);
+
+      expect(response.body.entries).toHaveLength(2);
+      const dates = response.body.entries.map((entry: { date: string }) => entry.date);
+      expect(dates).toContain(dateA);
+      expect(dates).toContain(dateB);
     });
   });
 
