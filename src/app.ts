@@ -51,6 +51,7 @@ export class SolarSentinelApp {
   private latestWeatherData: WeatherData | null = null;
   private latestCalendarData: DailyCalendarData | null = null;
   private historyRefreshPromise: Promise<void> | null = null;
+  private pendingHistoryRenderIndex: number | null = null;
   private forecastArtMode = false;
   private chartRenderToken = 0;
   private readonly appStartTime = performance.now();
@@ -105,7 +106,7 @@ export class SolarSentinelApp {
       .getElementById('history-close')
       ?.addEventListener('click', () => this.exitHistoryMode());
     document.getElementById('history-scrubber')?.addEventListener('input', event => {
-      this.renderHistoryAt(Number((event.target as HTMLInputElement).value));
+      this.scheduleHistoryRender(Number((event.target as HTMLInputElement).value));
     });
 
     document.getElementById('forecast-calendar')?.addEventListener('click', event => {
@@ -948,6 +949,20 @@ export class SolarSentinelApp {
     } else {
       this.requestForecastCalendar(false);
     }
+  }
+
+  private scheduleHistoryRender(index: number): void {
+    const alreadyScheduled = this.pendingHistoryRenderIndex !== null;
+    this.pendingHistoryRenderIndex = index;
+    if (alreadyScheduled) return;
+
+    requestAnimationFrame(() => {
+      const pending = this.pendingHistoryRenderIndex;
+      this.pendingHistoryRenderIndex = null;
+      if (pending !== null) {
+        this.renderHistoryAt(pending);
+      }
+    });
   }
 
   private renderHistoryAt(index: number): void {
