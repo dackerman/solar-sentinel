@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Rebuild and restart the Docker container, then verify the app responds.
+# Docker copies files at build time, so a plain restart never picks up code changes.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+docker compose down
+docker compose up -d --build
+
+echo "Waiting for app on :49877..."
+for _ in $(seq 1 30); do
+  if curl -fsS "http://localhost:49877/api/weather" >/dev/null 2>&1; then
+    echo "Deploy OK — app responding on :49877"
+    exit 0
+  fi
+  sleep 2
+done
+
+echo "Deploy failed — app not responding on :49877 after 60s" >&2
+docker logs --tail 20 solar-sentinel >&2
+exit 1
