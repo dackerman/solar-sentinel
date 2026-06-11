@@ -246,6 +246,21 @@ export class WeatherAPI {
     }));
   }
 
+  async fetchHistoryTimeline(location: Location): Promise<string[]> {
+    const params = new URLSearchParams({
+      lat: String(location.lat),
+      lon: String(location.lon),
+    });
+    const response = await this.fetchOnce(
+      `${this.baseURL}/api/history/timeline?${params.toString()}`
+    );
+    if (!response.ok) {
+      throw new Error(`History timeline failed: ${response.status}`);
+    }
+    const body = (await response.json()) as { times: string[] };
+    return body.times;
+  }
+
   private async fetchHistory<T>(
     route: '/api/weather' | '/api/daily-calendar',
     location: Location,
