@@ -142,6 +142,71 @@ const selectApiHistoryAfterStatement = apiHistoryDb.prepare(`
   LIMIT ?
 `);
 
+const selectApiHistoryAllDatesStatement = apiHistoryDb.prepare(`
+  SELECT * FROM (
+    SELECT
+      id,
+      fetched_at,
+      route,
+      lat,
+      lon,
+      date,
+      cache_status,
+      status_code,
+      response_json
+    FROM api_call_history
+    WHERE route = ?
+      AND location_key = ?
+      AND status_code = 200
+    ORDER BY fetched_at DESC, id DESC
+    LIMIT ?
+  )
+  ORDER BY fetched_at ASC, id ASC
+`);
+
+const selectApiHistoryAllDatesBeforeStatement = apiHistoryDb.prepare(`
+  SELECT * FROM (
+    SELECT
+      id,
+      fetched_at,
+      route,
+      lat,
+      lon,
+      date,
+      cache_status,
+      status_code,
+      response_json
+    FROM api_call_history
+    WHERE route = ?
+      AND location_key = ?
+      AND status_code = 200
+      AND fetched_at < ?
+    ORDER BY fetched_at DESC, id DESC
+    LIMIT ?
+  )
+  ORDER BY fetched_at ASC, id ASC
+`);
+
+const selectApiHistoryAllDatesAfterStatement = apiHistoryDb.prepare(`
+  SELECT
+    id,
+    fetched_at,
+    route,
+    lat,
+    lon,
+    date,
+    cache_status,
+    status_code,
+    response_json
+  FROM api_call_history
+  WHERE route = ?
+    AND location_key = ?
+    AND status_code = 200
+    AND fetched_at > ?
+  ORDER BY fetched_at ASC, id ASC
+  LIMIT ?
+`);
+
 const pruneApiHistoryStatement = apiHistoryDb.prepare(`
   DELETE FROM api_call_history
   WHERE fetched_at < ?
@@ -412,11 +477,17 @@ function recordApiCall({ req, lat, lon, date, cacheKey, cacheStatus, statusCode,
 
 function getApiHistoryEntries({ route, lat, lon, date, limit, before, after }) {
   const locationKey = getForecastCacheKey(lat, lon);
-  const rows = before
-    ? selectApiHistoryBeforeStatement.all(route, locationKey, date, before, limit)
-    : after
-      ? selectApiHistoryAfterStatement.all(route, locationKey, date, after, limit)
-      : selectApiHistoryStatement.all(route, locationKey, date, limit);
+  const rows = date
+    ? before
+      ? selectApiHistoryBeforeStatement.all(route, locationKey, date, before, limit)
+      : after
+        ? selectApiHistoryAfterStatement.all(route, locationKey, date, after, limit)
+        : selectApiHistoryStatement.all(route, locationKey, date, limit)
+    : before
+      ? selectApiHistoryAllDatesBeforeStatement.all(route, locationKey, before, limit)
+      : after
+        ? selectApiHistoryAllDatesAfterStatement.all(route, locationKey, after, limit)
+        : selectApiHistoryAllDatesStatement.all(route, locationKey, limit);
 
   return rows
     .map(row => {
@@ -501,7 +572,7 @@ function parseHistoryRequest(req) {
   const lonParam = parseFloat(getStringQueryParam(req.query.lon));
   const lat = Number.isFinite(latParam) ? latParam : DEFAULT_LAT;
   const lon = Number.isFinite(lonParam) ? lonParam : DEFAULT_LON;
-  const requestedDate = getStringQueryParam(req.query.date) || getTodayInNewYork();
+  const requestedDate = getStringQueryParam(req.query.date);
   const limitParam = parseInt(getStringQueryParam(req.query.limit), 10);
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 200;
   const before = getStringQueryParam(req.query.before);
@@ -512,7 +583,7 @@ function parseHistoryRequest(req) {
   }
 
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRegex.test(requestedDate)) {
+  if (requestedDate && !dateRegex.test(requestedDate)) {
     return { error: { status: 400, message: 'Invalid date format. Use YYYY-MM-DD' } };
   }
 

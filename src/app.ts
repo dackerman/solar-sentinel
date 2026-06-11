@@ -790,33 +790,34 @@ export class SolarSentinelApp {
   }
 
   private async refreshHistoryState(): Promise<void> {
-    const startDate = new Date().toLocaleDateString('en-CA');
     const [weatherHistory, calendarHistory] = await Promise.all([
-      this.loadWeatherHistory(this.currentDate),
-      this.loadCalendarHistory(startDate),
+      this.loadWeatherHistory(),
+      this.loadCalendarHistory(),
     ]);
     this.weatherHistory = weatherHistory;
     this.calendarHistory = calendarHistory;
     this.updateHistoryControls();
   }
 
-  private async loadWeatherHistory(date: string): Promise<WeatherHistoryEntry[]> {
-    const cacheKey = this.getHistoryCacheKey('/api/weather', date);
+  private async loadWeatherHistory(): Promise<WeatherHistoryEntry[]> {
+    const cacheKey = this.getHistoryCacheKey('/api/weather');
     const cache = this.weatherHistoryCache.get(cacheKey) || { entries: [], loadedAllOlder: false };
 
     if (cache.entries.length > 0) {
       const newest = cache.entries[cache.entries.length - 1];
       cache.entries = this.mergeHistoryEntries(
         cache.entries,
-        await this.api.fetchWeatherHistory(this.currentLocation, date, { after: newest.fetchedAt })
+        await this.api.fetchWeatherHistory(this.currentLocation, undefined, {
+          after: newest.fetchedAt,
+        })
       );
     } else {
-      cache.entries = await this.api.fetchWeatherHistory(this.currentLocation, date);
+      cache.entries = await this.api.fetchWeatherHistory(this.currentLocation);
     }
 
     while (!cache.loadedAllOlder && cache.entries.length > 0) {
       const oldest = cache.entries[0];
-      const older = await this.api.fetchWeatherHistory(this.currentLocation, date, {
+      const older = await this.api.fetchWeatherHistory(this.currentLocation, undefined, {
         before: oldest.fetchedAt,
       });
       cache.entries = this.mergeHistoryEntries(older, cache.entries);
@@ -827,25 +828,25 @@ export class SolarSentinelApp {
     return cache.entries;
   }
 
-  private async loadCalendarHistory(startDate: string): Promise<DailyCalendarHistoryEntry[]> {
-    const cacheKey = this.getHistoryCacheKey('/api/daily-calendar', startDate);
+  private async loadCalendarHistory(): Promise<DailyCalendarHistoryEntry[]> {
+    const cacheKey = this.getHistoryCacheKey('/api/daily-calendar');
     const cache = this.calendarHistoryCache.get(cacheKey) || { entries: [], loadedAllOlder: false };
 
     if (cache.entries.length > 0) {
       const newest = cache.entries[cache.entries.length - 1];
       cache.entries = this.mergeHistoryEntries(
         cache.entries,
-        await this.api.fetchDailyCalendarHistory(this.currentLocation, startDate, {
+        await this.api.fetchDailyCalendarHistory(this.currentLocation, undefined, {
           after: newest.fetchedAt,
         })
       );
     } else {
-      cache.entries = await this.api.fetchDailyCalendarHistory(this.currentLocation, startDate);
+      cache.entries = await this.api.fetchDailyCalendarHistory(this.currentLocation);
     }
 
     while (!cache.loadedAllOlder && cache.entries.length > 0) {
       const oldest = cache.entries[0];
-      const older = await this.api.fetchDailyCalendarHistory(this.currentLocation, startDate, {
+      const older = await this.api.fetchDailyCalendarHistory(this.currentLocation, undefined, {
         before: oldest.fetchedAt,
       });
       cache.entries = this.mergeHistoryEntries(older, cache.entries);
@@ -869,8 +870,8 @@ export class SolarSentinelApp {
     );
   }
 
-  private getHistoryCacheKey(route: '/api/weather' | '/api/daily-calendar', date: string): string {
-    return `${route}:${this.currentLocation.lat.toFixed(2)},${this.currentLocation.lon.toFixed(2)}:${date}`;
+  private getHistoryCacheKey(route: '/api/weather' | '/api/daily-calendar'): string {
+    return `${route}:${this.currentLocation.lat.toFixed(2)},${this.currentLocation.lon.toFixed(2)}:all`;
   }
 
   private updateHistoryControls(): void {
@@ -1083,7 +1084,10 @@ export class SolarSentinelApp {
     `;
   }
 
-  private renderForecastCloudCoverGraph(values: number[] | undefined, fallbackValue: number): string {
+  private renderForecastCloudCoverGraph(
+    values: number[] | undefined,
+    fallbackValue: number
+  ): string {
     const cloudCover = values && values.length > 0 ? values : [fallbackValue, fallbackValue];
     const width = 100;
     const height = 36;

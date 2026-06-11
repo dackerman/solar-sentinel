@@ -263,6 +263,29 @@ describe('Server API Endpoints', () => {
       expect(latestEntry.data.date).toBe(testDate);
       expect(latestEntry.data.daily.tempMax).toBe(68.1);
     });
+
+    it('returns stored weather snapshots without a date filter', async () => {
+      const testDate = getTestDate(14);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockCombinedData(testDate)),
+      });
+
+      await request(app).get('/api/weather').query({ date: testDate }).expect(200);
+
+      const response = await request(app)
+        .get('/api/history')
+        .query({ route: '/api/weather', lat: 42.8006, lon: -71.3048 })
+        .expect(200);
+
+      expect(response.body.entries.length).toBeGreaterThan(0);
+      expect(
+        response.body.entries.some(
+          (entry: { data: { date: string } }) => entry.data.date === testDate
+        )
+      ).toBe(true);
+    });
   });
 
   describe('GET /api/daily-calendar - Calendar Forecast', () => {

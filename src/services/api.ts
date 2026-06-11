@@ -209,7 +209,7 @@ export class WeatherAPI {
 
   async fetchWeatherHistory(
     location: Location,
-    date: string,
+    date?: string,
     options: { before?: string; after?: string } = {}
   ): Promise<WeatherHistoryEntry[]> {
     const history = await this.fetchHistory<WeatherData>('/api/weather', location, date, options);
@@ -226,7 +226,7 @@ export class WeatherAPI {
 
   async fetchDailyCalendarHistory(
     location: Location,
-    startDate: string,
+    startDate?: string,
     options: { before?: string; after?: string } = {}
   ): Promise<DailyCalendarHistoryEntry[]> {
     const history = await this.fetchHistory<DailyCalendarData>(
@@ -249,16 +249,16 @@ export class WeatherAPI {
   private async fetchHistory<T>(
     route: '/api/weather' | '/api/daily-calendar',
     location: Location,
-    date: string,
+    date?: string,
     options: { before?: string; after?: string } = {}
   ): Promise<ApiHistoryResponse<T>> {
     const params = new URLSearchParams({
       route,
       lat: String(location.lat),
       lon: String(location.lon),
-      date,
       limit: String(this.HISTORY_PAGE_SIZE),
     });
+    if (date) params.set('date', date);
     if (options.before) params.set('before', options.before);
     if (options.after) params.set('after', options.after);
     const response = await this.fetchOnce(`${this.baseURL}/api/history?${params.toString()}`);
