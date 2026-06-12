@@ -53,6 +53,8 @@ export class SolarSentinelApp {
   private historyRefreshPromise: Promise<void> | null = null;
   private pendingHistoryRenderIndex: number | null = null;
   private historyTimeline: string[] = [];
+  private lastHistoryWeatherId: number | string | null = null;
+  private lastHistoryCalendarId: number | string | null = null;
   private forecastArtMode = false;
   private chartRenderToken = 0;
   private readonly appStartTime = performance.now();
@@ -821,6 +823,7 @@ export class SolarSentinelApp {
       this.updateHistoryControls();
       const scrubber = document.getElementById('history-scrubber') as HTMLInputElement | null;
       const index = scrubber ? Number(scrubber.value) : this.historyTimeline.length - 1;
+      this.resetHistoryRenderTracking();
       this.renderHistoryAt(index);
     } catch (error) {
       this.debugPanel.log('History date change error', { error: (error as Error).message });
@@ -962,11 +965,13 @@ export class SolarSentinelApp {
 
     this.historyMode = true;
     this.updateHistoryControls();
+    this.resetHistoryRenderTracking();
     this.renderHistoryAt(this.historyTimeline.length - 1);
   }
 
   private exitHistoryMode(): void {
     this.setHistoryUnavailable(false);
+    this.resetHistoryRenderTracking();
     this.historyMode = false;
     this.updateHistoryControls();
 
@@ -1004,16 +1009,30 @@ export class SolarSentinelApp {
     const weatherEntry = this.getLatestEntryAt(this.weatherHistory, asOf);
     if (weatherEntry) {
       this.setHistoryUnavailable(false);
-      this.renderWeatherData(weatherEntry.data, false);
+      const weatherId = weatherEntry.id ?? weatherEntry.fetchedAt;
+      if (weatherId !== this.lastHistoryWeatherId) {
+        this.lastHistoryWeatherId = weatherId;
+        this.renderWeatherData(weatherEntry.data, false);
+      }
     } else {
+      this.lastHistoryWeatherId = null;
       this.setHistoryUnavailable(true);
     }
 
     const calendarEntry = this.getLatestEntryAt(this.calendarHistory, asOf);
     if (calendarEntry) {
-      this.renderForecastCalendar(calendarEntry.data);
+      const calendarId = calendarEntry.id ?? calendarEntry.fetchedAt;
+      if (calendarId !== this.lastHistoryCalendarId) {
+        this.lastHistoryCalendarId = calendarId;
+        this.renderForecastCalendar(calendarEntry.data);
+      }
     }
     this.updateHistoryLabel(index, weatherEntry);
+  }
+
+  private resetHistoryRenderTracking(): void {
+    this.lastHistoryWeatherId = null;
+    this.lastHistoryCalendarId = null;
   }
 
   private getLatestEntryAt<T extends { fetchedAt: string }>(entries: T[], asOf: string): T | null {

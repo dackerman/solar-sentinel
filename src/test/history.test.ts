@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SolarSentinelApp } from '../app.js';
 
 // Mirrors the real nesting in src/index.html: the history controls and the
@@ -56,5 +56,39 @@ describe('History unavailable state', () => {
 
     app.setHistoryUnavailable(false);
     expect(isHidden('history-unavailable')).toBe(true);
+  });
+
+  it('re-renders only when scrubbing resolves to a different snapshot', () => {
+    const app = new SolarSentinelApp() as unknown as {
+      historyTimeline: string[];
+      weatherHistory: Array<{ id: number; fetchedAt: string; data: unknown }>;
+      calendarHistory: unknown[];
+      renderHistoryAt(index: number): void;
+      renderWeatherData(data: unknown, silent: boolean): void;
+    };
+
+    const renderSpy = vi
+      .spyOn(
+        app as unknown as Record<'renderWeatherData', (...args: unknown[]) => void>,
+        'renderWeatherData'
+      )
+      .mockImplementation(() => {});
+
+    app.historyTimeline = [
+      '2026-06-10T10:00:00.000Z',
+      '2026-06-10T11:00:00.000Z',
+      '2026-06-10T12:00:00.000Z',
+    ];
+    app.weatherHistory = [
+      { id: 1, fetchedAt: '2026-06-10T09:30:00.000Z', data: {} },
+      { id: 2, fetchedAt: '2026-06-10T11:30:00.000Z', data: {} },
+    ];
+    app.calendarHistory = [];
+
+    app.renderHistoryAt(0); // resolves to id 1
+    app.renderHistoryAt(1); // still id 1 — must not re-render
+    app.renderHistoryAt(2); // resolves to id 2
+
+    expect(renderSpy).toHaveBeenCalledTimes(2);
   });
 });
