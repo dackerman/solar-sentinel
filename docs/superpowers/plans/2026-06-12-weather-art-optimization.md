@@ -24,14 +24,14 @@
 - Modify: `src/utils/weatherArt.ts` (base path), `src/test/weatherArt.test.ts` (path expectations, if any)
 - Delete: `public/weather-art/v1/`
 
-- [ ] **Step 1: Move originals out of public/**
+- [x] **Step 1: Move originals out of public/**
 
 ```bash
 mkdir -p art-src
 git mv public/weather-art/v1 art-src/weather-art
 ```
 
-- [ ] **Step 2: Write `scripts/compress-weather-art`**
+- [x] **Step 2: Write `scripts/compress-weather-art`**
 
 ```bash
 #!/usr/bin/env bash
@@ -68,7 +68,7 @@ echo "Total output size: $(du -sh "$out_dir" | cut -f1)"
 chmod +x scripts/compress-weather-art
 ```
 
-- [ ] **Step 3: Run it and sanity-check the output**
+- [x] **Step 3: Run it and sanity-check the output**
 
 Run: `./scripts/compress-weather-art`
 Expected: `Compressed 191 image(s), 0 up to date.` and total output around 3–6 MB.
@@ -85,7 +85,7 @@ ls -la public/weather-art/v2/day-cool-storm.webp
 
 Expected: `WEBP 384x384`, file size roughly 10–40 KB.
 
-- [ ] **Step 4: Bump the served base path**
+- [x] **Step 4: Bump the served base path**
 
 In `src/utils/weatherArt.ts`:
 
@@ -99,12 +99,12 @@ Check `src/test/weatherArt.test.ts` for `/v1` path assertions and update them to
 grep -n "v1" src/test/weatherArt.test.ts
 ```
 
-- [ ] **Step 5: Run the suite and typecheck**
+- [x] **Step 5: Run the suite and typecheck**
 
 Run: `pnpm exec vitest run && pnpm run typecheck`
 Expected: PASS
 
-- [ ] **Step 6: Format and commit**
+- [x] **Step 6: Format and commit**
 
 ```bash
 pnpm run format
@@ -120,7 +120,7 @@ git commit -m "Compress weather art to 384px lossy, move originals out of public
 - Modify: `src/app.ts` (`updateWeatherArtImage`, ~line 490)
 - Test: create `src/test/weatherArtImage.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `updateWeatherArtImage` is private; tests reach it via a structural cast. The
 off-DOM loader is observed by stubbing `Image` with a capturing fake.
@@ -223,13 +223,13 @@ describe('updateWeatherArtImage', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm exec vitest run src/test/weatherArtImage.test.ts`
 Expected: FAIL — current implementation hides immediately and sets `src` directly
 (no `FakeImage` instances; old-art-stays-visible assertions fail)
 
-- [ ] **Step 3: Replace `updateWeatherArtImage` in `src/app.ts`**
+- [x] **Step 3: Replace `updateWeatherArtImage` in `src/app.ts`**
 
 ```ts
 private updateWeatherArtImage(elementId: string, art: WeatherArtResult): void {
@@ -262,12 +262,12 @@ private updateWeatherArtImage(elementId: string, art: WeatherArtResult): void {
 }
 ```
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `pnpm exec vitest run && pnpm run typecheck`
 Expected: PASS
 
-- [ ] **Step 5: Format and commit**
+- [x] **Step 5: Format and commit**
 
 ```bash
 pnpm run format
@@ -283,7 +283,7 @@ git commit -m "Swap weather art without flicker, skip unchanged art"
 - Modify: `src/app.ts` (`renderHistoryAt`; fields near `historyTimeline`; resets in `enterHistoryMode`, `exitHistoryMode`, `refreshHistoryForDateChange`)
 - Test: `src/test/history.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `src/test/history.test.ts` (the existing `setupDOM` there already includes
 the history elements; spies neutralize the heavy render methods):
@@ -324,12 +324,12 @@ it('re-renders only when scrubbing resolves to a different snapshot', () => {
 Add the `vi` import to the existing import line if missing:
 `import { describe, it, expect, beforeEach, vi } from 'vitest';`
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm exec vitest run src/test/history.test.ts`
 Expected: FAIL — `renderWeatherData` called 3 times
 
-- [ ] **Step 3: Implement the skip**
+- [x] **Step 3: Implement the skip**
 
 Add fields next to `historyTimeline` in `src/app.ts`:
 
@@ -385,12 +385,12 @@ in three places:
 (The unavailable branch resets the weather id so returning to the same snapshot
 after an unavailable stretch re-renders the hidden sections.)
 
-- [ ] **Step 4: Run the full suite**
+- [x] **Step 4: Run the full suite**
 
 Run: `pnpm exec vitest run && pnpm run typecheck`
 Expected: PASS
 
-- [ ] **Step 5: Format and commit**
+- [x] **Step 5: Format and commit**
 
 ```bash
 pnpm run format
@@ -407,7 +407,7 @@ git commit -m "Skip history re-renders when the snapshot is unchanged"
 - Modify: `public/sw.js` (fetch strategy + `VERSION`)
 - Test: `src/test/server.api.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add a new describe block in `src/test/server.api.test.ts` (the test server serves
 `public/` because `NODE_ENV=test` ≠ production):
@@ -424,12 +424,12 @@ describe('Weather art static serving', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `pnpm exec vitest run src/test/server.api.test.ts -t "immutable cache"`
 Expected: FAIL — current header is `public, max-age=86400`
 
-- [ ] **Step 3: Add the header rule in `server.js`**
+- [x] **Step 3: Add the header rule in `server.js`**
 
 In the static `setHeaders` callback, insert a `weather-art` branch directly after
 the `/assets/` branch (before the HTML rule), mirroring its path matching:
@@ -443,7 +443,7 @@ the `/assets/` branch (before the HTML rule), mirroring its path matching:
       }
 ```
 
-- [ ] **Step 4: Service worker cache-first for weather art**
+- [x] **Step 4: Service worker cache-first for weather art**
 
 In `public/sw.js`:
 
@@ -463,12 +463,12 @@ to:
   ) {
 ```
 
-- [ ] **Step 5: Run the full suite**
+- [x] **Step 5: Run the full suite**
 
 Run: `pnpm exec vitest run`
 Expected: PASS
 
-- [ ] **Step 6: Format and commit**
+- [x] **Step 6: Format and commit**
 
 ```bash
 pnpm run format
@@ -483,7 +483,7 @@ git commit -m "Serve weather art with immutable caching"
 **Files:**
 - Modify: `AGENTS.md` (CLAUDE.md is a symlink to it)
 
-- [ ] **Step 1: Document the art pipeline**
+- [x] **Step 1: Document the art pipeline**
 
 In `AGENTS.md` `## Architecture`, after the Chart.js lazy-import line, add:
 
@@ -491,7 +491,7 @@ In `AGENTS.md` `## Architecture`, after the Chart.js lazy-import line, add:
 - Weather art lives as 512px lossless originals in `art-src/weather-art/`; `./scripts/compress-weather-art` (ImageMagick) emits the served 384px lossy copies into `public/weather-art/v2/` (committed). Art URLs are path-versioned and cached immutable — any art change goes to a new `/v3/` directory
 ```
 
-- [ ] **Step 2: Full check**
+- [x] **Step 2: Full check**
 
 Run: `pnpm exec vitest run && pnpm run typecheck && pnpm run format:check && pnpm run build`
 Expected: all PASS; `dist/weather-art` should be ~4 MB (was 45 MB)
@@ -500,7 +500,7 @@ Expected: all PASS; `dist/weather-art` should be ~4 MB (was 45 MB)
 du -sh dist/weather-art
 ```
 
-- [ ] **Step 3: Commit, push, deploy**
+- [x] **Step 3: Commit, push, deploy**
 
 ```bash
 git add AGENTS.md
@@ -509,7 +509,7 @@ git push
 ./scripts/deploy
 ```
 
-- [ ] **Step 4: Production smoke test**
+- [x] **Step 4: Production smoke test**
 
 ```bash
 curl -sI http://localhost:49877/weather-art/v2/day-cool-storm.webp | grep -i -E 'cache-control|content-length'

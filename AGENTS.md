@@ -43,6 +43,7 @@
 - Frontend stores weather and daily calendar responses in localStorage by rounded location/date for fast perceived startup, paints from cache when available, then refreshes from the backend
 - Geolocation is background-only for startup; Windham loads first unless the device is away from home
 - Chart.js is lazily imported from `chart.js/auto`; do not re-add a blocking CDN script
+- Weather art lives as 512px lossless originals in `art-src/weather-art/`; `./scripts/compress-weather-art` (ImageMagick) emits the served 384px lossy copies into `public/weather-art/v2/` (committed). Art URLs are path-versioned and cached immutable — any art change goes to a new `/v3/` directory
 - Performance instrumentation is intentional: frontend logs `Perf:` entries to the debug panel/console, and API responses include `Server-Timing` plus `metadata.performance`
 
 ## Weather Data
