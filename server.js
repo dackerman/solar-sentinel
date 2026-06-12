@@ -341,6 +341,12 @@ app.use(
           'Cache-Control': 'public, max-age=31536000, immutable',
         });
       }
+      // Weather art is path-versioned (/weather-art/v2/...); cache indefinitely.
+      else if (path.match(/[\\/]weather-art[\\/]/)) {
+        res.set({
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        });
+      }
       // No cache for HTML files (always get updates)
       else if (path.endsWith('.html') || path.endsWith('/')) {
         res.set({

@@ -1,7 +1,7 @@
 // Solar Sentinel Service Worker
 // Smart caching strategy: Network-first for app shell, cache-first for static assets
 
-const VERSION = '1.0.1';
+const VERSION = '1.1.0';
 const CURRENT_CACHES = {
   static: `solar-sentinel-static-v${VERSION}`,
   api: `solar-sentinel-api-v${VERSION}`
@@ -96,8 +96,11 @@ self.addEventListener('fetch', event => {
     );
   }
   
-  // Static assets - Cache first (icons, logos, etc.)
-  else if (cacheStrategies.static.some(path => url.pathname.includes(path))) {
+  // Static assets - Cache first (icons, logos, weather art, etc.)
+  else if (
+    url.pathname.startsWith('/weather-art/') ||
+    cacheStrategies.static.some(path => url.pathname.includes(path))
+  ) {
     event.respondWith(
       caches.match(event.request)
         .then(response => {

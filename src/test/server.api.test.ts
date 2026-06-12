@@ -403,6 +403,14 @@ describe('Server API Endpoints', () => {
     });
   });
 
+  describe('Weather art static serving', () => {
+    it('serves weather art with immutable cache headers', async () => {
+      const response = await request(app).get('/weather-art/v2/day-cool-storm.webp').expect(200);
+
+      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+    });
+  });
+
   describe('History duplicate cleanup', () => {
     it('removes consecutive duplicate snapshots, keeping the first occurrence', () => {
       const insert = apiHistoryDb.prepare(`
