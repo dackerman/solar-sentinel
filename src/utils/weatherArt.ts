@@ -25,7 +25,7 @@ export interface WeatherArtResult {
   };
 }
 
-const WEATHER_ART_BASE_PATH = '/weather-art/v1';
+const WEATHER_ART_BASE_PATH = '/weather-art/v2';
 const HUMIDITY_TEMP_BANDS = new Set<WeatherArtTempBand>(['mild', 'warm', 'hot']);
 
 const CONDITION_LABELS: Record<string, string> = {

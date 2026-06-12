@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Regenerate compressed weather art from the lossless originals.
+# Originals: art-src/weather-art/*.webp (512x512 lossless)
+# Output:    public/weather-art/v2/*.webp (384x384 lossy q82, committed)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+src_dir="art-src/weather-art"
+out_dir="public/weather-art/v2"
+mkdir -p "$out_dir"
+
+count=0
+skipped=0
+for src in "$src_dir"/*.webp; do
+  name="$(basename "$src")"
+  # Generation artifacts are not served art
+  if [[ "$name" == sample-* ]]; then continue; fi
+  out="$out_dir/$name"
+  if [[ -f "$out" && "$out" -nt "$src" ]]; then
+    skipped=$((skipped + 1))
+    continue
+  fi
+  magick "$src" -resize 384x384 -strip -quality 82 -define webp:method=6 "$out"
+  count=$((count + 1))
+done
+
+echo "Compressed $count image(s), $skipped up to date."
+echo "Total output size: $(du -sh "$out_dir" | cut -f1)"
