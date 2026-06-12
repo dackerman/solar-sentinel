@@ -491,18 +491,29 @@ export class SolarSentinelApp {
     const image = document.getElementById(elementId) as HTMLImageElement | null;
     if (!image) return;
 
-    image.classList.add('hidden');
-    image.alt = art.alt;
-    image.title = art.label;
+    if (image.dataset.weatherArtKey === art.key && image.getAttribute('src')) {
+      image.alt = art.alt;
+      image.title = art.label;
+      return;
+    }
+
+    // Load off-DOM and swap only when ready, so the previous art (if any)
+    // stays visible and there is never a blank frame.
     image.dataset.weatherArtKey = art.key;
-    image.onload = () => {
+    const loader = new Image();
+    loader.onload = () => {
+      if (image.dataset.weatherArtKey !== art.key) return;
+      image.alt = art.alt;
+      image.title = art.label;
+      image.src = art.path;
       image.classList.remove('hidden');
     };
-    image.onerror = () => {
+    loader.onerror = () => {
+      if (image.dataset.weatherArtKey !== art.key) return;
       image.classList.add('hidden');
       image.removeAttribute('src');
     };
-    image.src = art.path;
+    loader.src = art.path;
   }
 
   private hideWeatherArtImage(elementId: string): void {
