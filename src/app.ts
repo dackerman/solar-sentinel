@@ -73,6 +73,7 @@ export class SolarSentinelApp {
     this.markPerformance('event-listeners-ready');
     await this.loadData();
     this.scheduleAutoRefresh();
+    this.scheduleCacheSweep();
     this.markPerformance('initialize-complete');
   }
 
@@ -1342,6 +1343,21 @@ export class SolarSentinelApp {
     this.refreshTimer = window.setInterval(async () => {
       await this.runAutoRefresh('timer');
     }, this.REFRESH_INTERVAL_MS);
+  }
+
+  private scheduleCacheSweep(): void {
+    const runSweep = () => {
+      const removed = this.api.sweepExpiredCache();
+      this.debugPanel.log(`Cache sweep removed ${removed} expired entries`);
+    };
+    const idleCallback = (
+      window as Window & { requestIdleCallback?: (callback: () => void) => number }
+    ).requestIdleCallback;
+    if (idleCallback) {
+      idleCallback(runSweep);
+    } else {
+      window.setTimeout(runSweep, 3000);
+    }
   }
 
   private async runAutoRefresh(trigger: string): Promise<void> {

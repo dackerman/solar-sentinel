@@ -207,6 +207,42 @@ export class WeatherAPI {
     return `${this.CALENDAR_CACHE_PREFIX}_${location.lat.toFixed(2)},${location.lon.toFixed(2)},${startDate}`;
   }
 
+  // Expired entries are normally only evicted when read; this sweep clears
+  // entries for locations the user stopped viewing so they don't linger forever.
+  sweepExpiredCache(): number {
+    let removed = 0;
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        const isCacheKey =
+          key.startsWith(`${this.WEATHER_CACHE_PREFIX}_`) ||
+          key.startsWith(`${this.CALENDAR_CACHE_PREFIX}_`);
+        if (!isCacheKey) continue;
+
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) ?? '');
+          const expired =
+            !parsed ||
+            typeof parsed.timestamp !== 'number' ||
+            Date.now() - parsed.timestamp > this.WEATHER_CACHE_DURATION_MS;
+          if (expired) keysToRemove.push(key);
+        } catch {
+          keysToRemove.push(key);
+        }
+      }
+
+      for (const key of keysToRemove) {
+        localStorage.removeItem(key);
+        removed++;
+      }
+    } catch (error) {
+      console.log('Cache sweep error:', (error as Error).message);
+    }
+    return removed;
+  }
+
   async fetchWeatherHistory(
     location: Location,
     date?: string,
