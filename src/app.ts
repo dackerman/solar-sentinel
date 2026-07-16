@@ -158,6 +158,7 @@ export class SolarSentinelApp {
     this.debugPanel.log(`Loading UV data for ${this.currentDate}`, { reason });
     let renderedLocalCache = false;
     let requestedCalendar = false;
+    const requestedDate = this.currentDate;
 
     try {
       const locationStart = performance.now();
@@ -197,7 +198,6 @@ export class SolarSentinelApp {
       }
 
       const apiStart = performance.now();
-      const requestedDate = this.currentDate;
       const data = await this.api.fetchWeatherData(this.currentLocation, requestedDate);
       // The user may have navigated to a different date while this request was
       // in flight (loadData is fired without awaiting on navigation). Only the
@@ -242,8 +242,22 @@ export class SolarSentinelApp {
         this.requestForecastCalendar(silent && !renderedLocalCache);
       }
     } catch (error) {
-      this.markPerformance('load-error', { error: (error as Error).message });
-      this.debugPanel.log('Load error', { error: (error as Error).message });
+      // Same staleness guard as the success path: a request the user has
+      // already navigated away from must not show an error banner over a
+      // newer, successfully rendered date.
+      const isCurrentRequest = this.currentDate === requestedDate;
+      this.markPerformance('load-error', {
+        error: (error as Error).message,
+        skippedAsStale: !isCurrentRequest,
+      });
+      this.debugPanel.log('Load error', {
+        error: (error as Error).message,
+        skippedAsStale: !isCurrentRequest,
+      });
+
+      if (!isCurrentRequest) {
+        return;
+      }
 
       if (!silent && !renderedLocalCache) {
         document.getElementById('loading')?.style.setProperty('display', 'none');
@@ -396,6 +410,7 @@ export class SolarSentinelApp {
 
     if (!silent) {
       document.getElementById('loading')?.style.setProperty('display', 'none');
+      document.getElementById('error')?.classList.add('hidden');
       document.getElementById('current-conditions')?.classList.remove('hidden');
       document.getElementById('chart-container')?.classList.remove('hidden');
       document.getElementById('weather-chart-container')?.classList.remove('hidden');

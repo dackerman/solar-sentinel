@@ -229,4 +229,54 @@ describe('Date navigation bounds', () => {
     // The newer navigation must win; currentDate/display must not roll back.
     expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
   });
+
+  it('does not show the error banner when a stale out-of-order request rejects', async () => {
+    const today = new Date();
+    const todayStr = fmt(today);
+    const tomorrowStr = fmt(addDays(today, 1));
+
+    vi.mocked(global.fetch).mockReset();
+
+    // Hold the initial (today) request open so it can reject AFTER the user
+    // has already navigated forward and that newer request has rendered.
+    let rejectInitial!: (reason: unknown) => void;
+    const initialResponsePromise = new Promise((_resolve, reject) => {
+      rejectInitial = reject;
+    });
+    // Prevent an unhandled-rejection warning between creation and the later rejection.
+    initialResponsePromise.catch(() => {});
+
+    vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+      const url = String(input);
+      const requestedDate = new URL(url, 'http://localhost').searchParams.get('date') || todayStr;
+      if (requestedDate === todayStr) {
+        return initialResponsePromise as any;
+      }
+      return Promise.resolve(mkResponse(mkData(requestedDate)) as any);
+    });
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+
+    // Let the stalled initial request register before navigating away from it.
+    await flush();
+
+    // Navigate to the next day while the initial (today) request is still in flight.
+    (document.getElementById('next-day') as HTMLButtonElement).click();
+    await flush();
+
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+    expect(document.getElementById('error')?.classList.contains('hidden')).toBe(true);
+
+    // Now let the stale initial-date request reject, arriving after navigation.
+    rejectInitial(new Error('network error'));
+    await flush();
+    await init;
+
+    // The stale rejection must not surface an error banner or roll back the display.
+    expect(document.getElementById('error')?.classList.contains('hidden')).toBe(true);
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+  });
 });
