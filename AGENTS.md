@@ -42,6 +42,9 @@
 - Home forecast is prewarmed and refreshed every 10 minutes while the server is running
 - Frontend stores weather and daily calendar responses in localStorage by rounded location/date for fast perceived startup, paints from cache when available, then refreshes from the backend
 - Geolocation is background-only for startup; Windham loads first unless the device is away from home
+- Users can switch locations from the header location button: a picker with pinned Home, starred favorites, "use my current location", and Open-Meteo geocoding name search (`src/components/locationPicker.ts`, `src/services/geocoding.ts`)
+- Favorites live in localStorage `solar_sentinel_saved_locations`; the explicit selection in `solar_sentinel_selected_location` (`src/services/savedLocations.ts`). A manual pick persists across reloads and disables background geolocation until "use my current location" is chosen
+- Expired weather/calendar localStorage entries are swept at idle after startup (`WeatherAPI.sweepExpiredCache`)
 - Chart.js is lazily imported from `chart.js/auto`; do not re-add a blocking CDN script
 - Weather art lives as 512px lossless originals in `art-src/weather-art/`; `./scripts/compress-weather-art` (ImageMagick) emits the served 384px lossy copies into `public/weather-art/v2/` (committed). Art URLs are path-versioned and cached immutable — any art change goes to a new `/v3/` directory
 - Service worker serves the app shell stale-while-revalidate and precaches hashed `/assets/*` bundles at install; the precache manifest and cache version are injected into `dist/sw.js` at build time by the `sw-precache-manifest` plugin in `vite.config.ts` — do not hand-edit `VERSION` in `public/sw.js`
@@ -50,5 +53,5 @@
 ## Weather Data
 - Open-Meteo hourly fields: `uv_index`, `uv_index_clear_sky`, `precipitation_probability`, `temperature_2m`, `apparent_temperature`, `cloud_cover`, `relative_humidity_2m`
 - Open-Meteo daily fields: `temperature_2m_max`, `temperature_2m_min`, `uv_index_max`, `precipitation_probability_max`, `relative_humidity_2m_max`, `weather_code`
-- Use `America/New_York` for Windham/home data and existing US-longitude timezone behavior
+- Forecasts are fetched with `timezone=auto`; "today" and the today→+16 date window are resolved in each location's own timezone after cache lookup (`resolveRequestedDate` in server.js). Past dates clamp to the location's today; the response `date` field is authoritative and the frontend adopts it
 - Date navigation supports today through 16 days ahead
