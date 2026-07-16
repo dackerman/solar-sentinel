@@ -18,12 +18,17 @@ export class WeatherAPI {
 
   private readonly HISTORY_PAGE_SIZE = 500;
 
+  // `date: null` omits the `date=` query param entirely, letting the server
+  // resolve "today" for the location's own timezone (see resolveRequestedDate
+  // in server.js) instead of sending a device-local guess that can be off by
+  // a day for locations west/east of the device.
   async fetchWeatherData(
     location: Location,
-    date: string
+    date: string | null
   ): Promise<WeatherData & { timing?: RequestTiming }> {
     const startTime = performance.now();
-    const url = `${this.baseURL}/api/weather?lat=${location.lat}&lon=${location.lon}&date=${date}`;
+    const dateParam = date ? `&date=${date}` : '';
+    const url = `${this.baseURL}/api/weather?lat=${location.lat}&lon=${location.lon}${dateParam}`;
 
     const response = await this.fetchOnce(url);
     const responseTime = performance.now();
@@ -39,8 +44,11 @@ export class WeatherAPI {
     const data = await response.json();
     const parseDuration = Math.round(performance.now() - parseStart);
 
+    // Key the cache write by the response's own resolved date, not the
+    // requested one: for a normal explicit request they're identical, but for
+    // an omitted/clamped date this is the only way to key the entry correctly.
     const cacheWriteStart = performance.now();
-    this.setCachedWeatherData(location, date, data);
+    this.setCachedWeatherData(location, data.date, data);
     const cacheWriteDuration = Math.round(performance.now() - cacheWriteStart);
     const duration = Math.round(performance.now() - startTime);
 
@@ -110,12 +118,16 @@ export class WeatherAPI {
     return `${this.WEATHER_CACHE_PREFIX}_${location.lat.toFixed(2)},${location.lon.toFixed(2)},${date}`;
   }
 
+  // `startDate: null` omits the `date=` query param, letting the server
+  // resolve the calendar's start to the location's own today (see
+  // fetchWeatherData above for why this matters).
   async fetchDailyCalendar(
     location: Location,
-    startDate: string
+    startDate: string | null
   ): Promise<DailyCalendarData & { timing?: RequestTiming }> {
     const startTime = performance.now();
-    const url = `${this.baseURL}/api/daily-calendar?lat=${location.lat}&lon=${location.lon}&date=${startDate}`;
+    const dateParam = startDate ? `&date=${startDate}` : '';
+    const url = `${this.baseURL}/api/daily-calendar?lat=${location.lat}&lon=${location.lon}${dateParam}`;
 
     const response = await this.fetchOnce(url);
     const responseTime = performance.now();
@@ -131,8 +143,10 @@ export class WeatherAPI {
     const data = await response.json();
     const parseDuration = Math.round(performance.now() - parseStart);
 
+    // Key the cache write by the response's own resolved startDate, not the
+    // requested one — see fetchWeatherData's cache-write comment above.
     const cacheWriteStart = performance.now();
-    this.setCachedDailyCalendar(location, startDate, data);
+    this.setCachedDailyCalendar(location, data.startDate, data);
     const cacheWriteDuration = Math.round(performance.now() - cacheWriteStart);
     const duration = Math.round(performance.now() - startTime);
 

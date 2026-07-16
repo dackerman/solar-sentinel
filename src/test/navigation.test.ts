@@ -184,6 +184,38 @@ describe('Date navigation bounds', () => {
     expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(dayAfterStr));
   });
 
+  it('follows today by omitting date= on initial load, then sends an explicit date after navigating', async () => {
+    const today = new Date();
+    const todayStr = fmt(today);
+    const tomorrowStr = fmt(addDays(today, 1));
+
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(todayStr)) as any);
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+
+    // Following today: the initial request lets the server resolve "today"
+    // rather than sending a device-local guess.
+    const initialUrl = String(vi.mocked(global.fetch).mock.calls[0][0]);
+    expect(initialUrl).not.toContain('date=');
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(todayStr));
+
+    // Navigating forward is an explicit date pick: the request must now
+    // include date=.
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(tomorrowStr)) as any);
+    (document.getElementById('next-day') as HTMLButtonElement).click();
+    await flush();
+
+    const calls = vi.mocked(global.fetch).mock.calls;
+    const nextUrl = String(calls[calls.length - 1][0]);
+    expect(nextUrl).toContain(`date=${tomorrowStr}`);
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+  });
+
   it('ignores a stale out-of-order response for a date the user has navigated away from', async () => {
     const today = new Date();
     const todayStr = fmt(today);

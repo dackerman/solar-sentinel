@@ -135,7 +135,16 @@ describe('Auto-refresh behavior', () => {
       'http://localhost'
     );
 
-    expect(refreshUrl.searchParams.get('date')).toBe('2026-05-02');
+    // Following today (the default, no explicit navigation happened), the
+    // refresh omits date= entirely and lets the server resolve "today" —
+    // rollover is still reflected in the rendered date via the response.
+    expect(refreshUrl.searchParams.get('date')).toBeNull();
+    const expectedLabel = new Date(2026, 4, 2).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+    expect(document.getElementById('date-display')?.textContent).toBe(expectedLabel);
   });
 
   it('updates the chart now line every minute without fetching', async () => {

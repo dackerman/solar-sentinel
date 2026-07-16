@@ -40,6 +40,14 @@ export class SolarSentinelApp {
 
   private currentLocation: Location = this.locationService.getDefaultLocation();
   private currentDate = new Date().toLocaleDateString('en-CA');
+  // Whether the app should keep following the location's own "today" rather
+  // than a specific date the user explicitly navigated to. While true, date
+  // requests omit `date=` entirely so the server resolves "today" for the
+  // location's real timezone instead of a device-local guess (which can be
+  // off by a day for locations west/east of the device). currentDate is still
+  // kept as the device-local display guess until a response adopts the
+  // server-resolved date.
+  private followingToday = true;
   private uvChart: ChartInstance | null = null;
   private weatherChart: ChartInstance | null = null;
   private refreshTimer: number | null = null;
@@ -202,7 +210,10 @@ export class SolarSentinelApp {
       }
 
       const apiStart = performance.now();
-      const data = await this.api.fetchWeatherData(requestedLocation, requestedDate);
+      const data = await this.api.fetchWeatherData(
+        requestedLocation,
+        this.followingToday ? null : requestedDate
+      );
       // The user may have navigated to a different date or location while this
       // request was in flight (loadData is fired without awaiting on
       // navigation/location changes). Only the request that still matches the
@@ -410,6 +421,11 @@ export class SolarSentinelApp {
 
   private applyLocationChange(location: Location): void {
     this.currentLocation = location;
+    // A location switch always resumes following the new location's today;
+    // currentDate resets to the device-local guess as the display placeholder
+    // until the response adopts the server-resolved date.
+    this.followingToday = true;
+    this.currentDate = new Date().toLocaleDateString('en-CA');
     this.historyMode = false;
     this.latestWeatherData = null;
     this.latestCalendarData = null;
@@ -792,9 +808,13 @@ export class SolarSentinelApp {
     // latestCalendarData (and therefore getDateBounds()) or render stale UI.
     const requestedLocation = this.currentLocation;
     const requestedDate = this.currentDate;
-    const startDate = new Date().toLocaleDateString('en-CA');
+    // Device-local today is only a guess used for the instant pre-fetch cache
+    // paint below; it's usually right and harmless on a miss. The actual
+    // request always omits the date so the server resolves the location's
+    // real today (see fetchDailyCalendar).
+    const startDateGuess = new Date().toLocaleDateString('en-CA');
     const cacheStart = performance.now();
-    const cachedCalendar = this.api.getCachedDailyCalendar(this.currentLocation, startDate);
+    const cachedCalendar = this.api.getCachedDailyCalendar(this.currentLocation, startDateGuess);
     this.markPerformance('forecast-calendar-cache-lookup', {
       durationMs: Math.round(performance.now() - cacheStart),
       hit: Boolean(cachedCalendar),
@@ -812,7 +832,7 @@ export class SolarSentinelApp {
     }
 
     const apiStart = performance.now();
-    const calendar = await this.api.fetchDailyCalendar(requestedLocation, startDate);
+    const calendar = await this.api.fetchDailyCalendar(requestedLocation, null);
     const isCurrentRequest = this.isCurrentRequest(requestedLocation, requestedDate);
     if (isCurrentRequest) {
       this.latestCalendarData = calendar;
@@ -1387,6 +1407,9 @@ export class SolarSentinelApp {
     }
 
     this.debugPanel.log(`Forecast day selected: ${this.currentDate} → ${dateString}`);
+    // Navigating back to the calendar's first day means following today
+    // again; any later day is an explicit date the user picked.
+    this.followingToday = dateString === bounds.min;
     this.currentDate = dateString;
     this.latestWeatherData = null;
     if (this.historyMode) {
@@ -1521,6 +1544,9 @@ export class SolarSentinelApp {
     if (newDate < bounds.min || newDate > bounds.max) return;
 
     this.debugPanel.log(`Date navigation: ${this.currentDate} → ${newDate}`, { direction });
+    // Navigating back to the calendar's first day means following today
+    // again; any later day is an explicit date the user picked.
+    this.followingToday = newDate === bounds.min;
     this.currentDate = newDate;
     this.latestWeatherData = null;
     if (this.historyMode) {
