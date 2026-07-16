@@ -225,6 +225,12 @@ export class SolarSentinelApp {
       if (data.date && data.date !== requestedDate && isCurrentRequest) {
         this.debugPanel.log(`Date resolved by server: ${requestedDate} → ${data.date}`);
         this.currentDate = data.date;
+        // Any calendar request already kicked off above (from painting the
+        // local weather cache) was snapshotted under the pre-adoption date
+        // and will be dropped by loadForecastCalendar's own staleness guard.
+        // Clear the flag so the branch below re-requests it under the
+        // adopted date instead of leaving latestCalendarData stale/null.
+        requestedCalendar = false;
       }
       this.markPerformance('weather-api-complete', {
         durationMs: Math.round(performance.now() - apiStart),
@@ -1522,6 +1528,17 @@ export class SolarSentinelApp {
   }
 
   private normalizeCurrentDateForRefresh(): void {
+    // While following today, the server resolves "today" for the location's
+    // own timezone on every omitted-date request — currentDate can
+    // legitimately sit behind (or ahead of) DEVICE-local today for
+    // locations west/east of the device (e.g. Hawaii viewed from NH just
+    // after midnight Eastern). Forcing it back to device-local today here
+    // would fight that server-resolved adoption on every refresh/focus,
+    // spuriously kicking the user out of history mode. Device-local
+    // rollover handling is only needed for an explicit (non-following) date,
+    // which the server never re-resolves on its own.
+    if (this.followingToday) return;
+
     const todayStr = new Date().toLocaleDateString('en-CA');
 
     if (this.currentDate < todayStr) {

@@ -415,4 +415,107 @@ describe('Date navigation bounds', () => {
 
     expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(plus2Str));
   });
+
+  it('does not roll over on refresh while followingToday even when the server-adopted date is behind device-local today', async () => {
+    // Simulates a westward location (e.g. Hawaii viewed from NH just after
+    // midnight Eastern): the server resolves the location's own "today",
+    // which is legitimately device-local yesterday.
+    const today = new Date();
+    const todayStr = fmt(today);
+    const yesterdayStr = fmt(addDays(today, -1));
+
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(yesterdayStr)) as any);
+
+    const app = new SolarSentinelApp();
+    const priv = app as unknown as { historyMode: boolean; weatherHistory: unknown[] };
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(yesterdayStr));
+
+    // Simulate the user having opened history mode for the adopted date, as
+    // the "canLoadHistory" gate would allow once latestWeatherData exists.
+    priv.historyMode = true;
+    const sentinelHistory = [{ id: 1, fetchedAt: new Date().toISOString(), data: {} }];
+    priv.weatherHistory = sentinelHistory;
+
+    // The refresh's response resolves the same (still-yesterday) date again.
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(yesterdayStr)) as any);
+    window.dispatchEvent(new Event('focus'));
+    await flush();
+
+    // History state must survive: followingToday means the server already
+    // resolves "today" for omitted-date requests, so device-local rollover
+    // handling must not fire and reset history state out from under the user.
+    expect(priv.historyMode).toBe(true);
+    expect(priv.weatherHistory).toBe(sentinelHistory);
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(yesterdayStr));
+
+    // followingToday means every request omits date= entirely — confirm the
+    // refresh never sent a request pinned to device-local today.
+    for (const call of vi.mocked(global.fetch).mock.calls) {
+      const url = new URL(String(call[0]), 'http://localhost');
+      expect(url.searchParams.get('date')).not.toBe(todayStr);
+    }
+  });
+
+  it('re-requests the forecast calendar under the adopted date when same-load adoption changes currentDate', async () => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div id="forecast-calendar-container" class="hidden"></div>'
+    );
+
+    const today = new Date();
+    const todayStr = fmt(today);
+    const adoptedStr = fmt(addDays(today, 1));
+    const homeLat = 42.8006;
+    const homeLon = -71.3048;
+
+    // Prime the local weather cache under the device-guess date so the
+    // non-silent load paints from cache and kicks off an early (pre-adoption)
+    // calendar request per the ~line 209 path in loadData.
+    localStorage.setItem(
+      `solar_sentinel_weather_${homeLat.toFixed(2)},${homeLon.toFixed(2)},${todayStr}`,
+      JSON.stringify({ data: mkData(todayStr), timestamp: Date.now() })
+    );
+
+    const calendar = mkCalendarData(adoptedStr, fmt(addDays(today, 3)));
+
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+      const url = String(input);
+      if (url.includes('/api/daily-calendar')) {
+        return Promise.resolve(mkResponse(calendar) as any);
+      }
+      // The weather fetch resolves/adopts a date different from the
+      // device-guess date the local cache and early calendar request used.
+      return Promise.resolve(mkResponse(mkData(adoptedStr)) as any);
+    });
+
+    const app = new SolarSentinelApp();
+    const priv = app as unknown as { latestCalendarData: unknown };
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+    await flush();
+
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(adoptedStr));
+
+    const calendarCalls = vi
+      .mocked(global.fetch)
+      .mock.calls.filter(call => String(call[0]).includes('/api/daily-calendar'));
+
+    // One early request (issued while painting the local weather cache,
+    // snapshotted under the pre-adoption device-guess date) plus one
+    // re-request after the weather response's adoption changed currentDate.
+    // Without the fix, only the first (now-stale) request fires; it gets
+    // dropped by loadForecastCalendar's own staleness guard and
+    // latestCalendarData is left null.
+    expect(calendarCalls.length).toBe(2);
+    expect(priv.latestCalendarData).not.toBeNull();
+  });
 });
