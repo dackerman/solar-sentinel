@@ -806,11 +806,16 @@ export class SolarSentinelApp {
   }
 
   private async refreshHistoryState(): Promise<void> {
+    const location = this.currentLocation;
+    const date = this.currentDate;
     const [weatherHistory, calendarHistory, timeline] = await Promise.all([
-      this.loadWeatherHistory(this.currentDate),
-      this.loadCalendarHistory(),
-      this.api.fetchHistoryTimeline(this.currentLocation),
+      this.loadWeatherHistory(date, location),
+      this.loadCalendarHistory(location),
+      this.api.fetchHistoryTimeline(location),
     ]);
+
+    if (!this.isCurrentHistoryRequest(location, date)) return;
+
     this.weatherHistory = weatherHistory;
     this.calendarHistory = calendarHistory;
     this.historyTimeline = timeline;
@@ -818,8 +823,13 @@ export class SolarSentinelApp {
   }
 
   private async refreshHistoryForDateChange(): Promise<void> {
+    const location = this.currentLocation;
+    const date = this.currentDate;
     try {
-      this.weatherHistory = await this.loadWeatherHistory(this.currentDate);
+      const weatherHistory = await this.loadWeatherHistory(date, location);
+      if (!this.isCurrentHistoryRequest(location, date)) return;
+
+      this.weatherHistory = weatherHistory;
       this.updateHistoryControls();
       const scrubber = document.getElementById('history-scrubber') as HTMLInputElement | null;
       const index = scrubber ? Number(scrubber.value) : this.historyTimeline.length - 1;
@@ -830,25 +840,28 @@ export class SolarSentinelApp {
     }
   }
 
-  private async loadWeatherHistory(date: string): Promise<WeatherHistoryEntry[]> {
-    const cacheKey = this.getHistoryCacheKey('/api/weather', date);
+  private async loadWeatherHistory(
+    date: string,
+    location = this.currentLocation
+  ): Promise<WeatherHistoryEntry[]> {
+    const cacheKey = this.getHistoryCacheKey('/api/weather', location, date);
     const cache = this.weatherHistoryCache.get(cacheKey) || { entries: [], loadedAllOlder: false };
 
     if (cache.entries.length > 0) {
       const newest = cache.entries[cache.entries.length - 1];
       cache.entries = this.mergeHistoryEntries(
         cache.entries,
-        await this.api.fetchWeatherHistory(this.currentLocation, date, {
+        await this.api.fetchWeatherHistory(location, date, {
           after: newest.fetchedAt,
         })
       );
     } else {
-      cache.entries = await this.api.fetchWeatherHistory(this.currentLocation, date);
+      cache.entries = await this.api.fetchWeatherHistory(location, date);
     }
 
     while (!cache.loadedAllOlder && cache.entries.length > 0) {
       const oldest = cache.entries[0];
-      const older = await this.api.fetchWeatherHistory(this.currentLocation, date, {
+      const older = await this.api.fetchWeatherHistory(location, date, {
         before: oldest.fetchedAt,
       });
       cache.entries = this.mergeHistoryEntries(older, cache.entries);
@@ -859,25 +872,27 @@ export class SolarSentinelApp {
     return cache.entries;
   }
 
-  private async loadCalendarHistory(): Promise<DailyCalendarHistoryEntry[]> {
-    const cacheKey = this.getHistoryCacheKey('/api/daily-calendar');
+  private async loadCalendarHistory(
+    location = this.currentLocation
+  ): Promise<DailyCalendarHistoryEntry[]> {
+    const cacheKey = this.getHistoryCacheKey('/api/daily-calendar', location);
     const cache = this.calendarHistoryCache.get(cacheKey) || { entries: [], loadedAllOlder: false };
 
     if (cache.entries.length > 0) {
       const newest = cache.entries[cache.entries.length - 1];
       cache.entries = this.mergeHistoryEntries(
         cache.entries,
-        await this.api.fetchDailyCalendarHistory(this.currentLocation, undefined, {
+        await this.api.fetchDailyCalendarHistory(location, undefined, {
           after: newest.fetchedAt,
         })
       );
     } else {
-      cache.entries = await this.api.fetchDailyCalendarHistory(this.currentLocation);
+      cache.entries = await this.api.fetchDailyCalendarHistory(location);
     }
 
     while (!cache.loadedAllOlder && cache.entries.length > 0) {
       const oldest = cache.entries[0];
-      const older = await this.api.fetchDailyCalendarHistory(this.currentLocation, undefined, {
+      const older = await this.api.fetchDailyCalendarHistory(location, undefined, {
         before: oldest.fetchedAt,
       });
       cache.entries = this.mergeHistoryEntries(older, cache.entries);
@@ -901,8 +916,20 @@ export class SolarSentinelApp {
     );
   }
 
-  private getHistoryCacheKey(route: '/api/weather' | '/api/daily-calendar', date?: string): string {
-    return `${route}:${this.currentLocation.lat.toFixed(2)},${this.currentLocation.lon.toFixed(2)}:${date ?? 'all'}`;
+  private getHistoryCacheKey(
+    route: '/api/weather' | '/api/daily-calendar',
+    location: Location,
+    date?: string
+  ): string {
+    return `${route}:${location.lat.toFixed(2)},${location.lon.toFixed(2)}:${date ?? 'all'}`;
+  }
+
+  private isCurrentHistoryRequest(location: Location, date: string): boolean {
+    return (
+      this.currentDate === date &&
+      this.currentLocation.lat.toFixed(2) === location.lat.toFixed(2) &&
+      this.currentLocation.lon.toFixed(2) === location.lon.toFixed(2)
+    );
   }
 
   private updateHistoryControls(): void {
