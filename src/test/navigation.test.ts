@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SolarSentinelApp } from '../app.js';
-import type { WeatherData } from '../types/weather.js';
+import type { WeatherData, DailyCalendarData } from '../types/weather.js';
 
 const setupDOM = () => {
   document.body.innerHTML = `
@@ -38,7 +38,7 @@ describe('Date navigation bounds', () => {
     daily: { date, tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 },
   });
 
-  const mkResponse = (data: WeatherData) => {
+  const mkResponse = (data: unknown) => {
     const response = {
       ok: true,
       headers: { get: vi.fn().mockReturnValue('hit') },
@@ -48,6 +48,28 @@ describe('Date navigation bounds', () => {
     response.clone.mockReturnValue(response);
     return response;
   };
+
+  const mkCalendarData = (startDate: string, endDate: string): DailyCalendarData => ({
+    startDate,
+    endDate,
+    days: [],
+  });
+
+  const dayLabel = (dateString: string) =>
+    new Date(dateString + 'T00:00:00').toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+
+  const fmt = (d: Date) => d.toLocaleDateString('en-CA');
+
+  const addDays = (base: Date, days: number) =>
+    new Date(base.getFullYear(), base.getMonth(), base.getDate() + days);
+
+  // Drains the full microtask chain of a mocked fetch (fetchOnce -> json() -> render),
+  // which spans more ticks than a couple of `await Promise.resolve()` calls cover.
+  const flush = () => new Promise(resolve => setTimeout(resolve, 0));
 
   beforeEach(() => {
     setupDOM();
@@ -92,5 +114,73 @@ describe('Date navigation bounds', () => {
     expect(
       (global.fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length
     ).toBeGreaterThanOrEqual(2);
+  });
+
+  it('clamps navigation to the calendar range when available', async () => {
+    // The forecast calendar container must exist for the app to fetch /api/daily-calendar at all.
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div id="forecast-calendar-container" class="hidden"></div>'
+    );
+
+    const today = new Date();
+    const todayStr = fmt(today);
+    const plus2Str = fmt(addDays(today, 2));
+    const calendar = mkCalendarData(todayStr, plus2Str);
+
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+      const url = String(input);
+      if (url.includes('/api/daily-calendar')) {
+        return Promise.resolve(mkResponse(calendar) as any);
+      }
+      const requestedDate = new URL(url, 'http://localhost').searchParams.get('date') || todayStr;
+      return Promise.resolve(mkResponse(mkData(requestedDate)) as any);
+    });
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+
+    // Let the background /api/daily-calendar fetch settle before navigating.
+    await flush();
+
+    for (let i = 0; i < 3; i++) {
+      (document.getElementById('next-day') as HTMLButtonElement).click();
+      await flush();
+    }
+
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(plus2Str));
+    expect(document.getElementById('next-day')?.classList.contains('hidden')).toBe(true);
+  });
+
+  it('adopts the server-resolved date from the weather response', async () => {
+    const today = new Date();
+    const tomorrowStr = fmt(addDays(today, 1));
+    const dayAfterStr = fmt(addDays(today, 2));
+
+    vi.mocked(global.fetch).mockReset();
+    // Server resolves/clamps the requested date to a different date than device-local "today".
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(tomorrowStr)) as any);
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+
+    // Subsequent navigation must be relative to the adopted server date, not device-local today.
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(dayAfterStr)) as any);
+    (document.getElementById('next-day') as HTMLButtonElement).click();
+    await flush();
+
+    const calls = vi.mocked(global.fetch).mock.calls;
+    const lastRequestedUrl = String(calls[calls.length - 1][0]);
+    expect(lastRequestedUrl).toContain(`date=${dayAfterStr}`);
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(dayAfterStr));
   });
 });

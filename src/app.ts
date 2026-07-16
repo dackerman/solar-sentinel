@@ -199,6 +199,10 @@ export class SolarSentinelApp {
       const apiStart = performance.now();
       const data = await this.api.fetchWeatherData(this.currentLocation, this.currentDate);
       this.latestWeatherData = data;
+      if (data.date && data.date !== this.currentDate) {
+        this.debugPanel.log(`Date resolved by server: ${this.currentDate} → ${data.date}`);
+        this.currentDate = data.date;
+      }
       this.markPerformance('weather-api-complete', {
         durationMs: Math.round(performance.now() - apiStart),
         responseMs: data.timing?.responseDuration,
@@ -1328,13 +1332,8 @@ export class SolarSentinelApp {
       return;
     }
 
-    const date = this.parseLocalDate(dateString);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 16);
-
-    if (date < today || date > maxDate) {
+    const bounds = this.getDateBounds();
+    if (dateString < bounds.min || dateString > bounds.max) {
       return;
     }
 
@@ -1465,39 +1464,30 @@ export class SolarSentinelApp {
 
   private navigateDate(direction: number): void {
     const [year, month, day] = this.currentDate.split('-').map(Number);
-    const date = new Date(year, month - 1, day);
-    date.setDate(date.getDate() + direction);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    date.setUTCDate(date.getUTCDate() + direction);
+    const newDate = date.toISOString().slice(0, 10);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 16);
+    const bounds = this.getDateBounds();
+    if (newDate < bounds.min || newDate > bounds.max) return;
 
-    if (date >= today && date <= maxDate) {
-      const newDate = date.toLocaleDateString('en-CA');
-      this.debugPanel.log(`Date navigation: ${this.currentDate} → ${newDate}`, { direction });
-      this.currentDate = newDate;
-      this.latestWeatherData = null;
-      if (this.historyMode) {
-        void this.refreshHistoryForDateChange();
-        void this.loadData(true);
-      } else {
-        this.weatherHistory = [];
-        this.updateHistoryControls();
-        this.loadData();
-      }
+    this.debugPanel.log(`Date navigation: ${this.currentDate} → ${newDate}`, { direction });
+    this.currentDate = newDate;
+    this.latestWeatherData = null;
+    if (this.historyMode) {
+      void this.refreshHistoryForDateChange();
+      void this.loadData(true);
+    } else {
+      this.weatherHistory = [];
+      this.updateHistoryControls();
+      this.loadData();
     }
   }
 
   private updateDateNavigationControls(): void {
-    const selectedDate = this.parseLocalDate(this.currentDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const maxDate = new Date(today);
-    maxDate.setDate(maxDate.getDate() + 16);
-
-    document.getElementById('prev-day')?.classList.toggle('hidden', selectedDate <= today);
-    document.getElementById('next-day')?.classList.toggle('hidden', selectedDate >= maxDate);
+    const bounds = this.getDateBounds();
+    document.getElementById('prev-day')?.classList.toggle('hidden', this.currentDate <= bounds.min);
+    document.getElementById('next-day')?.classList.toggle('hidden', this.currentDate >= bounds.max);
   }
 
   private switchEnvironment(): void {
@@ -1520,6 +1510,21 @@ export class SolarSentinelApp {
   private parseLocalDate(dateString: string): Date {
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(year, month - 1, day);
+  }
+
+  // Prefer the server-provided calendar range (correct for the location's
+  // timezone); fall back to device-local today..+16 before the calendar loads.
+  private getDateBounds(): { min: string; max: string } {
+    if (this.latestCalendarData?.startDate && this.latestCalendarData?.endDate) {
+      return { min: this.latestCalendarData.startDate, max: this.latestCalendarData.endDate };
+    }
+    const today = new Date();
+    const max = new Date(today);
+    max.setDate(max.getDate() + 16);
+    return {
+      min: today.toLocaleDateString('en-CA'),
+      max: max.toLocaleDateString('en-CA'),
+    };
   }
 
   private updateElement(id: string, text: string): void {
