@@ -200,6 +200,19 @@ describe('Server API Endpoints', () => {
     });
 
     it('should validate date range - far future dates', async () => {
+      const testDate = getTestDate();
+
+      // Prime the default-coordinates forecast cache explicitly so this test
+      // doesn't depend on an earlier test having already warmed it (tests can
+      // be run in isolation or reordered).
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockHourlyData(testDate)),
+      });
+      await request(app).get('/api/uv-today').query({ date: testDate });
+      mockFetch.mockClear();
+
       const futureDate = getTestDate(20); // 20 days from now (beyond 16 day limit)
       const response = await request(app).get('/api/uv-today').query({ date: futureDate });
 
@@ -623,8 +636,16 @@ describe('Server API Endpoints', () => {
       });
       const yesterday = addDaysForTest(honoluluToday, -1);
 
-      // Reuses the Honolulu cache primed by the previous test (still same coords),
-      // exercising the clamp on both the cache-hit and cache-miss paths.
+      // Prime the Honolulu forecast cache explicitly (same coords as the
+      // previous test, but not dependent on it/its ordering) so this test
+      // deterministically exercises the clamp on the cache-hit path.
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockCombinedData(honoluluToday, 'Pacific/Honolulu')),
+      });
+      await request(app).get('/api/weather?lat=21.31&lon=-157.86');
+
       const response = await request(app).get(
         `/api/weather?lat=21.31&lon=-157.86&date=${yesterday}`
       );
@@ -637,6 +658,15 @@ describe('Server API Endpoints', () => {
         timeZone: 'Pacific/Honolulu',
       });
       const tooFar = addDaysForTest(honoluluToday, 17);
+
+      // Prime the Honolulu forecast cache explicitly so this test doesn't
+      // depend on test order / a preceding test having already warmed it.
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockCombinedData(honoluluToday, 'Pacific/Honolulu')),
+      });
+      await request(app).get('/api/weather?lat=21.31&lon=-157.86');
 
       const response = await request(app).get(`/api/weather?lat=21.31&lon=-157.86&date=${tooFar}`);
       expect(response.status).toBe(400);
