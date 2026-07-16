@@ -197,10 +197,17 @@ export class SolarSentinelApp {
       }
 
       const apiStart = performance.now();
-      const data = await this.api.fetchWeatherData(this.currentLocation, this.currentDate);
-      this.latestWeatherData = data;
-      if (data.date && data.date !== this.currentDate) {
-        this.debugPanel.log(`Date resolved by server: ${this.currentDate} → ${data.date}`);
+      const requestedDate = this.currentDate;
+      const data = await this.api.fetchWeatherData(this.currentLocation, requestedDate);
+      // The user may have navigated to a different date while this request was
+      // in flight (loadData is fired without awaiting on navigation). Only the
+      // request that still matches the live date is allowed to adopt/render.
+      const isCurrentRequest = this.currentDate === requestedDate;
+      if (isCurrentRequest) {
+        this.latestWeatherData = data;
+      }
+      if (data.date && data.date !== requestedDate && isCurrentRequest) {
+        this.debugPanel.log(`Date resolved by server: ${requestedDate} → ${data.date}`);
         this.currentDate = data.date;
       }
       this.markPerformance('weather-api-complete', {
@@ -222,15 +229,16 @@ export class SolarSentinelApp {
       });
 
       const apiRenderStart = performance.now();
-      if (!this.historyMode) {
+      if (!this.historyMode && isCurrentRequest) {
         this.renderWeatherData(data, silent && !renderedLocalCache);
       }
       this.markPerformance('weather-api-rendered', {
         durationMs: Math.round(performance.now() - apiRenderStart),
         silent: silent && !renderedLocalCache,
         skippedForHistory: this.historyMode,
+        skippedAsStale: !isCurrentRequest,
       });
-      if (!requestedCalendar) {
+      if (!requestedCalendar && isCurrentRequest) {
         this.requestForecastCalendar(silent && !renderedLocalCache);
       }
     } catch (error) {

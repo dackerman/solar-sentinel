@@ -183,4 +183,50 @@ describe('Date navigation bounds', () => {
     expect(lastRequestedUrl).toContain(`date=${dayAfterStr}`);
     expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(dayAfterStr));
   });
+
+  it('ignores a stale out-of-order response for a date the user has navigated away from', async () => {
+    const today = new Date();
+    const todayStr = fmt(today);
+    const tomorrowStr = fmt(addDays(today, 1));
+
+    vi.mocked(global.fetch).mockReset();
+
+    // Hold the initial (today) request open so it can resolve AFTER the user
+    // has already navigated forward, simulating an out-of-order response.
+    let resolveInitial!: (value: unknown) => void;
+    const initialResponsePromise = new Promise(resolve => {
+      resolveInitial = resolve;
+    });
+
+    vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+      const url = String(input);
+      const requestedDate = new URL(url, 'http://localhost').searchParams.get('date') || todayStr;
+      if (requestedDate === todayStr) {
+        return initialResponsePromise as any;
+      }
+      return Promise.resolve(mkResponse(mkData(requestedDate)) as any);
+    });
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+
+    // Let the stalled initial request register before navigating away from it.
+    await flush();
+
+    // Navigate to the next day while the initial (today) request is still in flight.
+    (document.getElementById('next-day') as HTMLButtonElement).click();
+    await flush();
+
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+
+    // Now let the stale initial-date response resolve, arriving after navigation.
+    resolveInitial(mkResponse(mkData(todayStr)));
+    await flush();
+    await init;
+
+    // The newer navigation must win; currentDate/display must not roll back.
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+  });
 });
