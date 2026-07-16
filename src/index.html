@@ -45,7 +45,21 @@
               →
             </button>
           </div>
-          <p id="location-display" class="text-gray-600 text-sm">📍 Getting location...</p>
+          <div class="relative inline-block">
+            <button
+              id="location-display"
+              class="cursor-pointer text-gray-600 text-sm hover:text-gray-900"
+              type="button"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              📍 Getting location...
+            </button>
+            <div
+              id="location-picker"
+              class="hidden absolute right-0 top-full z-50 mt-1 w-72 rounded-xl border border-gray-200 bg-white text-left text-sm shadow-xl"
+            ></div>
+          </div>
         </div>
       </header>
 

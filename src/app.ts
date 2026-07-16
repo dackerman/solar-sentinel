@@ -2,6 +2,8 @@ import { WeatherAPI } from './services/api.js';
 import { LocationService } from './services/location.js';
 import { SavedLocationsService } from './services/savedLocations.js';
 import { DebugPanel } from './components/debug.js';
+import { LocationPicker } from './components/locationPicker.js';
+import { GeocodingService } from './services/geocoding.js';
 import {
   createUVChart,
   createWeatherChart,
@@ -32,6 +34,8 @@ export class SolarSentinelApp {
   private api = new WeatherAPI();
   private locationService = new LocationService();
   private readonly savedLocationsService = new SavedLocationsService();
+  private readonly geocodingService = new GeocodingService();
+  private locationPicker: LocationPicker | null = null;
   private debugPanel!: DebugPanel;
 
   private currentLocation: Location = this.locationService.getDefaultLocation();
@@ -131,6 +135,21 @@ export class SolarSentinelApp {
         this.renderForecastCalendar(this.latestCalendarData);
       }
     });
+
+    this.locationPicker = new LocationPicker({
+      getHomeLocation: () => this.locationService.getDefaultLocation(),
+      getCurrentLocation: () => this.currentLocation,
+      getSavedLocations: () => this.savedLocationsService.getSavedLocations(),
+      isSaved: location => this.savedLocationsService.isSaved(location),
+      isHomeLocation: location => this.locationService.isHomeLocation(location),
+      onSelectLocation: location => this.selectLocation(location),
+      onUseCurrentLocation: () => this.useCurrentLocation(),
+      onToggleFavorite: location => this.toggleFavorite(location),
+      searchLocations: query => this.geocodingService.searchLocations(query),
+    });
+    document
+      .getElementById('location-display')
+      ?.addEventListener('click', () => this.locationPicker?.toggle());
   }
 
   private async loadData(silent = false): Promise<void> {
