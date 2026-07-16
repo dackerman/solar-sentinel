@@ -69,6 +69,21 @@ export interface Location {
   isUserLocation: boolean;
 }
 
+export type LocationSource = 'manual' | 'auto';
+
+export interface SavedLocation {
+  id: string; // 2-decimal coord key, e.g. "42.80,-71.30" — matches all cache keying
+  lat: number;
+  lon: number;
+  name: string;
+}
+
+export interface SelectedLocation {
+  location: Location;
+  source: LocationSource;
+  timestamp: number;
+}
+
 export interface DebugEntry {
   timestamp: string;
   message: string;
