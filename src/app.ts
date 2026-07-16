@@ -1,5 +1,6 @@
 import { WeatherAPI } from './services/api.js';
 import { LocationService } from './services/location.js';
+import { SavedLocationsService } from './services/savedLocations.js';
 import { DebugPanel } from './components/debug.js';
 import {
   createUVChart,
@@ -20,6 +21,8 @@ import type {
   DailyCalendarDay,
   DailyCalendarHistoryEntry,
   Location,
+  LocationSource,
+  SelectedLocation,
   WeatherHistoryEntry,
 } from './types/weather.js';
 
@@ -28,6 +31,7 @@ export class SolarSentinelApp {
 
   private api = new WeatherAPI();
   private locationService = new LocationService();
+  private readonly savedLocationsService = new SavedLocationsService();
   private debugPanel!: DebugPanel;
 
   private currentLocation: Location = this.locationService.getDefaultLocation();
@@ -138,8 +142,13 @@ export class SolarSentinelApp {
 
     try {
       const locationStart = performance.now();
-      this.prepareHomeFirstLocation();
-      this.refreshLocationInBackground();
+      const manualSelection = this.getManualSelection();
+      if (manualSelection) {
+        this.currentLocation = manualSelection.location;
+      } else {
+        this.prepareHomeFirstLocation();
+        this.refreshLocationInBackground();
+      }
       this.updateLocationDisplay();
       this.markPerformance('location-fast-path-ready', {
         durationMs: Math.round(performance.now() - locationStart),
@@ -304,6 +313,51 @@ export class SolarSentinelApp {
     if (locationDisplay) {
       locationDisplay.textContent = `${locationIcon}${this.currentLocation.name}`;
     }
+  }
+
+  private getManualSelection(): SelectedLocation | null {
+    const selected = this.savedLocationsService.getSelectedLocation();
+    return selected?.source === 'manual' ? selected : null;
+  }
+
+  selectLocation(location: Location, source: LocationSource = 'manual'): void {
+    this.debugPanel.log(`Location selected: ${location.name}`, {
+      coords: `${location.lat.toFixed(4)}, ${location.lon.toFixed(4)}`,
+      source,
+    });
+    this.savedLocationsService.setSelectedLocation(location, source);
+    this.applyLocationChange(location);
+  }
+
+  useCurrentLocation(): void {
+    this.debugPanel.log('Location: use current location requested');
+    this.savedLocationsService.clearSelectedLocation();
+    // Home-first + background geolocation resumes inside loadData now that no
+    // manual selection is stored.
+    this.applyLocationChange(this.locationService.getDefaultLocation());
+  }
+
+  toggleFavorite(location: Location): void {
+    if (this.savedLocationsService.isSaved(location)) {
+      this.savedLocationsService.removeSavedLocation(
+        SavedLocationsService.getLocationId(location.lat, location.lon)
+      );
+    } else {
+      this.savedLocationsService.addSavedLocation(location);
+    }
+  }
+
+  private applyLocationChange(location: Location): void {
+    this.currentLocation = location;
+    this.historyMode = false;
+    this.latestWeatherData = null;
+    this.latestCalendarData = null;
+    this.weatherHistory = [];
+    this.calendarHistory = [];
+    this.historyTimeline = [];
+    this.updateHistoryControls();
+    this.updateLocationDisplay();
+    void this.loadData();
   }
 
   private renderWeatherData(data: WeatherData, silent: boolean): void {
