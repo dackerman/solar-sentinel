@@ -159,6 +159,9 @@ export class SolarSentinelApp {
     let renderedLocalCache = false;
     let requestedCalendar = false;
     const requestedDate = this.currentDate;
+    // Finalized once location resolution (manual selection / home-first) below
+    // has run; declared here so the catch block can also see it.
+    let requestedLocation = this.currentLocation;
 
     try {
       const locationStart = performance.now();
@@ -169,6 +172,7 @@ export class SolarSentinelApp {
         this.prepareHomeFirstLocation();
         this.refreshLocationInBackground();
       }
+      requestedLocation = this.currentLocation;
       this.updateLocationDisplay();
       this.markPerformance('location-fast-path-ready', {
         durationMs: Math.round(performance.now() - locationStart),
@@ -198,11 +202,12 @@ export class SolarSentinelApp {
       }
 
       const apiStart = performance.now();
-      const data = await this.api.fetchWeatherData(this.currentLocation, requestedDate);
-      // The user may have navigated to a different date while this request was
-      // in flight (loadData is fired without awaiting on navigation). Only the
-      // request that still matches the live date is allowed to adopt/render.
-      const isCurrentRequest = this.currentDate === requestedDate;
+      const data = await this.api.fetchWeatherData(requestedLocation, requestedDate);
+      // The user may have navigated to a different date or location while this
+      // request was in flight (loadData is fired without awaiting on
+      // navigation/location changes). Only the request that still matches the
+      // live date AND location is allowed to adopt/render.
+      const isCurrentRequest = this.isCurrentRequest(requestedLocation, requestedDate);
       if (isCurrentRequest) {
         this.latestWeatherData = data;
       }
@@ -244,8 +249,8 @@ export class SolarSentinelApp {
     } catch (error) {
       // Same staleness guard as the success path: a request the user has
       // already navigated away from must not show an error banner over a
-      // newer, successfully rendered date.
-      const isCurrentRequest = this.currentDate === requestedDate;
+      // newer, successfully rendered date/location.
+      const isCurrentRequest = this.isCurrentRequest(requestedLocation, requestedDate);
       this.markPerformance('load-error', {
         error: (error as Error).message,
         skippedAsStale: !isCurrentRequest,
@@ -268,6 +273,17 @@ export class SolarSentinelApp {
         }
       }
     }
+  }
+
+  // Whether the live app state (date + location) still matches a request that
+  // was dispatched earlier — used to gate adoption/rendering of async
+  // responses that may land after the user has navigated/switched locations.
+  private isCurrentRequest(location: Location, date: string): boolean {
+    return (
+      this.currentDate === date &&
+      this.currentLocation.lat === location.lat &&
+      this.currentLocation.lon === location.lon
+    );
   }
 
   private prepareHomeFirstLocation(): void {
@@ -771,6 +787,11 @@ export class SolarSentinelApp {
   }
 
   private async loadForecastCalendar(silent: boolean): Promise<void> {
+    // Snapshot the live date/location before awaiting so a slow response for a
+    // location/date the user has since navigated away from can't clobber
+    // latestCalendarData (and therefore getDateBounds()) or render stale UI.
+    const requestedLocation = this.currentLocation;
+    const requestedDate = this.currentDate;
     const startDate = new Date().toLocaleDateString('en-CA');
     const cacheStart = performance.now();
     const cachedCalendar = this.api.getCachedDailyCalendar(this.currentLocation, startDate);
@@ -791,8 +812,11 @@ export class SolarSentinelApp {
     }
 
     const apiStart = performance.now();
-    const calendar = await this.api.fetchDailyCalendar(this.currentLocation, startDate);
-    this.latestCalendarData = calendar;
+    const calendar = await this.api.fetchDailyCalendar(requestedLocation, startDate);
+    const isCurrentRequest = this.isCurrentRequest(requestedLocation, requestedDate);
+    if (isCurrentRequest) {
+      this.latestCalendarData = calendar;
+    }
     this.markPerformance('forecast-calendar-api-complete', {
       durationMs: Math.round(performance.now() - apiStart),
       responseMs: calendar.timing?.responseDuration,
@@ -801,10 +825,11 @@ export class SolarSentinelApp {
       cacheStatus: calendar.timing?.cacheStatus,
       serverTiming: calendar.timing?.serverTiming,
       days: calendar.days.length,
+      skippedAsStale: !isCurrentRequest,
     });
 
     const renderStart = performance.now();
-    if (!this.historyMode) {
+    if (!this.historyMode && isCurrentRequest) {
       this.renderForecastCalendar(calendar);
     }
     this.markPerformance('forecast-calendar-api-rendered', {
@@ -812,6 +837,7 @@ export class SolarSentinelApp {
       days: calendar.days.length,
       silent,
       skippedForHistory: this.historyMode,
+      skippedAsStale: !isCurrentRequest,
     });
   }
 

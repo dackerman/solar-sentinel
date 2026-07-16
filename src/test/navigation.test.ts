@@ -279,4 +279,108 @@ describe('Date navigation bounds', () => {
     expect(document.getElementById('error')?.classList.contains('hidden')).toBe(true);
     expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
   });
+
+  it('does not let a stale location response overwrite a newer location switch', async () => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div id="forecast-calendar-container" class="hidden"></div>'
+    );
+
+    const today = new Date();
+    const todayStr = fmt(today);
+    const homeLat = 42.8006;
+    const homeLon = -71.3048;
+    const denverLat = 39.7392;
+    const denverLon = -104.9903;
+    const plus2Str = fmt(addDays(today, 2));
+
+    // Seed the local weather cache for home so the initial load renders from
+    // cache synchronously and kicks off the calendar fetch right away too —
+    // putting both home requests (weather + calendar) in flight before the
+    // location switch below.
+    localStorage.setItem(
+      `solar_sentinel_weather_${homeLat.toFixed(2)},${homeLon.toFixed(2)},${todayStr}`,
+      JSON.stringify({ data: mkData(todayStr), timestamp: Date.now() })
+    );
+
+    vi.mocked(global.fetch).mockReset();
+
+    let resolveHomeWeather!: (value: unknown) => void;
+    const homeWeatherPromise = new Promise(resolve => {
+      resolveHomeWeather = resolve;
+    });
+    let resolveHomeCalendar!: (value: unknown) => void;
+    const homeCalendarPromise = new Promise(resolve => {
+      resolveHomeCalendar = resolve;
+    });
+
+    // Home's calendar (if it were wrongly adopted) has a shorter, distinguishable
+    // range from Denver's so bounds corruption is observable via navigation.
+    const homeShortCalendar = mkCalendarData(todayStr, fmt(addDays(today, 1)));
+    const denverCalendar = mkCalendarData(todayStr, plus2Str);
+
+    vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+      const url = String(input);
+      const isHome = url.includes(`lat=${homeLat}`);
+      const isCalendar = url.includes('/api/daily-calendar');
+      if (isHome) {
+        return (isCalendar ? homeCalendarPromise : homeWeatherPromise) as any;
+      }
+      if (isCalendar) {
+        return Promise.resolve(mkResponse(denverCalendar) as any);
+      }
+      const requestedDate = new URL(url, 'http://localhost').searchParams.get('date') || todayStr;
+      return Promise.resolve(mkResponse(mkData(requestedDate)) as any);
+    });
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+
+    // Let the synchronous local-cache render fire, putting both home requests
+    // in flight (held open by the promises above).
+    await flush();
+
+    // Switch location while home's weather + calendar requests are still pending.
+    app.selectLocation({
+      lat: denverLat,
+      lon: denverLon,
+      name: 'Denver, CO',
+      isUserLocation: false,
+    });
+    await flush();
+
+    expect(document.getElementById('location-display')?.textContent).toContain('Denver, CO');
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(todayStr));
+
+    // Now let the stale home responses resolve, arriving after the switch.
+    resolveHomeWeather(mkResponse(mkData(todayStr)));
+    resolveHomeCalendar(mkResponse(homeShortCalendar));
+    await flush();
+    await init;
+
+    // Denver must still be showing, unclobbered by the late home responses.
+    expect(document.getElementById('location-display')?.textContent).toContain('Denver, CO');
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(todayStr));
+
+    // Prove the calendar bounds reflect Denver's (longer) range and not home's
+    // stale/shorter range that arrived late: navigating forward two days only
+    // succeeds if bounds.max is Denver's endDate, not home's.
+    vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+      const url = String(input);
+      if (url.includes('/api/daily-calendar')) {
+        return Promise.resolve(mkResponse(denverCalendar) as any);
+      }
+      const requestedDate = new URL(url, 'http://localhost').searchParams.get('date') || todayStr;
+      return Promise.resolve(mkResponse(mkData(requestedDate)) as any);
+    });
+
+    (document.getElementById('next-day') as HTMLButtonElement).click();
+    await flush();
+    (document.getElementById('next-day') as HTMLButtonElement).click();
+    await flush();
+
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(plus2Str));
+  });
 });
