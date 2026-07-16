@@ -379,13 +379,6 @@ app.use(
   })
 );
 
-// Get today's date in America/New_York timezone
-function getTodayInNewYork() {
-  return new Date().toLocaleDateString('en-CA', {
-    timeZone: 'America/New_York',
-  }); // Returns YYYY-MM-DD format
-}
-
 // Filter weather data for specified date
 function filterDateData(hourlyData, targetDate) {
   const todayIndices = [];
@@ -586,8 +579,39 @@ function getApiHistoryEntries({ route, lat, lon, date, limit, before, after }) {
     .filter(Boolean);
 }
 
-function getTimezone(lon) {
-  return lon >= -130 && lon <= -60 ? 'America/New_York' : 'UTC';
+const FORECAST_WINDOW_DAYS = 16;
+
+// Today's date (YYYY-MM-DD) in the given IANA timezone; UTC on bad input.
+function getTodayInTimezone(timeZone) {
+  try {
+    return new Date().toLocaleDateString('en-CA', { timeZone });
+  } catch {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'UTC' });
+  }
+}
+
+// Date-only arithmetic, timezone-free.
+function addDays(dateString, days) {
+  const date = new Date(`${dateString}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+// The served date can only be resolved once a forecast (and its real timezone)
+// is in hand: missing/past dates clamp to the location's today; dates beyond
+// the forecast window are rejected.
+function resolveRequestedDate(forecastData, requestedDate) {
+  const timeZone = forecastData?.timezone || 'UTC';
+  const today = getTodayInTimezone(timeZone);
+  if (!requestedDate || requestedDate < today) {
+    return { date: today };
+  }
+  if (requestedDate > addDays(today, FORECAST_WINDOW_DAYS)) {
+    return {
+      error: { status: 400, message: 'Date must be between today and 16 days from today' },
+    };
+  }
+  return { date: requestedDate };
 }
 
 function getStringQueryParam(value) {
@@ -602,34 +626,18 @@ function parseForecastRequest(req) {
   const lonParam = parseFloat(getStringQueryParam(req.query.lon));
   const lat = Number.isFinite(latParam) ? latParam : DEFAULT_LAT;
   const lon = Number.isFinite(lonParam) ? lonParam : DEFAULT_LON;
-  const requestedDate = getStringQueryParam(req.query.date) || getTodayInNewYork();
+  const requestedDate = getStringQueryParam(req.query.date);
 
   if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
     return { error: { status: 400, message: 'Invalid coordinates' } };
   }
 
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRegex.test(requestedDate)) {
+  if (requestedDate && !dateRegex.test(requestedDate)) {
     return { error: { status: 400, message: 'Invalid date format. Use YYYY-MM-DD' } };
   }
 
-  const today = new Date(getTodayInNewYork());
-  const maxDate = new Date(today);
-  maxDate.setDate(maxDate.getDate() + 16);
-  const reqDate = new Date(requestedDate);
-
-  if (reqDate < today || reqDate > maxDate) {
-    return {
-      error: { status: 400, message: 'Date must be between today and 16 days from today' },
-    };
-  }
-
-  return {
-    lat,
-    lon,
-    requestedDate,
-    timezone: getTimezone(lon),
-  };
+  return { lat, lon, requestedDate };
 }
 
 function parseHistoryRequest(req) {
@@ -685,10 +693,10 @@ function hasUsableForecast(data, requestedDate, requiredFields) {
   return true;
 }
 
-async function fetchForecastFromOpenMeteo(lat, lon, timezone) {
+async function fetchForecastFromOpenMeteo(lat, lon) {
   const upstreamStart = performance.now();
   const response = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max,weather_code&timezone=${timezone}&temperature_unit=fahrenheit&forecast_days=16`
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max,weather_code&timezone=auto&temperature_unit=fahrenheit&forecast_days=16`
   );
   const responseMs = roundTiming(performance.now() - upstreamStart);
 
@@ -703,7 +711,7 @@ async function fetchForecastFromOpenMeteo(lat, lon, timezone) {
   console.log('Open-Meteo fetch completed', {
     lat,
     lon,
-    timezone,
+    timezone: data?.timezone,
     responseMs,
     parseMs,
     totalMs: roundTiming(performance.now() - upstreamStart),
@@ -712,13 +720,13 @@ async function fetchForecastFromOpenMeteo(lat, lon, timezone) {
   return data;
 }
 
-async function fetchAndCacheForecast(lat, lon, timezone, cacheKey) {
+async function fetchAndCacheForecast(lat, lon, cacheKey) {
   const currentRefresh = forecastRefreshes.get(cacheKey);
   if (currentRefresh) {
     return currentRefresh;
   }
 
-  const refresh = fetchForecastFromOpenMeteo(lat, lon, timezone)
+  const refresh = fetchForecastFromOpenMeteo(lat, lon)
     .then(data => {
       const entry = {
         data,
@@ -736,32 +744,40 @@ async function fetchAndCacheForecast(lat, lon, timezone, cacheKey) {
   return refresh;
 }
 
-async function getForecast(lat, lon, requestedDate, timezone, requiredFields) {
+async function getForecast(lat, lon, requestedDate, requiredFields) {
   const lookupStart = performance.now();
   const cacheKey = getForecastCacheKey(lat, lon);
   const cached = forecastCache.get(cacheKey);
   const cacheLookupMs = performance.now() - lookupStart;
 
   const validationStart = performance.now();
-  if (cached && hasUsableForecast(cached.data, requestedDate, requiredFields)) {
-    return {
-      cacheKey,
-      cacheStatus: 'hit',
-      entry: cached,
-      performance: {
-        cacheLookupMs,
-        cacheValidationMs: performance.now() - validationStart,
-      },
-    };
+  if (cached) {
+    const resolved = resolveRequestedDate(cached.data, requestedDate);
+    if (resolved.error) return { error: resolved.error };
+    if (hasUsableForecast(cached.data, resolved.date, requiredFields)) {
+      return {
+        cacheKey,
+        cacheStatus: 'hit',
+        entry: cached,
+        date: resolved.date,
+        performance: {
+          cacheLookupMs,
+          cacheValidationMs: performance.now() - validationStart,
+        },
+      };
+    }
   }
   const cacheValidationMs = performance.now() - validationStart;
 
   const forecastWaitStart = performance.now();
-  const entry = await fetchAndCacheForecast(lat, lon, timezone, cacheKey);
+  const entry = await fetchAndCacheForecast(lat, lon, cacheKey);
+  const resolved = resolveRequestedDate(entry.data, requestedDate);
+  if (resolved.error) return { error: resolved.error };
   return {
     cacheKey,
     cacheStatus: 'miss',
     entry,
+    date: resolved.date,
     performance: {
       cacheLookupMs,
       cacheValidationMs,
@@ -770,12 +786,12 @@ async function getForecast(lat, lon, requestedDate, timezone, requiredFields) {
   };
 }
 
-function refreshForecastInBackground(lat, lon, timezone, cacheKey) {
+function refreshForecastInBackground(lat, lon, cacheKey) {
   if (forecastRefreshes.has(cacheKey)) {
     return;
   }
 
-  fetchAndCacheForecast(lat, lon, timezone, cacheKey)
+  fetchAndCacheForecast(lat, lon, cacheKey)
     .then(() => {
       console.log(`Forecast cache refresh completed for ${cacheKey}`);
     })
@@ -784,9 +800,9 @@ function refreshForecastInBackground(lat, lon, timezone, cacheKey) {
     });
 }
 
-function refreshIfStale(lat, lon, timezone, cacheKey, entry) {
+function refreshIfStale(lat, lon, cacheKey, entry) {
   if (Date.now() - entry.timestamp > FORECAST_REFRESH_MS) {
-    refreshForecastInBackground(lat, lon, timezone, cacheKey);
+    refreshForecastInBackground(lat, lon, cacheKey);
   }
 }
 
@@ -839,39 +855,39 @@ async function handleForecastRequest(req, res, requiredFields, buildData, logLab
       return res.status(request.error.status).json(responseBody);
     }
 
-    const { lat, lon, requestedDate, timezone } = request;
+    const { lat, lon, requestedDate } = request;
     responseContext = {
       ...responseContext,
       lat,
       lon,
-      date: requestedDate,
     };
 
     const forecastStart = performance.now();
-    const {
-      cacheKey,
-      cacheStatus,
-      entry,
-      performance: forecastPerformance,
-    } = await getForecast(lat, lon, requestedDate, timezone, requiredFields);
+    const forecastResult = await getForecast(lat, lon, requestedDate, requiredFields);
     timer.measure('getForecast', forecastStart);
+    if (forecastResult.error) {
+      responseContext = { ...responseContext, error: forecastResult.error.message };
+      return res.status(forecastResult.error.status).json({ error: forecastResult.error.message });
+    }
+    const { cacheKey, cacheStatus, entry, date, performance: forecastPerformance } = forecastResult;
     Object.entries(forecastPerformance).forEach(([name, duration]) => {
       timer.add(name, duration);
     });
     responseContext = {
       ...responseContext,
+      date,
       cacheKey,
       cacheStatus,
       cacheAgeMs: Date.now() - entry.timestamp,
     };
 
     const buildStart = performance.now();
-    const data = buildData(entry.data, requestedDate);
+    const data = buildData(entry.data, date);
     timer.measure('buildData', buildStart);
 
     if (cacheStatus === 'hit') {
       const refreshStart = performance.now();
-      refreshIfStale(lat, lon, timezone, cacheKey, entry);
+      refreshIfStale(lat, lon, cacheKey, entry);
       timer.measure('refreshCheck', refreshStart);
     }
 
@@ -898,7 +914,7 @@ function buildWeatherData(forecastData, requestedDate) {
 
 function prewarmHomeForecast() {
   const cacheKey = getForecastCacheKey(HOME_LOCATION.lat, HOME_LOCATION.lon);
-  refreshForecastInBackground(HOME_LOCATION.lat, HOME_LOCATION.lon, 'America/New_York', cacheKey);
+  refreshForecastInBackground(HOME_LOCATION.lat, HOME_LOCATION.lon, cacheKey);
 }
 
 // UV API endpoint

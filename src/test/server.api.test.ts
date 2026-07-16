@@ -14,9 +14,18 @@ function getTestDate(offsetDays = 1) {
   return date.toLocaleDateString('en-CA'); // Returns YYYY-MM-DD format
 }
 
+// Date-only UTC arithmetic, mirroring server.js's addDays, for computing
+// dates relative to a location's "today" independent of test-runner host tz.
+function addDaysForTest(dateString: string, days: number) {
+  const date = new Date(`${dateString}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 // Mock data for Open-Meteo API responses
-function getMockHourlyData(date: string) {
+function getMockHourlyData(date: string, timezone = 'America/New_York') {
   return {
+    timezone,
     hourly: {
       time: [
         `${date}T00:00:00`,
@@ -38,8 +47,9 @@ function getMockHourlyData(date: string) {
   };
 }
 
-function getMockDailyData(dates: string[]) {
+function getMockDailyData(dates: string[], timezone = 'America/New_York') {
   return {
+    timezone,
     daily: {
       time: dates,
       temperature_2m_max: [68.1, 72.3],
@@ -52,15 +62,16 @@ function getMockDailyData(dates: string[]) {
   };
 }
 
-function getMockCombinedData(date: string) {
+function getMockCombinedData(date: string, timezone = 'America/New_York') {
   return {
-    ...getMockHourlyData(date),
-    ...getMockDailyData([date, getTestDate(15)]),
+    ...getMockHourlyData(date, timezone),
+    ...getMockDailyData([date, getTestDate(15)], timezone),
   };
 }
 
-function getMockTwoDayData(dateA: string, dateB: string) {
+function getMockTwoDayData(dateA: string, dateB: string, timezone = 'America/New_York') {
   return {
+    timezone,
     hourly: {
       time: [`${dateA}T10:00:00`, `${dateA}T11:00:00`, `${dateB}T10:00:00`, `${dateB}T11:00:00`],
       uv_index: [3.1, 4.2, 2.5, 3.3],
@@ -167,13 +178,25 @@ describe('Server API Endpoints', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('should validate date range - past dates', async () => {
+    it('clamps past dates to the location today instead of erroring', async () => {
       const pastDate = '2020-01-01';
-      const response = await request(app).get('/api/uv-today').query({ date: pastDate });
+      const todayNY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
-      expect(response.status).toBe(400);
-      expect(response.body.error).toBe('Date must be between today and 16 days from today');
-      expect(mockFetch).not.toHaveBeenCalled();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockHourlyData(todayNY)),
+      });
+
+      // Fresh coordinates so this test's cache lookup is deterministic (a miss)
+      // regardless of what other tests have already cached.
+      const response = await request(app)
+        .get('/api/uv-today')
+        .query({ lat: 33.44, lon: -84.39, date: pastDate });
+
+      expect(response.status).toBe(200);
+      expect(response.body.date).toBe(todayNY);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('should validate date range - far future dates', async () => {
@@ -560,9 +583,9 @@ describe('Server API Endpoints', () => {
     });
   });
 
-  describe('Timezone handling', () => {
-    it('should use America/New_York timezone for US coordinates', async () => {
-      const testDate = getTestDate(8);
+  describe('per-location timezone handling', () => {
+    it('requests timezone=auto upstream', async () => {
+      const testDate = getTestDate();
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -570,33 +593,53 @@ describe('Server API Endpoints', () => {
         json: () => Promise.resolve(getMockHourlyData(testDate)),
       });
 
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ lat: 40.7, lon: -74.0, date: testDate }); // New York coordinates
+      // Fresh coordinates so this test's cache lookup is deterministic (a miss).
+      await request(app).get('/api/weather').query({ lat: 12.34, lon: 56.78 });
 
-      expect(response.status).toBe(200);
-
-      // Verify the timezone parameter was set correctly
-      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('timezone=America/New_York'));
+      const upstreamUrl = mockFetch.mock.calls[0][0];
+      expect(upstreamUrl).toContain('timezone=auto');
+      expect(upstreamUrl).not.toContain('timezone=America');
     });
 
-    it('should use UTC timezone for non-US coordinates', async () => {
-      const testDate = getTestDate(9);
+    it('defaults to today in the forecast timezone when no date is given', async () => {
+      const honoluluToday = new Date().toLocaleDateString('en-CA', {
+        timeZone: 'Pacific/Honolulu',
+      });
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: () => Promise.resolve(getMockHourlyData(testDate)),
+        json: () => Promise.resolve(getMockCombinedData(honoluluToday, 'Pacific/Honolulu')),
       });
 
-      const response = await request(app)
-        .get('/api/uv-today')
-        .query({ lat: 51.5, lon: -0.1, date: testDate }); // London coordinates
-
+      const response = await request(app).get('/api/weather?lat=21.31&lon=-157.86');
       expect(response.status).toBe(200);
+      expect(response.body.date).toBe(honoluluToday);
+    });
 
-      // Verify the timezone parameter was set correctly
-      expect(mockFetch).toHaveBeenCalledWith(expect.stringContaining('timezone=UTC'));
+    it('clamps dates before the location today to today instead of erroring', async () => {
+      const honoluluToday = new Date().toLocaleDateString('en-CA', {
+        timeZone: 'Pacific/Honolulu',
+      });
+      const yesterday = addDaysForTest(honoluluToday, -1);
+
+      // Reuses the Honolulu cache primed by the previous test (still same coords),
+      // exercising the clamp on both the cache-hit and cache-miss paths.
+      const response = await request(app).get(
+        `/api/weather?lat=21.31&lon=-157.86&date=${yesterday}`
+      );
+      expect(response.status).toBe(200);
+      expect(response.body.date).toBe(honoluluToday);
+    });
+
+    it('rejects dates beyond the 16-day window', async () => {
+      const honoluluToday = new Date().toLocaleDateString('en-CA', {
+        timeZone: 'Pacific/Honolulu',
+      });
+      const tooFar = addDaysForTest(honoluluToday, 17);
+
+      const response = await request(app).get(`/api/weather?lat=21.31&lon=-157.86&date=${tooFar}`);
+      expect(response.status).toBe(400);
     });
   });
 
