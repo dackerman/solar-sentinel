@@ -6,7 +6,7 @@
 
 **Architecture:** Thin widget + smart server. The server gains `GET /api/widget` returning render-ready fields (rain label computed from hourly precipitation probability, art URL chosen by the existing weather-art logic, shared via a plain-JS module). A small Kotlin app in `android/` renders a Jetpack Glance widget, refreshed every 30 minutes by WorkManager using coarse device location (fallback: Windham), authenticating through Cloudflare Access with a service token.
 
-**Tech Stack:** Node/Express (server.js, plain JS ESM), Vitest + supertest, Kotlin 2.0 / Jetpack Glance 1.1 / WorkManager / OkHttp / kotlinx-serialization, Gradle 8.9 + AGP 8.5.2.
+**Tech Stack:** Node/Express (server.js, plain JS ESM), Vitest + supertest, Kotlin 2.0 / Jetpack Glance 1.1 / WorkManager / OkHttp / kotlinx-serialization, Gradle 8.11.1 + AGP 8.7.3 (JDK 21, SDK platform 35 — matches what is installed at /home/david/Android/Sdk).
 
 **Spec:** `docs/superpowers/specs/2026-07-28-android-widget-design.md`. One approved deviation: the response's freshness timestamp is the existing `metadata.lastUpdated` field (added automatically by `sendForecastResponse`) instead of a top-level `updatedAt`.
 
@@ -622,7 +622,7 @@ include(":app")
 
 ```kotlin
 plugins {
-  id("com.android.application") version "8.5.2" apply false
+  id("com.android.application") version "8.7.3" apply false
   id("org.jetbrains.kotlin.android") version "2.0.20" apply false
   id("org.jetbrains.kotlin.plugin.compose") version "2.0.20" apply false
   id("org.jetbrains.kotlin.plugin.serialization") version "2.0.20" apply false
@@ -679,12 +679,12 @@ fun localProperty(name: String) = localProperties.getProperty(name, "")
 
 android {
   namespace = "com.solarsentinel.widget"
-  compileSdk = 34
+  compileSdk = 35
 
   defaultConfig {
     applicationId = "com.solarsentinel.widget"
     minSdk = 26
-    targetSdk = 34
+    targetSdk = 35
     versionCode = 1
     versionName = "1.0"
 
@@ -803,14 +803,27 @@ class MainActivity : Activity() {
 
 - [ ] **Step 10: Generate the Gradle wrapper and `local.properties`**
 
+System gradle is not installed; copy the wrapper from the sibling Android repo and pin our version (the wrapper jar is a version-agnostic launcher — `distributionUrl` decides what actually runs):
+
 ```bash
 cd android
-# NixOS: gradle may not be on PATH; use nix-shell if needed.
-gradle wrapper --gradle-version 8.9 || nix-shell -p gradle --run 'gradle wrapper --gradle-version 8.9'
+mkdir -p gradle/wrapper
+cp ~/code/android-remote-control/gradle/wrapper/gradle-wrapper.jar gradle/wrapper/
+cp ~/code/android-remote-control/gradlew ~/code/android-remote-control/gradlew.bat . 2>/dev/null || cp ~/code/android-remote-control/gradlew .
+chmod +x gradlew
+cat > gradle/wrapper/gradle-wrapper.properties <<'EOF'
+distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.11.1-bin.zip
+networkTimeout=10000
+validateDistributionUrl=true
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+EOF
 cp local.properties.example local.properties
 ```
 
-Then set `sdk.dir` in `android/local.properties` to the real SDK path — check `~/code/android-remote-control/local.properties` or `$ANDROID_HOME` for it. Leave the widget.* placeholders for now (Task 8 fills them).
+Then in `android/local.properties` set `sdk.dir=/home/david/Android/Sdk`. Leave the widget.* placeholders for now (Task 8 fills them).
 
 - [ ] **Step 11: Verify it assembles**
 
