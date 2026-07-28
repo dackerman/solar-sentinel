@@ -5,3 +5,4 @@ public/
 package-lock.json
 pnpm-lock.yaml
 *.md
+android/
