@@ -51,7 +51,7 @@
 - Performance instrumentation is intentional: frontend logs `Perf:` entries to the debug panel/console, and API responses include `Server-Timing` plus `metadata.performance`
 
 ## Weather Data
-- Open-Meteo hourly fields: `uv_index`, `uv_index_clear_sky`, `precipitation_probability`, `temperature_2m`, `apparent_temperature`, `cloud_cover`, `relative_humidity_2m`
+- Open-Meteo hourly fields: `uv_index`, `uv_index_clear_sky`, `precipitation_probability`, `temperature_2m`, `apparent_temperature`, `cloud_cover`, `relative_humidity_2m`, `weather_code`
 - Open-Meteo daily fields: `temperature_2m_max`, `temperature_2m_min`, `uv_index_max`, `precipitation_probability_max`, `relative_humidity_2m_max`, `weather_code`
 - Forecasts are fetched with `timezone=auto`; "today" and the today→+16 date window are resolved in each location's own timezone after cache lookup (`resolveRequestedDate` in server.js). Past dates clamp to the location's today; the response `date` field is authoritative and the frontend adopts it
 - Date navigation supports today through 16 days ahead

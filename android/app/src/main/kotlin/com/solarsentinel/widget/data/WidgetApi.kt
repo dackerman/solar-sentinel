@@ -28,10 +28,20 @@ object WidgetApi {
 
   fun downloadArtIfMissing(url: String, destination: File) {
     if (destination.exists()) return
-    client.newCall(request(url)).execute().use { response ->
-      if (!response.isSuccessful) throw IOException("Art download returned ${response.code}")
-      val body = response.body ?: throw IOException("Art download returned an empty body")
-      destination.outputStream().use { body.byteStream().copyTo(it) }
+    val temp = File(destination.parentFile, destination.name + ".tmp")
+    try {
+      client.newCall(request(url)).execute().use { response ->
+        if (!response.isSuccessful) throw IOException("Art download returned ${response.code}")
+        val body = response.body ?: throw IOException("Art download returned an empty body")
+        temp.outputStream().use { body.byteStream().copyTo(it) }
+      }
+      if (!temp.renameTo(destination)) {
+        temp.delete()
+        throw IOException("Failed to move downloaded art into place")
+      }
+    } catch (error: Exception) {
+      temp.delete()
+      throw error
     }
   }
 }

@@ -33,6 +33,8 @@ class RefreshWorker(context: Context, params: WorkerParameters) :
         WidgetApi.downloadArtIfMissing(data.artUrl, WidgetStore.artFile(applicationContext, data.artUrl))
         SolarWidget.updateAll(applicationContext)
         Result.success()
+      } catch (error: kotlinx.coroutines.CancellationException) {
+        throw error
       } catch (error: Exception) {
         // Keep the last good render; WorkManager retries with backoff.
         Log.w("RefreshWorker", "widget refresh failed", error)

@@ -9,7 +9,18 @@ object WidgetStore {
   private const val ART_DIR = "art-cache"
 
   fun save(context: Context, body: String) {
-    File(context.filesDir, DATA_FILE).writeText(body)
+    val destination = File(context.filesDir, DATA_FILE)
+    val temp = File(destination.parentFile, destination.name + ".tmp")
+    try {
+      temp.writeText(body)
+      if (!temp.renameTo(destination)) {
+        temp.delete()
+        throw java.io.IOException("Failed to move widget data into place")
+      }
+    } catch (error: Exception) {
+      temp.delete()
+      throw error
+    }
   }
 
   fun load(context: Context): WidgetData? {
