@@ -1,0 +1,6 @@
+# Copy to local.properties and fill in. local.properties is gitignored — never commit it.
+sdk.dir=/path/to/android-sdk
+widget.baseUrl=https://solar.example.com
+widget.webAppUrl=https://solar.example.com
+widget.cfAccessClientId=xxx.access
+widget.cfAccessClientSecret=xxx
