@@ -26,5 +26,8 @@ class MainActivity : Activity() {
     if (!granted) {
       requestPermissions(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 1)
     }
+
+    com.solarsentinel.widget.refresh.RefreshWorker.schedule(this)
+    com.solarsentinel.widget.refresh.RefreshWorker.refreshNow(this)
   }
 }
