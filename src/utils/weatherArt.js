@@ -1,34 +1,22 @@
-export type WeatherArtDaypart = 'day' | 'night';
-export type WeatherArtTempBand = 'freezing' | 'cold' | 'cool' | 'mild' | 'warm' | 'hot';
-export type WeatherArtHumidityFeel = 'dry' | 'comfortable' | 'humid';
-
-export interface WeatherArtInput {
-  tempF: number;
-  uv?: number;
-  precipChance?: number;
-  humidity?: number;
-  cloudCover?: number;
-  weatherCode?: number;
-  daypart?: WeatherArtDaypart;
-}
-
-export interface WeatherArtResult {
-  key: string;
-  path: string;
-  label: string;
-  alt: string;
-  bins: {
-    daypart: WeatherArtDaypart;
-    tempBand: WeatherArtTempBand;
-    humidityFeel?: WeatherArtHumidityFeel;
-    condition: string;
-  };
-}
+/**
+ * Weather art selection. Shared by the frontend (src/app.ts) and server.js —
+ * plain JS with JSDoc types so both can import it. Type declarations live in
+ * weatherArt.d.ts; keep the two in sync.
+ *
+ * @typedef {'day' | 'night'} WeatherArtDaypart
+ * @typedef {'freezing' | 'cold' | 'cool' | 'mild' | 'warm' | 'hot'} WeatherArtTempBand
+ * @typedef {'dry' | 'comfortable' | 'humid'} WeatherArtHumidityFeel
+ * @typedef {{ tempF: number, uv?: number, precipChance?: number, humidity?: number,
+ *   cloudCover?: number, weatherCode?: number, daypart?: WeatherArtDaypart }} WeatherArtInput
+ * @typedef {{ key: string, path: string, label: string, alt: string,
+ *   bins: { daypart: WeatherArtDaypart, tempBand: WeatherArtTempBand,
+ *     humidityFeel?: WeatherArtHumidityFeel, condition: string } }} WeatherArtResult
+ */
 
 const WEATHER_ART_BASE_PATH = '/weather-art/v2';
-const HUMIDITY_TEMP_BANDS = new Set<WeatherArtTempBand>(['mild', 'warm', 'hot']);
+const HUMIDITY_TEMP_BANDS = new Set(['mild', 'warm', 'hot']);
 
-const CONDITION_LABELS: Record<string, string> = {
+const CONDITION_LABELS = {
   'clear-low-uv': 'clear, low UV',
   'clear-moderate-uv': 'clear, moderate UV',
   'clear-high-uv': 'clear, high UV',
@@ -51,7 +39,11 @@ const CONDITION_LABELS: Record<string, string> = {
   cloudy: 'cloudy night',
 };
 
-export function getWeatherArt(input: WeatherArtInput): WeatherArtResult {
+/**
+ * @param {WeatherArtInput} input
+ * @returns {WeatherArtResult}
+ */
+export function getWeatherArt(input) {
   const daypart = input.daypart ?? 'day';
   const tempBand = getWeatherArtTempBand(input.tempF);
   const classification =
@@ -75,7 +67,11 @@ export function getWeatherArt(input: WeatherArtInput): WeatherArtResult {
   };
 }
 
-export function getWeatherArtTempBand(tempF: number): WeatherArtTempBand {
+/**
+ * @param {number} tempF
+ * @returns {WeatherArtTempBand}
+ */
+export function getWeatherArtTempBand(tempF) {
   if (tempF <= 32) return 'freezing';
   if (tempF <= 44) return 'cold';
   if (tempF <= 59) return 'cool';
@@ -84,15 +80,7 @@ export function getWeatherArtTempBand(tempF: number): WeatherArtTempBand {
   return 'hot';
 }
 
-interface WeatherArtClassification {
-  condition: string;
-  humidityFeel?: WeatherArtHumidityFeel;
-}
-
-function classifyDayWeather(
-  input: WeatherArtInput,
-  tempBand: WeatherArtTempBand
-): WeatherArtClassification {
+function classifyDayWeather(input, tempBand) {
   if (isFogWeather(input)) return { condition: 'fog-haze' };
 
   const precipKind = getActivePrecipKind(input, tempBand);
@@ -115,10 +103,7 @@ function classifyDayWeather(
   };
 }
 
-function classifyNightWeather(
-  input: WeatherArtInput,
-  tempBand: WeatherArtTempBand
-): WeatherArtClassification {
+function classifyNightWeather(input, tempBand) {
   if (isFogWeather(input)) return { condition: 'fog-haze' };
 
   const precipKind = getActivePrecipKind(input, tempBand);
@@ -129,7 +114,7 @@ function classifyNightWeather(
   return { condition: getNightSkyCondition(input.cloudCover) };
 }
 
-function getDryDaySkyUvCondition(cloudCover?: number, uv?: number): string {
+function getDryDaySkyUvCondition(cloudCover, uv) {
   const cloud = getValue(cloudCover);
   const uvValue = getValue(uv);
   const uvBand = uvValue <= 2 ? 'low-uv' : uvValue <= 5 ? 'moderate-uv' : 'high-uv';
@@ -140,28 +125,25 @@ function getDryDaySkyUvCondition(cloudCover?: number, uv?: number): string {
   return uvValue <= 2 ? 'overcast-low-uv' : 'overcast-bright';
 }
 
-function getNightSkyCondition(cloudCover?: number): string {
+function getNightSkyCondition(cloudCover) {
   const cloud = getValue(cloudCover);
   if (cloud <= 25) return 'clear';
   if (cloud <= 70) return 'partly-cloudy';
   return 'cloudy';
 }
 
-function getHumidityFeel(humidity?: number): WeatherArtHumidityFeel {
+function getHumidityFeel(humidity) {
   const humidityValue = getValue(humidity, 50);
   if (humidityValue < 35) return 'dry';
   if (humidityValue >= 70) return 'humid';
   return 'comfortable';
 }
 
-function getChancePrecipHumidityFeel(humidity?: number): WeatherArtHumidityFeel {
+function getChancePrecipHumidityFeel(humidity) {
   return getValue(humidity, 50) >= 70 ? 'humid' : 'comfortable';
 }
 
-function getActivePrecipKind(
-  input: WeatherArtInput,
-  tempBand: WeatherArtTempBand
-): 'none' | 'rain' | 'snow' | 'storm' {
+function getActivePrecipKind(input, tempBand) {
   const code = input.weatherCode;
 
   if (isThunderstormCode(code)) return 'storm';
@@ -175,20 +157,14 @@ function getActivePrecipKind(
   return 'none';
 }
 
-function getDayActivePrecipCondition(
-  precipKind: 'rain' | 'snow' | 'storm',
-  tempBand: WeatherArtTempBand
-): string {
+function getDayActivePrecipCondition(precipKind, tempBand) {
   if (tempBand === 'freezing') return precipKind === 'snow' ? 'snow' : 'wintry-mix';
   if (tempBand === 'cold') return precipKind === 'rain' ? 'rain' : 'wintry-mix';
   if (precipKind === 'storm') return 'storm';
   return 'rain';
 }
 
-function getNightActivePrecipCondition(
-  precipKind: 'rain' | 'snow' | 'storm',
-  tempBand: WeatherArtTempBand
-): string {
+function getNightActivePrecipCondition(precipKind, tempBand) {
   if (tempBand === 'freezing') return 'snow';
   if (tempBand === 'cold')
     return precipKind === 'snow' || precipKind === 'storm' ? 'wintry-mix' : 'rain';
@@ -196,45 +172,37 @@ function getNightActivePrecipCondition(
   return 'rain';
 }
 
-function isFogWeather(input: WeatherArtInput): boolean {
+function isFogWeather(input) {
   return input.weatherCode === 45 || input.weatherCode === 48;
 }
 
-function isRainCode(code?: number): boolean {
+function isRainCode(code) {
   if (code === undefined) return false;
   return (code >= 51 && code <= 67) || (code >= 80 && code <= 82);
 }
 
-function isSnowCode(code?: number): boolean {
+function isSnowCode(code) {
   if (code === undefined) return false;
   return (code >= 71 && code <= 77) || (code >= 85 && code <= 86);
 }
 
-function isThunderstormCode(code?: number): boolean {
+function isThunderstormCode(code) {
   return code !== undefined && code >= 95;
 }
 
-function buildWeatherArtKey(
-  daypart: WeatherArtDaypart,
-  tempBand: WeatherArtTempBand,
-  classification: WeatherArtClassification
-): string {
-  const parts: string[] = [daypart, tempBand];
+function buildWeatherArtKey(daypart, tempBand, classification) {
+  const parts = [daypart, tempBand];
   if (classification.humidityFeel) parts.push(classification.humidityFeel);
   parts.push(classification.condition);
   return parts.join('-');
 }
 
-function getWeatherArtLabel(
-  daypart: WeatherArtDaypart,
-  tempBand: WeatherArtTempBand,
-  classification: WeatherArtClassification
-): string {
+function getWeatherArtLabel(daypart, tempBand, classification) {
   const humidity = classification.humidityFeel ? `${classification.humidityFeel} ` : '';
   const condition = CONDITION_LABELS[classification.condition] ?? classification.condition;
   return `${daypart} ${tempBand} ${humidity}${condition}`;
 }
 
-function getValue(value: number | undefined, fallback = 0): number {
+function getValue(value, fallback = 0) {
   return value === undefined || !Number.isFinite(value) ? fallback : value;
 }
