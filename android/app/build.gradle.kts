@@ -36,6 +36,26 @@ android {
     )
   }
 
+  signingConfigs {
+    // Personal sideload key; created outside the repo, referenced via local.properties.
+    val keystorePath = localProperty("widget.releaseKeystore")
+    if (keystorePath.isNotEmpty()) {
+      create("release") {
+        storeFile = file(keystorePath)
+        storePassword = localProperty("widget.releaseKeystorePassword")
+        keyAlias = localProperty("widget.releaseKeyAlias")
+        keyPassword = localProperty("widget.releaseKeystorePassword")
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      isMinifyEnabled = false
+      signingConfigs.findByName("release")?.let { signingConfig = it }
+    }
+  }
+
   buildFeatures {
     buildConfig = true
     compose = true

@@ -4,3 +4,8 @@ widget.baseUrl=https://solar.example.com
 widget.webAppUrl=https://solar.example.com
 widget.cfAccessClientId=xxx.access
 widget.cfAccessClientSecret=xxx
+
+# Release signing (keystore lives outside the repo)
+widget.releaseKeystore=/home/you/.android/solar-sentinel-widget.jks
+widget.releaseKeystorePassword=xxx
+widget.releaseKeyAlias=widget

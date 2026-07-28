@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Build the signed release APK for the Solar Sentinel Android widget.
+#
+# Requires android/local.properties with sdk.dir, the widget.* BuildConfig
+# values, and widget.releaseKeystore/-Password/-KeyAlias (see
+# android/local.properties.example plus the signing block in
+# android/app/build.gradle.kts).
+set -euo pipefail
+
+cd "$(dirname "$0")/../android"
+
+if ! grep -q '^widget.releaseKeystore=' local.properties 2>/dev/null; then
+  echo "error: widget.releaseKeystore not set in android/local.properties" >&2
+  exit 1
+fi
+
+./gradlew :app:testDebugUnitTest :app:assembleRelease
+
+APK=app/build/outputs/apk/release/app-release.apk
+if [ ! -f "$APK" ]; then
+  echo "error: expected APK not found at android/$APK" >&2
+  exit 1
+fi
+
+echo
+echo "Release APK: $(cd "$(dirname "$APK")" && pwd)/$(basename "$APK")"
+ls -lh "$APK" | awk '{print "Size:", $5}'
