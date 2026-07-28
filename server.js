@@ -4,6 +4,8 @@ import { mkdirSync } from 'fs';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { getWeatherArt } from './src/utils/weatherArt.js';
+import { buildRainOutlook } from './src/utils/rainOutlook.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -590,6 +592,22 @@ function getTodayInTimezone(timeZone) {
   }
 }
 
+// Current hour (0-23) in the given IANA timezone; UTC on bad input.
+function getCurrentHourInTimezone(timeZone) {
+  const options = { hour: 'numeric', hourCycle: 'h23' };
+  try {
+    return parseInt(
+      new Intl.DateTimeFormat('en-US', { ...options, timeZone }).format(new Date()),
+      10
+    );
+  } catch {
+    return parseInt(
+      new Intl.DateTimeFormat('en-US', { ...options, timeZone: 'UTC' }).format(new Date()),
+      10
+    );
+  }
+}
+
 // Date-only arithmetic, timezone-free.
 function addDays(dateString, days) {
   const date = new Date(`${dateString}T00:00:00Z`);
@@ -912,6 +930,70 @@ function buildWeatherData(forecastData, requestedDate) {
   };
 }
 
+// Public origin for absolute URLs; honors the Cloudflare tunnel's forwarded headers.
+function getRequestBaseUrl(req) {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const forwardedHost = req.headers['x-forwarded-host'];
+  const proto = String(forwardedProto || req.protocol || 'http')
+    .split(',')[0]
+    .trim();
+  const host = String(forwardedHost || req.get('host') || '')
+    .split(',')[0]
+    .trim();
+  return `${proto}://${host}`;
+}
+
+// Mirrors the frontend's daypart rule (src/app.ts getWeatherArtDaypart).
+function getWidgetDaypart(hour) {
+  return hour >= 6 && hour < 20 ? 'day' : 'night';
+}
+
+function buildWidgetData(forecastData, requestedDate, baseUrl) {
+  const timeZone = forecastData.timezone || 'UTC';
+  const isToday = requestedDate === getTodayInTimezone(timeZone);
+  const currentHour = isToday ? getCurrentHourInTimezone(timeZone) : 12;
+  const hourly = forecastData.hourly;
+  const daily = extractDailyData(forecastData.daily, requestedDate);
+
+  // The hour row shown as "now": latest hour at or before currentHour, else the day's first.
+  let nowIndex;
+  hourly.time.forEach((timestamp, index) => {
+    if (!timestamp.startsWith(`${requestedDate}T`)) return;
+    const hour = parseInt(timestamp.slice(11, 13), 10);
+    if (nowIndex === undefined || hour <= currentHour) nowIndex = index;
+  });
+
+  const rain = buildRainOutlook(
+    hourly.time,
+    hourly.precipitation_probability,
+    requestedDate,
+    currentHour
+  );
+  const art = getWeatherArt({
+    tempF: hourly.temperature_2m[nowIndex],
+    uv: hourly.uv_index[nowIndex],
+    precipChance: hourly.precipitation_probability[nowIndex],
+    humidity: hourly.relative_humidity_2m[nowIndex],
+    cloudCover: hourly.cloud_cover[nowIndex],
+    weatherCode: hourly.weather_code?.[nowIndex],
+    daypart: getWidgetDaypart(currentHour),
+  });
+
+  return {
+    date: requestedDate,
+    tempNow: hourly.temperature_2m[nowIndex],
+    feelsLike: hourly.apparent_temperature[nowIndex],
+    tempHigh: daily.tempMax,
+    tempLow: daily.tempMin,
+    uvNow: hourly.uv_index[nowIndex],
+    uvMax: daily.uvMax,
+    rain,
+    weatherCode: daily.weatherCode,
+    artUrl: `${baseUrl}${art.path}`,
+    artLabel: art.label,
+  };
+}
+
 function prewarmHomeForecast() {
   const cacheKey = getForecastCacheKey(HOME_LOCATION.lat, HOME_LOCATION.lon);
   refreshForecastInBackground(HOME_LOCATION.lat, HOME_LOCATION.lon, cacheKey);
@@ -950,6 +1032,19 @@ app.get('/api/weather', async (req, res) => {
     buildWeatherData,
     'Weather API',
     'Failed to fetch weather data. Please try again later.'
+  );
+});
+
+// Widget endpoint: render-ready day summary for the Android home-screen widget
+app.get('/api/widget', async (req, res) => {
+  const baseUrl = getRequestBaseUrl(req);
+  await handleForecastRequest(
+    req,
+    res,
+    ['hourly', 'daily'],
+    (forecastData, requestedDate) => buildWidgetData(forecastData, requestedDate, baseUrl),
+    'Widget API',
+    'Failed to fetch widget data. Please try again later.'
   );
 });
 
