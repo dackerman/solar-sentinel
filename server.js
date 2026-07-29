@@ -963,6 +963,18 @@ function buildWidgetData(forecastData, requestedDate, baseUrl) {
     if (nowIndex === undefined || hour <= currentHour) nowIndex = index;
   });
 
+  const hourlySeries = { hours: [], temp: [], precipProb: [], cloudCover: [], uv: [] };
+  hourly.time.forEach((timestamp, index) => {
+    if (!timestamp.startsWith(`${requestedDate}T`)) return;
+    const hour = parseInt(timestamp.slice(11, 13), 10);
+    if (!Number.isFinite(hour)) return;
+    hourlySeries.hours.push(hour);
+    hourlySeries.temp.push(hourly.temperature_2m[index]);
+    hourlySeries.precipProb.push(hourly.precipitation_probability[index]);
+    hourlySeries.cloudCover.push(hourly.cloud_cover[index]);
+    hourlySeries.uv.push(hourly.uv_index[index]);
+  });
+
   const rain = buildRainOutlook(
     hourly.time,
     hourly.precipitation_probability,
@@ -988,6 +1000,7 @@ function buildWidgetData(forecastData, requestedDate, baseUrl) {
     uvNow: hourly.uv_index[nowIndex],
     uvMax: daily.uvMax,
     rain,
+    hourly: hourlySeries,
     weatherCode: daily.weatherCode,
     artUrl: `${baseUrl}${art.path}`,
     artLabel: art.label,

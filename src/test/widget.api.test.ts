@@ -68,6 +68,32 @@ describe('GET /api/widget', () => {
     expect(response.body.artUrl).toMatch(/\/weather-art\/v2\/day-.*\.webp$/);
     expect(typeof response.body.artLabel).toBe('string');
     expect(response.body.metadata.lastUpdated).toBeDefined();
+    expect(response.body.hourly).toEqual({
+      hours: [10, 13, 14, 16],
+      temp: [75.0, 82.3, 84.1, 83.0],
+      precipProb: [10, 20, 72, 80],
+      cloudCover: [10, 30, 40, 50],
+      uv: [3.0, 5.5, 6.2, 4.1],
+    });
+  });
+
+  it('keeps hourly series aligned and excludes other dates', async () => {
+    const forecast = getMockForecast();
+    forecast.hourly.time = [...forecast.hourly.time, '2026-07-29T09:00'];
+    forecast.hourly.uv_index = [...forecast.hourly.uv_index, 1.1];
+    forecast.hourly.uv_index_clear_sky = [...forecast.hourly.uv_index_clear_sky, 2.0];
+    forecast.hourly.precipitation_probability = [...forecast.hourly.precipitation_probability, 99];
+    forecast.hourly.temperature_2m = [...forecast.hourly.temperature_2m, 60.0];
+    forecast.hourly.apparent_temperature = [...forecast.hourly.apparent_temperature, 60.0];
+    forecast.hourly.cloud_cover = [...forecast.hourly.cloud_cover, 90];
+    forecast.hourly.relative_humidity_2m = [...forecast.hourly.relative_humidity_2m, 80];
+    forecast.hourly.weather_code = [...forecast.hourly.weather_code, 61];
+    mockForecastResponse(forecast);
+    const response = await request(app).get('/api/widget?lat=14.005&lon=14.005');
+
+    expect(response.status).toBe(200);
+    expect(response.body.hourly.hours).toEqual([10, 13, 14, 16]);
+    expect(response.body.hourly.precipProb).toEqual([10, 20, 72, 80]);
   });
 
   it('reports upcoming rain with a time label', async () => {
