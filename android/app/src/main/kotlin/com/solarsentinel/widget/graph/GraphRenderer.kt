@@ -31,7 +31,7 @@ object GraphRenderer {
     val chartBottom = heightPx - axisPad
     val chartHeight = chartBottom - chartTop
     val gutter = 28f * densityScale
-    val slot = (widthPx - gutter) / hourly.hours.size
+    val slot = max(widthPx - gutter, 0f) / hourly.hours.size
     fun xFor(index: Int) = gutter + index * slot
 
     val cloudPaint = Paint()
