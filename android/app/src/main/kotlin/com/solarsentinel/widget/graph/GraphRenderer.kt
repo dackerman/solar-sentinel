@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import com.solarsentinel.widget.data.HourlySeries
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 object GraphRenderer {
   fun render(
@@ -29,8 +30,9 @@ object GraphRenderer {
     val chartTop = 4f * densityScale
     val chartBottom = heightPx - axisPad
     val chartHeight = chartBottom - chartTop
-    val slot = widthPx.toFloat() / hourly.hours.size
-    fun xFor(index: Int) = index * slot
+    val gutter = 28f * densityScale
+    val slot = (widthPx - gutter) / hourly.hours.size
+    fun xFor(index: Int) = gutter + index * slot
 
     val cloudPaint = Paint()
     hourly.cloudCover.forEachIndexed { i, cover ->
@@ -41,7 +43,7 @@ object GraphRenderer {
 
     val rainPaint = Paint().apply { color = Color.argb(0xCC, 0x38, 0xBD, 0xF8) }
     hourly.precipProb.forEachIndexed { i, prob ->
-      val h = (prob.coerceIn(0.0, 100.0) / 100.0 * chartHeight * 0.55).toFloat()
+      val h = (prob.coerceIn(0.0, 100.0) / 100.0 * chartHeight).toFloat()
       if (h > 0f) {
         canvas.drawRect(xFor(i) + slot * 0.15f, chartBottom - h, xFor(i) + slot * 0.85f, chartBottom, rainPaint)
       }
@@ -64,6 +66,27 @@ object GraphRenderer {
           strokeWidth = 2.5f * densityScale
         }
       canvas.drawPath(path, tempPaint)
+
+      val axisLabelPaint =
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+          color = Color.argb(0xE6, 0xFB, 0xBF, 0x24)
+          textSize = labelPaint.textSize
+          textAlign = Paint.Align.RIGHT
+        }
+      val gridPaint =
+        Paint().apply {
+          color = Color.argb(30, 0xFF, 0xFF, 0xFF)
+          strokeWidth = 1f
+        }
+      val labelX = gutter - 4f * densityScale
+      val maxTemp = hourly.temp.max()
+      val minTemp = hourly.temp.min()
+      listOf(maxTemp, minTemp).forEach { t ->
+        val y = chartTop + ((hi - t) / span * chartHeight).toFloat()
+        val baseline = y.coerceIn(axisLabelPaint.textSize, chartBottom)
+        canvas.drawText("${t.roundToInt()}°", labelX, baseline, axisLabelPaint)
+        canvas.drawLine(gutter, y, widthPx.toFloat(), y, gridPaint)
+      }
     }
 
     val nowIndex = hourly.hours.indexOf(nowHour)
