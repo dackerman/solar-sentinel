@@ -4,6 +4,7 @@ import { SavedLocationsService } from './services/savedLocations.js';
 import { DebugPanel } from './components/debug.js';
 import { LocationPicker } from './components/locationPicker.js';
 import { GeocodingService } from './services/geocoding.js';
+import { SwipeNavigator } from './utils/swipeNavigation.js';
 import {
   createUVChart,
   createWeatherChart,
@@ -118,6 +119,20 @@ export class SolarSentinelApp {
     // Date navigation
     document.getElementById('prev-day')?.addEventListener('click', () => this.navigateDate(-1));
     document.getElementById('next-day')?.addEventListener('click', () => this.navigateDate(1));
+
+    const swipeSurface = document.getElementById('swipe-surface');
+    const dayView = document.getElementById('day-view');
+    if (swipeSurface && dayView) {
+      new SwipeNavigator({
+        surface: swipeSurface,
+        target: dayView,
+        canNavigate: direction => {
+          const bounds = this.getDateBounds();
+          return direction === 1 ? this.currentDate < bounds.max : this.currentDate > bounds.min;
+        },
+        onNavigate: direction => this.navigateDate(direction),
+      });
+    }
 
     document
       .getElementById('history-toggle')

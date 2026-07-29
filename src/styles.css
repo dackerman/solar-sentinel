@@ -3,6 +3,11 @@
 @source './**/*.{html,ts}';
 
 @layer components {
+  #swipe-surface {
+    touch-action: pan-y;
+    overflow-x: clip;
+  }
+
   .history-floating-panel {
     position: fixed;
     right: max(0.75rem, env(safe-area-inset-right));

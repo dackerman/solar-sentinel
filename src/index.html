@@ -63,270 +63,279 @@
         </div>
       </header>
 
-      <div class="max-w-4xl mx-auto">
-        <!-- Current Conditions -->
-        <div
-          id="current-conditions"
-          class="hidden bg-white rounded-lg border border-gray-200 p-4 mb-6"
-        >
-          <div class="flex justify-between items-center mb-3">
-            <div class="flex items-center gap-2">
-              <h3 class="text-lg font-semibold">Current Conditions</h3>
-              <button
-                id="history-toggle"
-                class="hidden flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                type="button"
-                aria-label="Show condition history"
-                aria-pressed="false"
-                title="Show condition history"
-              >
-                <svg
-                  class="h-4 w-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M3 12a9 9 0 1 0 3-6.7" />
-                  <path d="M3 4v6h6" />
-                  <path d="M12 7v5l3 2" />
-                </svg>
-              </button>
-            </div>
-            <div class="text-sm text-gray-600">
-              <span id="current-time">--:-- --</span>
-            </div>
-          </div>
-
+      <div class="max-w-4xl mx-auto" id="swipe-surface">
+        <div id="day-view">
+          <!-- Current Conditions -->
           <div
-            id="history-panel"
-            class="history-floating-panel hidden rounded-lg border border-blue-200 bg-blue-50 p-3 pr-10"
+            id="current-conditions"
+            class="hidden bg-white rounded-lg border border-gray-200 p-4 mb-6"
           >
-            <button
-              id="history-close"
-              class="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-lg leading-none text-blue-700 hover:bg-blue-100 hover:text-blue-900"
-              type="button"
-              aria-label="Close condition history"
-              title="Close condition history"
-            >
-              ×
-            </button>
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div id="history-status" class="text-sm font-semibold text-blue-900"></div>
-                <div id="history-detail" class="text-xs text-blue-700"></div>
-              </div>
-              <div id="history-controls" class="hidden min-w-0 flex-1 sm:max-w-sm">
-                <input
-                  id="history-scrubber"
-                  type="range"
-                  min="0"
-                  max="0"
-                  value="0"
-                  class="w-full"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div
-            id="history-unavailable"
-            class="hidden rounded-lg border border-dashed border-blue-300 bg-blue-50/60 p-6 text-center text-sm text-blue-800"
-          ></div>
-
-          <!-- Dual Display: Current + Today's Forecast -->
-          <div id="dual-display" class="hidden grid grid-cols-2 gap-0">
-            <!-- Now panel -->
-            <div>
-              <div
-                class="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 md:text-left"
-              >
-                Now
-              </div>
-              <div class="flex flex-col items-center gap-3 md:flex-row">
-                <div
-                  class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
+            <div class="flex justify-between items-center mb-3">
+              <div class="flex items-center gap-2">
+                <h3 class="text-lg font-semibold">Current Conditions</h3>
+                <button
+                  id="history-toggle"
+                  class="hidden flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  type="button"
+                  aria-label="Show condition history"
+                  aria-pressed="false"
+                  title="Show condition history"
                 >
-                  <img id="current-weather-art" class="weather-art-image hidden" alt="" />
-                </div>
-                <div
-                  class="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-2 text-xs sm:text-sm md:gap-x-3"
-                >
-                  <div
-                    class="col-span-2 flex items-baseline justify-center gap-1.5 md:justify-start"
+                  <svg
+                    class="h-4 w-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
                   >
-                    <span class="text-base">🌡️</span>
-                    <span
-                      id="current-temp-dual"
-                      class="text-3xl font-bold leading-none text-gray-900"
-                      >--°F</span
-                    >
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span>☀️</span>
-                    <span id="current-uv-dual" class="font-semibold text-gray-800">--</span>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span>🌧️</span>
-                    <span id="current-precip-dual" class="font-semibold text-gray-800">--%</span>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span>💧</span>
-                    <span id="current-humidity-dual" class="font-semibold text-gray-800">--%</span>
-                  </div>
-                </div>
+                    <path d="M3 12a9 9 0 1 0 3-6.7" />
+                    <path d="M3 4v6h6" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                </button>
+              </div>
+              <div class="text-sm text-gray-600">
+                <span id="current-time">--:-- --</span>
               </div>
             </div>
 
-            <!-- Today panel -->
-            <div>
-              <div
-                class="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 md:text-left"
-              >
-                Today
-              </div>
-              <div class="flex flex-col items-center gap-3 md:flex-row">
-                <div
-                  class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
-                >
-                  <img id="today-weather-art" class="weather-art-image hidden" alt="" />
-                </div>
-                <div
-                  class="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-2 text-xs sm:text-sm md:gap-x-3"
-                >
-                  <div
-                    class="col-span-2 flex items-baseline justify-center gap-1.5 md:justify-start"
-                  >
-                    <span class="text-base">🌡️</span>
-                    <span id="today-temp-dual" class="text-3xl font-bold leading-none text-gray-900"
-                      >--°/--°F</span
-                    >
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span>☀️</span>
-                    <span id="today-uv-dual" class="font-semibold text-gray-800">--</span>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span>🌧️</span>
-                    <span id="today-precip-dual" class="font-semibold text-gray-800">--%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Single Display (selected day's forecast) -->
-          <div id="single-display" class="flex flex-col items-center gap-4 md:flex-row">
             <div
-              class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
+              id="history-panel"
+              class="history-floating-panel hidden rounded-lg border border-blue-200 bg-blue-50 p-3 pr-10"
             >
-              <img id="daily-weather-art" class="weather-art-image hidden" alt="" />
+              <button
+                id="history-close"
+                class="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full text-lg leading-none text-blue-700 hover:bg-blue-100 hover:text-blue-900"
+                type="button"
+                aria-label="Close condition history"
+                title="Close condition history"
+              >
+                ×
+              </button>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div id="history-status" class="text-sm font-semibold text-blue-900"></div>
+                  <div id="history-detail" class="text-xs text-blue-700"></div>
+                </div>
+                <div id="history-controls" class="hidden min-w-0 flex-1 sm:max-w-sm">
+                  <input
+                    id="history-scrubber"
+                    type="range"
+                    min="0"
+                    max="0"
+                    value="0"
+                    class="w-full"
+                  />
+                </div>
+              </div>
             </div>
-            <div class="grid w-full flex-1 grid-cols-2 gap-4 text-center md:grid-cols-4">
-              <div class="bg-gray-50 rounded-lg p-3">
-                <div class="text-2xl mb-1">🌡️</div>
-                <div id="current-temp" class="text-xl font-bold text-gray-800">--°F</div>
-                <div id="temp-label" class="text-xs text-gray-600">Temperature</div>
+
+            <div
+              id="history-unavailable"
+              class="hidden rounded-lg border border-dashed border-blue-300 bg-blue-50/60 p-6 text-center text-sm text-blue-800"
+            ></div>
+
+            <!-- Dual Display: Current + Today's Forecast -->
+            <div id="dual-display" class="hidden grid grid-cols-2 gap-0">
+              <!-- Now panel -->
+              <div>
+                <div
+                  class="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 md:text-left"
+                >
+                  Now
+                </div>
+                <div class="flex flex-col items-center gap-3 md:flex-row">
+                  <div
+                    class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
+                  >
+                    <img id="current-weather-art" class="weather-art-image hidden" alt="" />
+                  </div>
+                  <div
+                    class="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-2 text-xs sm:text-sm md:gap-x-3"
+                  >
+                    <div
+                      class="col-span-2 flex items-baseline justify-center gap-1.5 md:justify-start"
+                    >
+                      <span class="text-base">🌡️</span>
+                      <span
+                        id="current-temp-dual"
+                        class="text-3xl font-bold leading-none text-gray-900"
+                        >--°F</span
+                      >
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span>☀️</span>
+                      <span id="current-uv-dual" class="font-semibold text-gray-800">--</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span>🌧️</span>
+                      <span id="current-precip-dual" class="font-semibold text-gray-800">--%</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span>💧</span>
+                      <span id="current-humidity-dual" class="font-semibold text-gray-800"
+                        >--%</span
+                      >
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="bg-gray-50 rounded-lg p-3">
-                <div class="text-2xl mb-1">☀️</div>
-                <div id="current-uv" class="text-xl font-bold text-gray-800">--</div>
-                <div id="uv-label" class="text-xs text-gray-600">UV Index</div>
+
+              <!-- Today panel -->
+              <div>
+                <div
+                  class="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 md:text-left"
+                >
+                  Today
+                </div>
+                <div class="flex flex-col items-center gap-3 md:flex-row">
+                  <div
+                    class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
+                  >
+                    <img id="today-weather-art" class="weather-art-image hidden" alt="" />
+                  </div>
+                  <div
+                    class="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-2 text-xs sm:text-sm md:gap-x-3"
+                  >
+                    <div
+                      class="col-span-2 flex items-baseline justify-center gap-1.5 md:justify-start"
+                    >
+                      <span class="text-base">🌡️</span>
+                      <span
+                        id="today-temp-dual"
+                        class="text-3xl font-bold leading-none text-gray-900"
+                        >--°/--°F</span
+                      >
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span>☀️</span>
+                      <span id="today-uv-dual" class="font-semibold text-gray-800">--</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                      <span>🌧️</span>
+                      <span id="today-precip-dual" class="font-semibold text-gray-800">--%</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div class="bg-gray-50 rounded-lg p-3">
-                <div class="text-2xl mb-1">🌧️</div>
-                <div id="current-precip" class="text-xl font-bold text-gray-800">--%</div>
-                <div id="precip-label" class="text-xs text-gray-600">Precipitation</div>
+            </div>
+
+            <!-- Single Display (selected day's forecast) -->
+            <div id="single-display" class="flex flex-col items-center gap-4 md:flex-row">
+              <div
+                class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
+              >
+                <img id="daily-weather-art" class="weather-art-image hidden" alt="" />
               </div>
-              <div class="bg-gray-50 rounded-lg p-3">
-                <div class="text-2xl mb-1">💧</div>
-                <div id="current-humidity" class="text-xl font-bold text-gray-800">--%</div>
-                <div id="humidity-label" class="text-xs text-gray-600">Humidity</div>
+              <div class="grid w-full flex-1 grid-cols-2 gap-4 text-center md:grid-cols-4">
+                <div class="bg-gray-50 rounded-lg p-3">
+                  <div class="text-2xl mb-1">🌡️</div>
+                  <div id="current-temp" class="text-xl font-bold text-gray-800">--°F</div>
+                  <div id="temp-label" class="text-xs text-gray-600">Temperature</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-3">
+                  <div class="text-2xl mb-1">☀️</div>
+                  <div id="current-uv" class="text-xl font-bold text-gray-800">--</div>
+                  <div id="uv-label" class="text-xs text-gray-600">UV Index</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-3">
+                  <div class="text-2xl mb-1">🌧️</div>
+                  <div id="current-precip" class="text-xl font-bold text-gray-800">--%</div>
+                  <div id="precip-label" class="text-xs text-gray-600">Precipitation</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-3">
+                  <div class="text-2xl mb-1">💧</div>
+                  <div id="current-humidity" class="text-xl font-bold text-gray-800">--%</div>
+                  <div id="humidity-label" class="text-xs text-gray-600">Humidity</div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <!-- Loading state -->
-        <div id="loading" class="text-center py-8">
+          <!-- Loading state -->
+          <div id="loading" class="text-center py-8">
+            <div
+              class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
+            ></div>
+            <p class="mt-2 text-gray-600">Loading UV data...</p>
+          </div>
+
+          <!-- Error state -->
           <div
-            class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"
-          ></div>
-          <p class="mt-2 text-gray-600">Loading UV data...</p>
-        </div>
+            id="error"
+            class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4"
+          >
+            <p id="error-message"></p>
+          </div>
 
-        <!-- Error state -->
-        <div
-          id="error"
-          class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4"
-        >
-          <p id="error-message"></p>
-        </div>
-
-        <!-- Weather Chart container -->
-        <div
-          id="weather-chart-container"
-          class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6 mb-6"
-        >
-          <h3 class="text-lg font-semibold mb-2 sm:mb-4">Weather Conditions</h3>
-          <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
-            <span>🌧️ Precip (%)</span>
-            <span>🌡️ Temp (°F)</span>
-          </div>
-          <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
-            <span>☁️ Cloud (%)</span>
-            <span>💧 Humidity (%)</span>
-          </div>
-          <div style="height: 384px; width: 100%; position: relative">
-            <canvas
-              id="weatherChart"
-              style="height: 384px !important; width: 100% !important"
-            ></canvas>
-          </div>
-        </div>
-
-        <!-- UV Chart container -->
-        <div
-          id="chart-container"
-          class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6"
-        >
-          <h3 class="text-lg font-semibold mb-2 sm:mb-4">UV Index</h3>
-          <div class="text-xs text-gray-600 mb-2 sm:hidden">☀️ UV Index Level</div>
-          <div style="height: 384px; width: 100%; position: relative">
-            <canvas id="uvChart" style="height: 384px !important; width: 100% !important"></canvas>
-          </div>
-          <details id="legend" class="mt-4 rounded-lg border border-gray-200 bg-gray-50">
-            <summary
-              class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
-            >
-              UV Index Scale
-            </summary>
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 pt-1 text-sm">
-              <div class="flex items-center">
-                <div class="w-4 h-4 bg-green-400 rounded mr-2"></div>
-                <span>0-2 Low</span>
-              </div>
-              <div class="flex items-center">
-                <div class="w-4 h-4 bg-yellow-400 rounded mr-2"></div>
-                <span>3-5 Moderate</span>
-              </div>
-              <div class="flex items-center">
-                <div class="w-4 h-4 bg-orange-400 rounded mr-2"></div>
-                <span>6-7 High</span>
-              </div>
-              <div class="flex items-center">
-                <div class="w-4 h-4 bg-red-500 rounded mr-2"></div>
-                <span>8-10 Very High</span>
-              </div>
-              <div class="flex items-center">
-                <div class="w-4 h-4 bg-purple-600 rounded mr-2"></div>
-                <span>11+ Extreme</span>
-              </div>
+          <!-- Weather Chart container -->
+          <div
+            id="weather-chart-container"
+            class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6 mb-6"
+          >
+            <h3 class="text-lg font-semibold mb-2 sm:mb-4">Weather Conditions</h3>
+            <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
+              <span>🌧️ Precip (%)</span>
+              <span>🌡️ Temp (°F)</span>
             </div>
-          </details>
+            <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
+              <span>☁️ Cloud (%)</span>
+              <span>💧 Humidity (%)</span>
+            </div>
+            <div style="height: 384px; width: 100%; position: relative">
+              <canvas
+                id="weatherChart"
+                style="height: 384px !important; width: 100% !important"
+              ></canvas>
+            </div>
+          </div>
+
+          <!-- UV Chart container -->
+          <div
+            id="chart-container"
+            class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6"
+          >
+            <h3 class="text-lg font-semibold mb-2 sm:mb-4">UV Index</h3>
+            <div class="text-xs text-gray-600 mb-2 sm:hidden">☀️ UV Index Level</div>
+            <div style="height: 384px; width: 100%; position: relative">
+              <canvas
+                id="uvChart"
+                style="height: 384px !important; width: 100% !important"
+              ></canvas>
+            </div>
+            <details id="legend" class="mt-4 rounded-lg border border-gray-200 bg-gray-50">
+              <summary
+                class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-gray-700 hover:text-gray-900"
+              >
+                UV Index Scale
+              </summary>
+              <div class="grid grid-cols-2 md:grid-cols-5 gap-2 p-3 pt-1 text-sm">
+                <div class="flex items-center">
+                  <div class="w-4 h-4 bg-green-400 rounded mr-2"></div>
+                  <span>0-2 Low</span>
+                </div>
+                <div class="flex items-center">
+                  <div class="w-4 h-4 bg-yellow-400 rounded mr-2"></div>
+                  <span>3-5 Moderate</span>
+                </div>
+                <div class="flex items-center">
+                  <div class="w-4 h-4 bg-orange-400 rounded mr-2"></div>
+                  <span>6-7 High</span>
+                </div>
+                <div class="flex items-center">
+                  <div class="w-4 h-4 bg-red-500 rounded mr-2"></div>
+                  <span>8-10 Very High</span>
+                </div>
+                <div class="flex items-center">
+                  <div class="w-4 h-4 bg-purple-600 rounded mr-2"></div>
+                  <span>11+ Extreme</span>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
 
         <!-- Forecast -->
