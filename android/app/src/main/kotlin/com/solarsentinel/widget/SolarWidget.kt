@@ -66,7 +66,7 @@ private fun WidgetContent(data: WidgetData?, artPath: String?) {
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     )
   val compact = size.height < 90.dp
-  val showArt = artPath != null && size.width >= 220.dp
+  val showArt = artPath != null && !compact && size.width >= 220.dp
   val artSize = minOf(size.height - 24.dp, 120.dp, (size.width.value * 0.4f).dp)
 
   Row(
