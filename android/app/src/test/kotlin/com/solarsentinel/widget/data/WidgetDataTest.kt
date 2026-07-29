@@ -15,7 +15,8 @@ class WidgetDataTest {
       "weatherCode": 3,
       "artUrl": "https://example.com/weather-art/v2/day-hot-partly-high-uv.webp",
       "artLabel": "day hot partly cloudy, high UV",
-      "metadata": { "cached": true, "cacheAge": 1234, "lastUpdated": "2026-07-28T15:40:12.000Z" }
+      "metadata": { "cached": true, "cacheAge": 1234, "lastUpdated": "2026-07-28T15:40:12.000Z" },
+      "hourly": {"hours":[10,14],"temp":[75.0,84.1],"precipProb":[10,72],"cloudCover":[10,40],"uv":[3.0,6.2]}
     }
     """.trimIndent()
 
@@ -29,6 +30,8 @@ class WidgetDataTest {
     assertEquals("14:00", data.rain.startsAt)
     assertEquals(3, data.weatherCode)
     assertEquals("2026-07-28T15:40:12.000Z", data.metadata?.lastUpdated)
+    assertEquals(listOf(10, 14), data.hourly?.hours)
+    assertEquals(listOf(10.0, 72.0), data.hourly?.precipProb)
   }
 
   @Test
@@ -46,5 +49,6 @@ class WidgetDataTest {
     assertNull(data.rain.startsAt)
     assertNull(data.weatherCode)
     assertNull(data.metadata)
+    assertNull(data.hourly)
   }
 }

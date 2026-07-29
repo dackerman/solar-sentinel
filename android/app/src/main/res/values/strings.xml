@@ -2,4 +2,6 @@
 <resources>
   <string name="app_name">Solar Sentinel</string>
   <string name="widget_description">Today\'s UV, temperature, and rain at a glance</string>
+  <string name="graph_widget_name">Solar Sentinel Graph</string>
+  <string name="graph_widget_description">Today\'s temperature, rain, and cloud curves</string>
 </resources>

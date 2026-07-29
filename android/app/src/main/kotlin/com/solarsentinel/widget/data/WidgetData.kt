@@ -14,6 +14,15 @@ data class RainOutlook(
 data class WidgetMetadata(val lastUpdated: String? = null)
 
 @Serializable
+data class HourlySeries(
+  val hours: List<Int> = emptyList(),
+  val temp: List<Double> = emptyList(),
+  val precipProb: List<Double> = emptyList(),
+  val cloudCover: List<Double> = emptyList(),
+  val uv: List<Double> = emptyList(),
+)
+
+@Serializable
 data class WidgetData(
   val date: String,
   val tempNow: Double,
@@ -23,6 +32,7 @@ data class WidgetData(
   val uvNow: Double,
   val uvMax: Double,
   val rain: RainOutlook,
+  val hourly: HourlySeries? = null,
   val weatherCode: Int? = null,
   val artUrl: String,
   val artLabel: String? = null,

@@ -12,6 +12,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.solarsentinel.widget.GraphWidget
 import com.solarsentinel.widget.SolarWidget
 import com.solarsentinel.widget.data.WidgetApi
 import com.solarsentinel.widget.data.WidgetData
@@ -32,6 +33,7 @@ class RefreshWorker(context: Context, params: WorkerParameters) :
         WidgetStore.save(applicationContext, body)
         WidgetApi.downloadArtIfMissing(data.artUrl, WidgetStore.artFile(applicationContext, data.artUrl))
         SolarWidget.updateAll(applicationContext)
+        GraphWidget.updateAll(applicationContext)
         Result.success()
       } catch (error: kotlinx.coroutines.CancellationException) {
         throw error
