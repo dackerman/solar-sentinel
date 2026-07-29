@@ -12,8 +12,10 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
@@ -39,6 +41,8 @@ import com.solarsentinel.widget.data.formatUpdatedTime
 import com.solarsentinel.widget.data.formatUv
 
 class SolarWidget : GlanceAppWidget() {
+  override val sizeMode: SizeMode = SizeMode.Exact
+
   override suspend fun provideGlance(context: Context, id: GlanceId) {
     val data = WidgetStore.load(context)
     val artPath = data?.let { WidgetStore.artFile(context, it.artUrl) }
@@ -55,11 +59,15 @@ private val dimColor = ColorProvider(Color(0xB3FFFFFF))
 
 @Composable
 private fun WidgetContent(data: WidgetData?, artPath: String?) {
+  val size = LocalSize.current
   val openApp =
     actionStartActivity(
       Intent(Intent.ACTION_VIEW, Uri.parse(BuildConfig.WEB_APP_URL))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     )
+  val compact = size.height < 90.dp
+  val showArt = artPath != null && size.width >= 220.dp
+  val artSize = minOf(size.height - 24.dp, 120.dp, (size.width.value * 0.4f).dp)
 
   Row(
     modifier =
@@ -71,40 +79,57 @@ private fun WidgetContent(data: WidgetData?, artPath: String?) {
     verticalAlignment = Alignment.CenterVertically,
   ) {
     if (data == null) {
-      Text("Solar Sentinel: waiting for first refresh…", style = TextStyle(color = dimColor, fontSize = 13.sp))
+      Text(
+        "Solar Sentinel: waiting for first refresh…",
+        style = TextStyle(color = dimColor, fontSize = 13.sp),
+      )
       return@Row
     }
 
-    if (artPath != null) {
+    if (showArt) {
       val bitmap = BitmapFactory.decodeFile(artPath)
       if (bitmap != null) {
         Image(
           provider = ImageProvider(bitmap),
           contentDescription = data.artLabel ?: "Weather art",
-          modifier = GlanceModifier.size(96.dp).cornerRadius(16.dp),
+          modifier = GlanceModifier.size(artSize).cornerRadius(16.dp),
           contentScale = ContentScale.Crop,
         )
         Spacer(modifier = GlanceModifier.size(12.dp))
       }
     }
 
-    Column(verticalAlignment = Alignment.CenterVertically) {
-      Text(
-        "${formatTemp(data.tempHigh)} / ${formatTemp(data.tempLow)}  now ${formatTemp(data.tempNow)}",
-        style = TextStyle(color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold),
-      )
-      Spacer(modifier = GlanceModifier.height(4.dp))
-      Text(
-        "UV ${formatUv(data.uvNow)} now · max ${formatUv(data.uvMax)}",
-        style = TextStyle(color = textColor, fontSize = 14.sp),
-      )
-      Spacer(modifier = GlanceModifier.height(4.dp))
-      Text(data.rain.label, style = TextStyle(color = textColor, fontSize = 14.sp))
-      Spacer(modifier = GlanceModifier.height(4.dp))
-      Text(
-        "updated ${formatUpdatedTime(data.metadata?.lastUpdated)}",
-        style = TextStyle(color = dimColor, fontSize = 11.sp),
-      )
+    if (compact) {
+      Column(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          "${formatTemp(data.tempHigh)}/${formatTemp(data.tempLow)} now ${formatTemp(data.tempNow)} · UV ${formatUv(data.uvNow)}/${formatUv(data.uvMax)}",
+          style = TextStyle(color = textColor, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+        )
+        Spacer(modifier = GlanceModifier.height(2.dp))
+        Text(
+          "${data.rain.label} · upd ${formatUpdatedTime(data.metadata?.lastUpdated)}",
+          style = TextStyle(color = dimColor, fontSize = 11.sp),
+        )
+      }
+    } else {
+      Column(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          "${formatTemp(data.tempHigh)} / ${formatTemp(data.tempLow)}  now ${formatTemp(data.tempNow)}",
+          style = TextStyle(color = textColor, fontSize = 16.sp, fontWeight = FontWeight.Bold),
+        )
+        Spacer(modifier = GlanceModifier.height(4.dp))
+        Text(
+          "UV ${formatUv(data.uvNow)} now · max ${formatUv(data.uvMax)}",
+          style = TextStyle(color = textColor, fontSize = 14.sp),
+        )
+        Spacer(modifier = GlanceModifier.height(4.dp))
+        Text(data.rain.label, style = TextStyle(color = textColor, fontSize = 14.sp))
+        Spacer(modifier = GlanceModifier.height(4.dp))
+        Text(
+          "updated ${formatUpdatedTime(data.metadata?.lastUpdated)}",
+          style = TextStyle(color = dimColor, fontSize = 11.sp),
+        )
+      }
     }
   }
 }

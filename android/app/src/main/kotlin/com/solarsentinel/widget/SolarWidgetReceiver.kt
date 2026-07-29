@@ -13,4 +13,14 @@ class SolarWidgetReceiver : GlanceAppWidgetReceiver() {
     RefreshWorker.schedule(context)
     RefreshWorker.refreshNow(context)
   }
+
+  override fun onUpdate(
+    context: Context,
+    appWidgetManager: android.appwidget.AppWidgetManager,
+    appWidgetIds: IntArray,
+  ) {
+    super.onUpdate(context, appWidgetManager, appWidgetIds)
+    RefreshWorker.schedule(context)
+    RefreshWorker.refreshNow(context)
+  }
 }
