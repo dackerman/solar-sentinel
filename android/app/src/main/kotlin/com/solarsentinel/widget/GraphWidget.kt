@@ -10,10 +10,10 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
+import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
@@ -32,7 +32,6 @@ import com.solarsentinel.widget.data.WidgetData
 import com.solarsentinel.widget.data.WidgetStore
 import com.solarsentinel.widget.data.formatTemp
 import com.solarsentinel.widget.graph.GraphRenderer
-import com.solarsentinel.widget.refresh.RefreshAndOpenAction
 import com.solarsentinel.widget.refresh.RefreshWorker
 import java.util.Calendar
 
@@ -57,7 +56,7 @@ private val dimColor = ColorProvider(Color(0xB3FFFFFF))
 @Composable
 private fun GraphContent(data: WidgetData?, density: Float) {
   val size = LocalSize.current
-  val openApp = actionRunCallback<RefreshAndOpenAction>()
+  val openApp = actionStartActivity<WidgetTapActivity>()
 
   Column(
     modifier =

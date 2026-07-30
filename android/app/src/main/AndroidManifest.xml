@@ -20,6 +20,11 @@
       </intent-filter>
     </activity>
 
+    <activity
+      android:name=".WidgetTapActivity"
+      android:exported="false"
+      android:theme="@android:style/Theme.NoDisplay" />
+
     <receiver
       android:name=".SolarWidgetReceiver"
       android:exported="true"

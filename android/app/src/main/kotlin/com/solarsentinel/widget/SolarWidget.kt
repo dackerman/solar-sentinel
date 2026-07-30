@@ -11,10 +11,10 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalSize
+import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
@@ -37,7 +37,6 @@ import com.solarsentinel.widget.data.WidgetStore
 import com.solarsentinel.widget.data.formatTemp
 import com.solarsentinel.widget.data.formatUpdatedTime
 import com.solarsentinel.widget.data.formatUv
-import com.solarsentinel.widget.refresh.RefreshAndOpenAction
 import com.solarsentinel.widget.refresh.RefreshWorker
 
 class SolarWidget : GlanceAppWidget() {
@@ -61,7 +60,7 @@ private val dimColor = ColorProvider(Color(0xB3FFFFFF))
 @Composable
 private fun WidgetContent(data: WidgetData?, artPath: String?) {
   val size = LocalSize.current
-  val openApp = actionRunCallback<RefreshAndOpenAction>()
+  val openApp = actionStartActivity<WidgetTapActivity>()
   val compact = size.height < 90.dp
   val showArt = artPath != null && !compact && size.width >= 220.dp
   val artSize = minOf(size.height - 24.dp, 120.dp, (size.width.value * 0.4f).dp)
