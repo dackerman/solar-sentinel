@@ -350,7 +350,7 @@
           });
         }
 
-        fetch('manifest.json')
+        fetch('manifest.json', { cache: 'no-store' })
           .then(function (res) {
             if (!res.ok) throw new Error('manifest fetch failed');
             return res.json();

@@ -147,6 +147,12 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // The widget distribution page must always be live (server serves it no-cache);
+  // never hold it back with the app shell's stale-while-revalidate.
+  if (url.pathname.startsWith('/widget')) {
+    return;
+  }
+
   if (APP_SHELL.includes(url.pathname) || event.request.mode === 'navigate') {
     event.respondWith(staleWhileRevalidateShell(event));
   }
