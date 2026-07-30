@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Solar Sentinel Widget</title>
+    <meta
+      name="description"
+      content="Android home screen widgets for Solar Sentinel: glanceable UV, temperature, and rain at a glance."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px 20px 64px;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          Helvetica,
+          Arial,
+          sans-serif;
+        line-height: 1.5;
+      }
+
+      main {
+        max-width: 640px;
+        margin: 0 auto;
+      }
+
+      section {
+        margin-bottom: 40px;
+      }
+
+      section:last-child {
+        margin-bottom: 0;
+      }
+
+      h1 {
+        color: #fbbf24;
+        font-size: 2rem;
+        margin: 0 0 12px;
+      }
+
+      h2 {
+        color: #fbbf24;
+        font-size: 1.1rem;
+        margin: 0 0 16px;
+      }
+
+      .blurb {
+        color: #cbd5e1;
+        font-size: 1.05rem;
+        margin: 0;
+      }
+
+      .card {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 16px;
+        padding: 24px;
+      }
+
+      .download-btn {
+        display: block;
+        text-align: center;
+        background: #fbbf24;
+        color: #0f172a;
+        font-weight: 700;
+        font-size: 1.15rem;
+        text-decoration: none;
+        border-radius: 16px;
+        padding: 18px 24px;
+        border: 1px solid #fbbf24;
+      }
+
+      .download-btn:hover {
+        background: #fcd34d;
+      }
+
+      .download-meta {
+        margin-top: 14px;
+        text-align: center;
+        color: #94a3b8;
+        font-size: 0.9rem;
+      }
+
+      .download-meta div + div {
+        margin-top: 2px;
+      }
+
+      .download-empty {
+        text-align: center;
+        color: #94a3b8;
+        padding: 8px 0;
+      }
+
+      .screenshots {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .screenshots img {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        border-radius: 16px;
+        border: 1px solid #334155;
+      }
+
+      .changelog-entry + .changelog-entry {
+        margin-top: 24px;
+        padding-top: 24px;
+        border-top: 1px solid #334155;
+      }
+
+      .changelog-heading {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+
+      .changelog-version {
+        color: #fbbf24;
+        font-weight: 700;
+        font-size: 1rem;
+      }
+
+      .changelog-date {
+        color: #64748b;
+        font-size: 0.85rem;
+      }
+
+      .changelog-entry ul {
+        margin: 0;
+        padding-left: 20px;
+        color: #cbd5e1;
+      }
+
+      .changelog-entry li + li {
+        margin-top: 4px;
+      }
+
+      .install-notes ol {
+        margin: 0;
+        padding-left: 20px;
+        color: #cbd5e1;
+      }
+
+      .install-notes li + li {
+        margin-top: 10px;
+      }
+
+      footer {
+        margin-top: 48px;
+        text-align: center;
+        color: #64748b;
+        font-size: 0.85rem;
+      }
+
+      footer a {
+        color: #94a3b8;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section id="hero">
+        <h1>Solar Sentinel Widget</h1>
+        <p class="blurb">
+          Glanceable UV, temperature, and rain, right on your Android home screen. A summary
+          widget shows today's conditions at a glance, and a graph widget charts today's
+          temperature, rain probability, and cloud cover by hour &mdash; both fed by this site.
+        </p>
+      </section>
+
+      <section id="download">
+        <div class="card" id="download-card">
+          <div class="download-empty" id="download-content">Loading release info&hellip;</div>
+        </div>
+      </section>
+
+      <section id="screenshots" hidden>
+        <h2>Screenshots</h2>
+        <div class="screenshots" id="screenshots-list"></div>
+      </section>
+
+      <section id="changelog">
+        <h2>Changelog</h2>
+        <div class="card" id="changelog-list"></div>
+      </section>
+
+      <section id="install-notes">
+        <h2>Installing</h2>
+        <div class="card install-notes">
+          <ol>
+            <li>Download the APK above and allow installs from your browser when prompted.</li>
+            <li>
+              Open the app once and grant location access, then set it to &ldquo;Allow all the
+              time&rdquo; in your device's app settings so the widgets can refresh in the
+              background.
+            </li>
+            <li>
+              On Samsung devices: go to Settings &rarr; Apps &rarr; Solar Sentinel &rarr; Battery
+              &rarr; Unrestricted, so background refresh isn't paused by battery optimization.
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <footer><a href="/">&larr; Back to Solar Sentinel</a></footer>
+    </main>
+
+    <script>
+      (function () {
+        function formatSize(bytes) {
+          return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function formatBuiltAt(iso) {
+          var d = new Date(iso);
+          if (isNaN(d.getTime())) return iso;
+          return d.toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          });
+        }
+
+        function formatChangelogDate(dateStr) {
+          var d = new Date(dateStr + 'T00:00:00Z');
+          if (isNaN(d.getTime())) return dateStr;
+          return d.toLocaleDateString(undefined, {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            timeZone: 'UTC',
+          });
+        }
+
+        function renderDownload(manifest) {
+          var content = document.getElementById('download-content');
+          content.textContent = '';
+
+          var latest = manifest && manifest.latest;
+          if (!latest) {
+            content.className = 'download-empty';
+            content.textContent = 'No release published yet';
+            return;
+          }
+
+          content.className = '';
+
+          var link = document.createElement('a');
+          link.className = 'download-btn';
+          link.href = latest.file;
+          link.setAttribute('download', '');
+          link.textContent = 'Download Solar Sentinel Widget v' + latest.versionName;
+          content.appendChild(link);
+
+          var meta = document.createElement('div');
+          meta.className = 'download-meta';
+
+          var fileLine = document.createElement('div');
+          fileLine.textContent = latest.file;
+          meta.appendChild(fileLine);
+
+          var detailLine = document.createElement('div');
+          var sizeText = formatSize(latest.sizeBytes);
+          var builtText = formatBuiltAt(latest.builtAt);
+          detailLine.textContent = sizeText + ' • built ' + builtText;
+          meta.appendChild(detailLine);
+
+          content.appendChild(meta);
+        }
+
+        function renderScreenshots(manifest) {
+          var section = document.getElementById('screenshots');
+          var list = document.getElementById('screenshots-list');
+          var screenshots = (manifest && manifest.screenshots) || [];
+
+          if (!screenshots.length) {
+            section.hidden = true;
+            return;
+          }
+
+          section.hidden = false;
+          screenshots.forEach(function (src) {
+            var img = document.createElement('img');
+            img.src = src;
+            img.loading = 'lazy';
+            img.alt = 'Solar Sentinel widget screenshot';
+            list.appendChild(img);
+          });
+        }
+
+        function renderChangelog(manifest) {
+          var container = document.getElementById('changelog-list');
+          var entries = (manifest && manifest.changelog) || [];
+
+          if (!entries.length) {
+            var empty = document.createElement('div');
+            empty.className = 'download-empty';
+            empty.textContent = 'No changelog entries yet';
+            container.appendChild(empty);
+            return;
+          }
+
+          entries.forEach(function (entry) {
+            var wrap = document.createElement('div');
+            wrap.className = 'changelog-entry';
+
+            var heading = document.createElement('div');
+            heading.className = 'changelog-heading';
+
+            var version = document.createElement('span');
+            version.className = 'changelog-version';
+            version.textContent = 'v' + entry.version;
+            heading.appendChild(version);
+
+            var date = document.createElement('span');
+            date.className = 'changelog-date';
+            date.textContent = formatChangelogDate(entry.date);
+            heading.appendChild(date);
+
+            wrap.appendChild(heading);
+
+            var ul = document.createElement('ul');
+            (entry.notes || []).forEach(function (note) {
+              var li = document.createElement('li');
+              li.textContent = note;
+              ul.appendChild(li);
+            });
+            wrap.appendChild(ul);
+
+            container.appendChild(wrap);
+          });
+        }
+
+        fetch('manifest.json')
+          .then(function (res) {
+            if (!res.ok) throw new Error('manifest fetch failed');
+            return res.json();
+          })
+          .then(function (manifest) {
+            renderDownload(manifest);
+            renderScreenshots(manifest);
+            renderChangelog(manifest);
+          })
+          .catch(function () {
+            renderDownload(null);
+            renderScreenshots(null);
+            renderChangelog(null);
+          });
+      })();
+    </script>
+  </body>
+</html>
