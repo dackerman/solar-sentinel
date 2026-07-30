@@ -365,6 +365,20 @@ app.use(
           Expires: '0',
         });
       }
+      // The widget release manifest is the source of truth for new APKs; never cache it
+      else if (path.match(/[\\/]widget[\\/]manifest\.json$/)) {
+        res.set({
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          Pragma: 'no-cache',
+          Expires: '0',
+        });
+      }
+      // Widget APKs are hash-named per release; cache indefinitely.
+      else if (path.match(/[\\/]widget[\\/].*\.apk$/)) {
+        res.set({
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        });
+      }
       // Longer cache for static assets (icons, images)
       else if (path.match(/\.(png|jpg|jpeg|gif|ico|svg|webp)$/)) {
         res.set({
