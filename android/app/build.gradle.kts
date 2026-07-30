@@ -23,8 +23,8 @@ android {
     applicationId = "com.solarsentinel.widget"
     minSdk = 26
     targetSdk = 35
-    versionCode = 4
-    versionName = "1.3"
+    versionCode = 5
+    versionName = "1.4"
 
     buildConfigField("String", "BASE_URL", "\"${localProperty("widget.baseUrl")}\"")
     buildConfigField("String", "WEB_APP_URL", "\"${localProperty("widget.webAppUrl")}\"")

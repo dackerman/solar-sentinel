@@ -18,8 +18,10 @@ import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
 import androidx.glance.background
+import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
+import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.height
@@ -31,6 +33,7 @@ import androidx.glance.unit.ColorProvider
 import com.solarsentinel.widget.data.WidgetData
 import com.solarsentinel.widget.data.WidgetStore
 import com.solarsentinel.widget.data.formatTemp
+import com.solarsentinel.widget.data.formatUpdatedTime
 import com.solarsentinel.widget.graph.GraphRenderer
 import com.solarsentinel.widget.refresh.RefreshWorker
 import java.util.Calendar
@@ -77,10 +80,17 @@ private fun GraphContent(data: WidgetData?, density: Float) {
 
     val showHeader = size.height >= 90.dp
     if (showHeader) {
-      Text(
-        "${formatTemp(data.tempHigh)} / ${formatTemp(data.tempLow)} · ${data.rain.label}",
-        style = TextStyle(color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold),
-      )
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+          "${formatTemp(data.tempHigh)} / ${formatTemp(data.tempLow)} · ${data.rain.label}",
+          style = TextStyle(color = textColor, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+        )
+        Spacer(modifier = GlanceModifier.defaultWeight())
+        Text(
+          "upd ${formatUpdatedTime(data.metadata?.lastUpdated)}",
+          style = TextStyle(color = dimColor, fontSize = 11.sp),
+        )
+      }
       Spacer(modifier = GlanceModifier.height(4.dp))
     }
 
