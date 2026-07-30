@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Build the release APK and stage it for distribution at /widget/.
+# Produces public/widget/solar-sentinel-widget-<shorthash>.apk (latest only)
+# and rewrites manifest.json's `latest` + `screenshots`. Does NOT git-commit.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+if ! git diff --quiet HEAD -- android/; then
+  echo "error: android/ has uncommitted changes; commit them first so the APK hash is honest" >&2
+  exit 1
+fi
+
+./scripts/build-widget-apk
+
+HASH="$(git rev-parse --short HEAD)"
+APK_SRC="android/app/build/outputs/apk/release/app-release.apk"
+DEST_DIR="public/widget"
+DEST="$DEST_DIR/solar-sentinel-widget-$HASH.apk"
+
+mkdir -p "$DEST_DIR/screens"
+rm -f "$DEST_DIR"/solar-sentinel-widget-*.apk
+cp "$APK_SRC" "$DEST"
+
+VERSION_NAME="$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)"
+VERSION_CODE="$(grep -oP 'versionCode = \K[0-9]+' android/app/build.gradle.kts)"
+
+HASH="$HASH" DEST="$DEST" VERSION_NAME="$VERSION_NAME" VERSION_CODE="$VERSION_CODE" node <<'NODE'
+const fs = require('node:fs');
+const path = 'public/widget/manifest.json';
+const manifest = fs.existsSync(path)
+  ? JSON.parse(fs.readFileSync(path, 'utf8'))
+  : { latest: null, screenshots: [], changelog: [] };
+manifest.latest = {
+  file: require('node:path').basename(process.env.DEST),
+  versionName: process.env.VERSION_NAME,
+  versionCode: Number(process.env.VERSION_CODE),
+  commit: process.env.HASH,
+  builtAt: new Date().toISOString(),
+  sizeBytes: fs.statSync(process.env.DEST).size,
+};
+manifest.screenshots = fs
+  .readdirSync('public/widget/screens')
+  .filter(f => /\.(png|jpe?g|webp)$/i.test(f))
+  .sort()
+  .map(f => `screens/${f}`);
+fs.writeFileSync(path, JSON.stringify(manifest, null, 2) + '\n');
+console.log('manifest updated:', JSON.stringify(manifest.latest));
+NODE
+
+echo
+echo "Staged $DEST"
+echo "Next: add a changelog entry to public/widget/manifest.json if this is a new version,"
+echo "then commit public/widget/ and deploy (docker compose down && docker compose up -d --build)."

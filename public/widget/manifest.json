@@ -1,0 +1,39 @@
+{
+  "latest": {
+    "file": "solar-sentinel-widget-8431494.apk",
+    "versionName": "1.2",
+    "versionCode": 3,
+    "commit": "8431494",
+    "builtAt": "2026-07-30T03:04:40.831Z",
+    "sizeBytes": 5007486
+  },
+  "screenshots": [
+    "screens/widgets-home-screen.jpg"
+  ],
+  "changelog": [
+    {
+      "version": "1.2",
+      "date": "2026-07-29",
+      "notes": [
+        "Temperature y-axis with min/max labels and gridlines on the graph widget",
+        "Rain-probability bars now span the full 0–100% chart height"
+      ]
+    },
+    {
+      "version": "1.1",
+      "date": "2026-07-29",
+      "notes": [
+        "New graph widget: today's temperature, rain probability, and cloud cover by hour",
+        "Summary widget resizes responsively and fills its cells",
+        "Fixed background refresh being frozen by Samsung battery optimization"
+      ]
+    },
+    {
+      "version": "1.0",
+      "date": "2026-07-28",
+      "notes": [
+        "Initial release: today's high/low, current temp, UV now/max, rain timing, and daily weather art"
+      ]
+    }
+  ]
+}
