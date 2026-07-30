@@ -33,6 +33,12 @@ object WidgetStore {
     }
   }
 
+  fun lastUpdatedMillis(context: Context): Long? {
+    val file = File(context.filesDir, DATA_FILE)
+    val modified = file.lastModified()
+    return if (modified > 0L) modified else null
+  }
+
   // Art URLs are path-versioned and immutable, so cached files never expire.
   fun artFile(context: Context, url: String): File {
     val dir = File(context.filesDir, ART_DIR).apply { mkdirs() }

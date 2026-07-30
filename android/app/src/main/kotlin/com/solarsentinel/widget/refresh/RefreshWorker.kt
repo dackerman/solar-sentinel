@@ -1,6 +1,7 @@
 package com.solarsentinel.widget.refresh
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
@@ -9,6 +10,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -47,6 +49,7 @@ class RefreshWorker(context: Context, params: WorkerParameters) :
   companion object {
     private const val PERIODIC_WORK = "widget-refresh"
     private const val ONE_TIME_WORK = "widget-refresh-now"
+    private const val STALE_AFTER_MS = 20L * 60L * 1000L
 
     private val constraints =
       Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
@@ -62,10 +65,20 @@ class RefreshWorker(context: Context, params: WorkerParameters) :
     }
 
     fun refreshNow(context: Context) {
-      val request =
-        OneTimeWorkRequestBuilder<RefreshWorker>().setConstraints(constraints).build()
+      val builder = OneTimeWorkRequestBuilder<RefreshWorker>().setConstraints(constraints)
+      if (Build.VERSION.SDK_INT >= 31) {
+        builder.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+      }
+      val request = builder.build()
       WorkManager.getInstance(context)
         .enqueueUniqueWork(ONE_TIME_WORK, ExistingWorkPolicy.REPLACE, request)
+    }
+
+    fun refreshIfStale(context: Context) {
+      val updated = WidgetStore.lastUpdatedMillis(context)
+      if (updated == null || System.currentTimeMillis() - updated > STALE_AFTER_MS) {
+        refreshNow(context)
+      }
     }
   }
 }
