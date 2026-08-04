@@ -3,6 +3,7 @@ package com.solarsentinel.widget.refresh
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import androidx.lifecycle.LiveData
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -12,6 +13,7 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.solarsentinel.widget.GraphWidget
@@ -73,6 +75,9 @@ class RefreshWorker(context: Context, params: WorkerParameters) :
       WorkManager.getInstance(context)
         .enqueueUniqueWork(ONE_TIME_WORK, ExistingWorkPolicy.REPLACE, request)
     }
+
+    fun manualRefreshWork(context: Context): LiveData<List<WorkInfo>> =
+      WorkManager.getInstance(context).getWorkInfosForUniqueWorkLiveData(ONE_TIME_WORK)
 
     fun refreshIfStale(context: Context) {
       val updated = WidgetStore.lastUpdatedMillis(context)

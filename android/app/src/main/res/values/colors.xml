@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="slate_900">#0F172A</color>
+  <color name="launcher_background">#1E293B</color>
+  <color name="amber_400">#FBBF24</color>
+  <color name="cyan_400">#38BDF8</color>
+</resources>

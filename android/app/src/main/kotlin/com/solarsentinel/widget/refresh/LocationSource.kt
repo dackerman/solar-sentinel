@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -22,17 +23,23 @@ object LocationSource {
         PackageManager.PERMISSION_GRANTED
     if (!granted) return HOME_LAT to HOME_LON
 
-    val client = LocationServices.getFusedLocationProviderClient(context)
-    val location =
-      withTimeoutOrNull(10_000) {
-        client.lastLocation.await()
-          ?: client
-            .getCurrentLocation(
-              Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-              CancellationTokenSource().token,
-            )
-            .await()
-      }
-    return if (location != null) location.latitude to location.longitude else HOME_LAT to HOME_LON
+    return try {
+      val client = LocationServices.getFusedLocationProviderClient(context)
+      val location =
+        withTimeoutOrNull(10_000) {
+          client.lastLocation.await()
+            ?: client
+              .getCurrentLocation(
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+                CancellationTokenSource().token,
+              )
+              .await()
+        }
+      if (location != null) location.latitude to location.longitude else HOME_LAT to HOME_LON
+    } catch (error: CancellationException) {
+      throw error
+    } catch (_: Exception) {
+      HOME_LAT to HOME_LON
+    }
   }
 }

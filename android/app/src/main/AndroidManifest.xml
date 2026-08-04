@@ -8,8 +8,10 @@
 
   <application
     android:label="@string/app_name"
-    android:icon="@android:drawable/ic_menu_compass"
-    android:allowBackup="false">
+    android:icon="@mipmap/ic_launcher"
+    android:roundIcon="@mipmap/ic_launcher_round"
+    android:allowBackup="false"
+    android:theme="@style/Theme.SolarSentinelWidgets">
 
     <activity
       android:name=".MainActivity"
@@ -28,7 +30,7 @@
     <receiver
       android:name=".SolarWidgetReceiver"
       android:exported="true"
-      android:label="@string/app_name">
+      android:label="@string/summary_widget_name">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
       </intent-filter>

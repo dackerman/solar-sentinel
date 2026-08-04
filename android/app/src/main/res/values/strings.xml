@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="app_name">Solar Sentinel</string>
+  <string name="app_name">Solar Sentinel Widgets</string>
+  <string name="summary_widget_name">Solar Sentinel Summary</string>
   <string name="widget_description">Today\'s UV, temperature, and rain at a glance</string>
-  <string name="graph_widget_name">Solar Sentinel Graph</string>
+  <string name="graph_widget_name">Solar Sentinel Today Graph</string>
   <string name="graph_widget_description">Today\'s temperature, rain, and cloud curves</string>
 </resources>
