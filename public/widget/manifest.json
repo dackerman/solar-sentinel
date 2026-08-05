@@ -1,16 +1,26 @@
 {
   "latest": {
-    "file": "solar-sentinel-widget-bffcaa4.apk",
-    "versionName": "1.4",
-    "versionCode": 5,
-    "commit": "bffcaa4",
-    "builtAt": "2026-07-30T15:02:21.940Z",
-    "sizeBytes": 5008078
+    "file": "solar-sentinel-widget-f2bc216.apk",
+    "versionName": "1.5",
+    "versionCode": 6,
+    "commit": "f2bc216",
+    "builtAt": "2026-08-04T14:59:14.316Z",
+    "sizeBytes": 9405808
   },
   "screenshots": [
     "screens/widgets-home-screen.jpg"
   ],
   "changelog": [
+    {
+      "version": "1.5",
+      "date": "2026-08-04",
+      "notes": [
+        "New widget companion screen clearly separates widget setup from the full Solar Sentinel forecast",
+        "Setup status and actions for location, background access, battery optimization, and manual refresh",
+        "Add the Summary and Today Graph widgets directly from the companion when the launcher supports it",
+        "Convenient button opens the production Solar Sentinel forecast"
+      ]
+    },
     {
       "version": "1.4",
       "date": "2026-07-30",
