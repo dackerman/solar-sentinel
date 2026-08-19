@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { WeatherAPI } from '../services/api.js';
+import { WeatherAPI, AuthExpiredError } from '../services/api.js';
 import { LocationService } from '../services/location.js';
 import type { WeatherData, Location } from '../types/weather.js';
 
@@ -52,7 +52,9 @@ describe('WeatherAPI', () => {
 
     const result = await api.fetchWeatherData(mockLocation, '2025-08-31');
 
-    expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31');
+    expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31', {
+      redirect: 'manual',
+    });
     expect(result.timing).toBeDefined();
     expect(result.timing?.cacheStatus).toBe('hit');
     expect(result.timing?.serverTiming).toBe('parseRequest;dur=1, total;dur=2');
@@ -75,6 +77,74 @@ describe('WeatherAPI', () => {
     await expect(api.fetchWeatherData(mockLocation, '2025-08-31')).rejects.toThrow(
       'Weather API failed: 500'
     );
+  });
+
+  it('should request with redirect: manual so Cloudflare Access redirects surface as opaque', async () => {
+    const mockData: WeatherData = {
+      labels: ['12:00 AM'],
+      uv: [0],
+      uvClearSky: [0],
+      precipitation: [0],
+      temperature: [60],
+      apparentTemperature: [60],
+      cloudCover: [0],
+      humidity: [50],
+      date: '2025-08-31',
+      daily: {
+        date: '2025-08-31',
+        tempMax: 70,
+        tempMin: 50,
+        uvMax: 5,
+        precipMax: 10,
+        humidityMax: 70,
+      },
+    };
+    const mockResponse = {
+      ok: true,
+      type: 'basic',
+      headers: { get: vi.fn().mockReturnValue('hit') },
+      json: vi.fn().mockResolvedValue(mockData),
+      clone: vi.fn(),
+    };
+    mockResponse.clone.mockReturnValue(mockResponse);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
+
+    await api.fetchWeatherData(mockLocation, '2025-08-31');
+
+    expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31', {
+      redirect: 'manual',
+    });
+  });
+
+  it('should throw AuthExpiredError when the response is an opaque redirect (Cloudflare Access login)', async () => {
+    const opaqueRedirectResponse = {
+      type: 'opaqueredirect',
+      clone: vi.fn(),
+    };
+    vi.mocked(global.fetch).mockResolvedValue(opaqueRedirectResponse as any);
+
+    await expect(api.fetchWeatherData(mockLocation, '2025-08-31')).rejects.toBeInstanceOf(
+      AuthExpiredError
+    );
+    expect(opaqueRedirectResponse.clone).not.toHaveBeenCalled();
+  });
+
+  it('propagates AuthExpiredError to concurrent callers sharing an in-flight opaque-redirect request', async () => {
+    let resolveFetch!: (value: unknown) => void;
+    vi.mocked(global.fetch).mockReturnValue(
+      new Promise(resolve => {
+        resolveFetch = resolve;
+      }) as any
+    );
+
+    const first = api.fetchWeatherData(mockLocation, '2025-08-31');
+    const second = api.fetchWeatherData(mockLocation, '2025-08-31');
+
+    resolveFetch({ type: 'opaqueredirect', clone: vi.fn() });
+
+    await expect(first).rejects.toBeInstanceOf(AuthExpiredError);
+    await expect(second).rejects.toBeInstanceOf(AuthExpiredError);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
 

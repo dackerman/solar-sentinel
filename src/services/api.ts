@@ -9,6 +9,17 @@ import type {
   WeatherHistoryEntry,
 } from '../types/weather.js';
 
+// The Weather API never legitimately redirects. When Cloudflare Access
+// intercepts a request behind an expired session, it responds with a 302 to
+// its login page. Fetched with `redirect: 'manual'`, that surfaces as an
+// opaque redirect response rather than being silently followed cross-origin.
+export class AuthExpiredError extends Error {
+  constructor(message = 'Session expired: request was redirected to sign-in') {
+    super(message);
+    this.name = 'AuthExpiredError';
+  }
+}
+
 export class WeatherAPI {
   private baseURL = '';
   private readonly WEATHER_CACHE_PREFIX = 'solar_sentinel_weather';
@@ -398,15 +409,25 @@ export class WeatherAPI {
   private async fetchOnce(url: string): Promise<Response> {
     const inFlight = this.inFlightRequests.get(url) as Promise<Response> | undefined;
     if (inFlight) {
-      return inFlight.then(response => response.clone());
+      const response = await inFlight;
+      // The type check happens after awaiting the shared promise (not on the
+      // resolved value cached inside it), so every concurrent caller re-checks
+      // it independently and gets the same AuthExpiredError.
+      if (response.type === 'opaqueredirect') {
+        throw new AuthExpiredError();
+      }
+      return response.clone();
     }
 
-    const request = fetch(url).finally(() => {
+    const request = fetch(url, { redirect: 'manual' }).finally(() => {
       this.inFlightRequests.delete(url);
     });
     this.inFlightRequests.set(url, request);
 
     const response = await request;
+    if (response.type === 'opaqueredirect') {
+      throw new AuthExpiredError();
+    }
     return response.clone();
   }
 }

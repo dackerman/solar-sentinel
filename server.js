@@ -1139,6 +1139,15 @@ app.get('/api/history', (req, res) => {
   });
 });
 
+// Re-auth entry point: Cloudflare Access intercepts this request before it
+// reaches Express when the session is unauthenticated, triggering the login
+// flow. Once authenticated, bounce back to the app root. Must never be
+// cached by the browser or Cloudflare, or the login trigger would be skipped.
+app.get('/auth/refresh', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, '/');
+});
+
 // Polling endpoint to check if newer data is available
 app.get('/api/uv-today/poll', async (req, res) => {
   try {

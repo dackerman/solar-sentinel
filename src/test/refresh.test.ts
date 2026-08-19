@@ -5,6 +5,7 @@ import type { WeatherData } from '../types/weather.js';
 const setupDOM = () => {
   document.body.innerHTML = `
     <div>
+      <div id="auth-banner" class="hidden"></div>
       <div id="loading"></div>
       <div id="current-conditions" class="hidden"></div>
       <div id="chart-container" class="hidden"></div>
@@ -177,5 +178,121 @@ describe('Auto-refresh behavior', () => {
       'none'
     );
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the last-updated stamp stale after 30 minutes with no successful refresh', async () => {
+    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+      configurable: true,
+      value: vi.fn().mockReturnValue({}),
+    });
+    vi.mocked((global as any).Chart).mockImplementation(() => ({
+      destroy: vi.fn(),
+      update: vi.fn(),
+    }));
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+
+    const stamp = document.getElementById('current-time') as HTMLElement;
+    expect(stamp.classList.contains('text-amber-600')).toBe(false);
+
+    // Jump the perceived clock forward without firing any scheduled timers,
+    // then advance by exactly one now-line tick (not the 5-minute refresh
+    // interval) so staleness is detected without a new fetch succeeding.
+    vi.setSystemTime(new Date(Date.now() + 31 * 60 * 1000));
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+
+    expect(stamp.classList.contains('text-amber-600')).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('Session expiry', () => {
+  const mkData = (date = new Date().toLocaleDateString('en-CA')): WeatherData => ({
+    labels: ['12:00 AM'],
+    uv: [0],
+    uvClearSky: [0],
+    precipitation: [0],
+    temperature: [60],
+    apparentTemperature: [60],
+    cloudCover: [0],
+    humidity: [50],
+    date,
+    daily: { date, tempMax: 70, tempMin: 50, uvMax: 5, precipMax: 10, humidityMax: 70 },
+    metadata: { cached: true, cacheAge: 0, lastUpdated: new Date().toISOString() },
+  });
+
+  const mkResponse = (data = mkData()) => {
+    const response = {
+      ok: true,
+      type: 'basic',
+      headers: { get: vi.fn().mockReturnValue('hit') },
+      json: vi.fn().mockResolvedValue(data),
+      clone: vi.fn(),
+    };
+    response.clone.mockReturnValue(response);
+    return response;
+  };
+
+  const opaqueRedirectResponse = () => ({
+    type: 'opaqueredirect',
+    clone: vi.fn(),
+  });
+
+  const mockWeatherFetch = () => {
+    vi.mocked(global.fetch).mockImplementation(async input => {
+      const url = new URL(input.toString(), 'http://localhost');
+      const date = url.searchParams.get('date') || new Date().toLocaleDateString('en-CA');
+
+      return mkResponse(mkData(date)) as any;
+    });
+  };
+
+  beforeEach(() => {
+    setupDOM();
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.useFakeTimers();
+    vi.mocked(navigator.geolocation.getCurrentPosition).mockImplementation((_success, error) => {
+      error?.({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows the auth banner when a load hits an expired session after local cache already painted', async () => {
+    // Prime localStorage with a real cached weather entry the same way a
+    // prior successful load would, so the next load renders from cache
+    // before its own network request fails.
+    mockWeatherFetch();
+    const primer = new SolarSentinelApp();
+    await primer.initialize();
+
+    setupDOM();
+    vi.mocked(global.fetch).mockResolvedValueOnce(opaqueRedirectResponse() as any);
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    expect(document.getElementById('auth-banner')?.classList.contains('hidden')).toBe(false);
+  });
+
+  it('hides the auth banner again after a subsequent successful refresh', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(opaqueRedirectResponse() as any);
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(document.getElementById('auth-banner')?.classList.contains('hidden')).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(document.getElementById('auth-banner')?.classList.contains('hidden')).toBe(true);
   });
 });

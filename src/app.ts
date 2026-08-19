@@ -1,4 +1,4 @@
-import { WeatherAPI } from './services/api.js';
+import { WeatherAPI, AuthExpiredError } from './services/api.js';
 import { LocationService } from './services/location.js';
 import { SavedLocationsService } from './services/savedLocations.js';
 import { DebugPanel } from './components/debug.js';
@@ -82,6 +82,8 @@ export class SolarSentinelApp {
 
   private readonly REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private readonly NOW_LINE_INTERVAL_MS = 60 * 1000; // 1 minute
+  private readonly STALE_LAST_UPDATED_MS = 30 * 60 * 1000; // 30 minutes
+  private lastRenderedUpdateTime: number | null = null;
 
   async initialize(): Promise<void> {
     this.debugPanel = new DebugPanel();
@@ -95,6 +97,12 @@ export class SolarSentinelApp {
   }
 
   private setupEventListeners(): void {
+    // Session-expired banner: bypass the service worker so the request hits
+    // Cloudflare Access directly and triggers its login, then returns here.
+    document.getElementById('auth-banner')?.addEventListener('click', () => {
+      window.location.href = '/auth/refresh';
+    });
+
     // App menu
     const menu = document.getElementById('app-menu');
     const menuToggle = document.getElementById('app-menu-toggle');
@@ -229,6 +237,9 @@ export class SolarSentinelApp {
         requestedLocation,
         this.followingToday ? null : requestedDate
       );
+      // A successful weather fetch proves the session is valid again, even if
+      // this particular response turns out to be stale below (see isCurrentRequest).
+      this.hideAuthBanner();
       // The user may have navigated to a different date or location while this
       // request was in flight (loadData is fired without awaiting on
       // navigation/location changes). Only the request that still matches the
@@ -291,6 +302,12 @@ export class SolarSentinelApp {
         error: (error as Error).message,
         skippedAsStale: !isCurrentRequest,
       });
+
+      if (error instanceof AuthExpiredError) {
+        // Show even when the local cache already painted or the refresh was
+        // silent — those are exactly the paths that otherwise swallow this.
+        this.showAuthBanner();
+      }
 
       if (!isCurrentRequest) {
         return;
@@ -400,6 +417,18 @@ export class SolarSentinelApp {
     });
   }
 
+  private showAuthBanner(): void {
+    const banner = document.getElementById('auth-banner');
+    if (banner?.classList.contains('hidden')) {
+      this.debugPanel.log('Session expired: showing auth banner');
+    }
+    banner?.classList.remove('hidden');
+  }
+
+  private hideAuthBanner(): void {
+    document.getElementById('auth-banner')?.classList.add('hidden');
+  }
+
   private updateLocationDisplay(): void {
     const locationIcon = this.currentLocation.isUserLocation ? '📍 ' : '';
     const locationDisplay = document.getElementById('location-display');
@@ -489,6 +518,8 @@ export class SolarSentinelApp {
         hour12: true,
       });
       this.updateElement('current-time', `Last updated: ${timeString}`);
+      this.lastRenderedUpdateTime = lastUpdated.getTime();
+      this.updateLastUpdatedStaleness();
     }
 
     this.updateCurrentConditions(data);
@@ -809,6 +840,19 @@ export class SolarSentinelApp {
   private updateChartsNowLine(): void {
     this.uvChart?.update('none');
     this.weatherChart?.update('none');
+    this.updateLastUpdatedStaleness();
+  }
+
+  // Re-evaluated whenever the stamp is written, and once a minute via the
+  // chart now-line timer, so a page left open goes visibly stale without a
+  // reload. That timer only runs while viewing today, which is the case that
+  // matters here.
+  private updateLastUpdatedStaleness(): void {
+    const element = document.getElementById('current-time');
+    if (!element || this.lastRenderedUpdateTime === null) return;
+
+    const isStale = Date.now() - this.lastRenderedUpdateTime > this.STALE_LAST_UPDATED_MS;
+    element.classList.toggle('text-amber-600', isStale);
   }
 
   private requestForecastCalendar(silent: boolean): boolean {
@@ -819,6 +863,9 @@ export class SolarSentinelApp {
     void this.loadForecastCalendar(silent).catch(error => {
       this.markPerformance('forecast-calendar-error', { error: (error as Error).message });
       this.debugPanel.log('Forecast calendar error', { error: (error as Error).message });
+      if (error instanceof AuthExpiredError) {
+        this.showAuthBanner();
+      }
     });
     return true;
   }

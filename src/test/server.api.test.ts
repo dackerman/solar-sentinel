@@ -689,6 +689,16 @@ describe('Server API Endpoints', () => {
     });
   });
 
+  describe('GET /auth/refresh', () => {
+    it('redirects to / with no-store caching so Cloudflare Access sees the raw request', async () => {
+      const response = await request(app).get('/auth/refresh');
+
+      expect(response.status).toBe(302);
+      expect(response.headers['location']).toBe('/');
+      expect(response.headers['cache-control']).toBe('no-store');
+    });
+  });
+
   describe('Cache Key Isolation', () => {
     it('should use different cache keys for different coordinates', async () => {
       const testDate = getTestDate(10);

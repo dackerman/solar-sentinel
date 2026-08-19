@@ -5,6 +5,7 @@ import type { WeatherData } from '../types/weather.js';
 const setupDOM = () => {
   document.body.innerHTML = `
     <div>
+      <div id="auth-banner" class="hidden"></div>
       <div id="loading"></div>
       <div id="current-conditions" class="hidden"></div>
       <div id="chart-container" class="hidden"></div>
@@ -71,5 +72,59 @@ describe('Last updated display', () => {
 
     const text = (document.getElementById('current-time') as HTMLElement).textContent || '';
     expect(text).toMatch(/^Last updated: /);
+  });
+
+  it('applies the stale style when lastUpdated is more than 30 minutes old', async () => {
+    const staleIso = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+
+    const response = {
+      ok: true,
+      type: 'basic',
+      headers: { get: vi.fn().mockReturnValue('hit') },
+      json: vi.fn().mockResolvedValue({
+        ...baseData,
+        metadata: { cached: true, cacheAge: 0, lastUpdated: staleIso },
+      }),
+      clone: vi.fn(),
+    };
+    response.clone.mockReturnValue(response);
+    vi.mocked(global.fetch).mockResolvedValueOnce(response as any);
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const geolib = vi.mocked(navigator.geolocation.getCurrentPosition);
+    const errCb = geolib.mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+
+    const stamp = document.getElementById('current-time') as HTMLElement;
+    expect(stamp.classList.contains('text-amber-600')).toBe(true);
+  });
+
+  it('does not apply the stale style when lastUpdated is recent', async () => {
+    const freshIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+    const response = {
+      ok: true,
+      type: 'basic',
+      headers: { get: vi.fn().mockReturnValue('hit') },
+      json: vi.fn().mockResolvedValue({
+        ...baseData,
+        metadata: { cached: true, cacheAge: 0, lastUpdated: freshIso },
+      }),
+      clone: vi.fn(),
+    };
+    response.clone.mockReturnValue(response);
+    vi.mocked(global.fetch).mockResolvedValueOnce(response as any);
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const geolib = vi.mocked(navigator.geolocation.getCurrentPosition);
+    const errCb = geolib.mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+
+    const stamp = document.getElementById('current-time') as HTMLElement;
+    expect(stamp.classList.contains('text-amber-600')).toBe(false);
   });
 });

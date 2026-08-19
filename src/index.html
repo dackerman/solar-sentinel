@@ -18,6 +18,14 @@
     <link rel="manifest" href="/manifest.json" />
   </head>
   <body class="bg-gray-100 min-h-screen">
+    <div
+      id="auth-banner"
+      class="hidden sticky top-0 z-50 cursor-pointer bg-amber-100 border-b border-amber-400 px-4 py-2 text-center text-sm font-medium text-amber-800 hover:bg-amber-200"
+      role="button"
+      tabindex="0"
+    >
+      Session expired — tap to sign in
+    </div>
     <div class="container mx-auto max-w-4xl">
       <header class="flex items-center justify-between">
         <img

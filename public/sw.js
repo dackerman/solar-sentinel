@@ -153,6 +153,12 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  // Re-auth navigation must reach Cloudflare Access directly, not the cached
+  // app shell, so an expired session's login redirect is never hidden.
+  if (url.pathname.startsWith('/auth/')) {
+    return;
+  }
+
   if (APP_SHELL.includes(url.pathname) || event.request.mode === 'navigate') {
     event.respondWith(staleWhileRevalidateShell(event));
   }
