@@ -1,5 +1,6 @@
 import './styles.css';
 import { SolarSentinelApp } from './app.js';
+import { initServiceWorkerUpdates } from './services/swUpdates.js';
 
 performance.mark('solar-sentinel:main-module-loaded');
 console.debug('Solar Sentinel perf', {
@@ -35,6 +36,12 @@ if ('serviceWorker' in navigator) {
         console.debug('Solar Sentinel perf', {
           event: 'service-worker-registered',
           durationMs: registrationDuration,
+        });
+
+        initServiceWorkerUpdates({
+          registration,
+          container: navigator.serviceWorker,
+          reload: () => window.location.reload(),
         });
       })
       .catch(registrationError => {
