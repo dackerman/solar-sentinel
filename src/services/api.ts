@@ -26,6 +26,11 @@ export class WeatherAPI {
   private readonly CALENDAR_CACHE_PREFIX = 'solar_sentinel_calendar';
   private readonly WEATHER_CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
   private readonly inFlightRequests = new Map<string, Promise<unknown>>();
+  // On Android, a request started right before the page is backgrounded can
+  // hang indefinitely (no response, no error), leaving refreshInFlight stuck
+  // forever. AbortController + setTimeout is used instead of
+  // AbortSignal.timeout because jsdom (our test environment) may lack it.
+  private readonly REQUEST_TIMEOUT_MS = 20_000;
 
   private readonly HISTORY_PAGE_SIZE = 500;
 
@@ -419,9 +424,20 @@ export class WeatherAPI {
       return response.clone();
     }
 
-    const request = fetch(url, { redirect: 'manual' }).finally(() => {
-      this.inFlightRequests.delete(url);
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
+
+    const request = fetch(url, { redirect: 'manual', signal: controller.signal })
+      .catch(error => {
+        if (controller.signal.aborted) {
+          throw new Error(`Request timed out after 20s: ${url}`);
+        }
+        throw error;
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        this.inFlightRequests.delete(url);
+      });
     this.inFlightRequests.set(url, request);
 
     const response = await request;

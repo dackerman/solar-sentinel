@@ -2,6 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SolarSentinelApp } from '../app.js';
 import type { WeatherData } from '../types/weather.js';
 
+// happy-dom aliases PageTransitionEvent to plain Event, so its constructor
+// silently drops the `persisted` init option — force it onto the resulting
+// event instead of relying on the constructor to honor it.
+const makePageShowEvent = (persisted: boolean): Event => {
+  const event = new Event('pageshow');
+  Object.defineProperty(event, 'persisted', { value: persisted, configurable: true });
+  return event;
+};
+
 const setupDOM = () => {
   document.body.innerHTML = `
     <div>
@@ -92,8 +101,13 @@ describe('Auto-refresh behavior', () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
 
+    // Once the hung request settles, the skipped refresh runs exactly once as
+    // a queued follow-up — so a resume during a stuck request isn't lost.
     resolveRefresh(mkResponse());
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 
   it('refreshes every five minutes while the page stays open', async () => {
@@ -120,6 +134,90 @@ describe('Auto-refresh behavior', () => {
     window.dispatchEvent(new Event('focus'));
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes from the backend when the document becomes visible again', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not refresh when visibilitychange fires while the document is hidden', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes from the backend on a bfcache pageshow restore', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    window.dispatchEvent(makePageShowEvent(true));
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not refresh on pageshow when not restored from bfcache', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    window.dispatchEvent(makePageShowEvent(false));
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes across a midnight rollover when resumed via visibilitychange without timers firing', async () => {
+    vi.setSystemTime(new Date(2026, 4, 1, 23, 59, 0));
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    // Jump the perceived clock past midnight without any scheduled timer
+    // (the 5-minute refresh interval) ever firing.
+    vi.setSystemTime(new Date(2026, 4, 2, 7, 0, 0));
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    const refreshUrl = new URL(
+      vi.mocked(global.fetch).mock.calls[1][0].toString(),
+      'http://localhost'
+    );
+    expect(refreshUrl.searchParams.get('date')).toBeNull();
+
+    const expectedLabel = new Date(2026, 4, 2).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+    expect(document.getElementById('date-display')?.textContent).toBe(expectedLabel);
   });
 
   it('rolls over to the new day before an auto-refresh after midnight', async () => {

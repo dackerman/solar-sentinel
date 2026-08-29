@@ -518,4 +518,80 @@ describe('Date navigation bounds', () => {
     expect(calendarCalls.length).toBe(2);
     expect(priv.latestCalendarData).not.toBeNull();
   });
+
+  it('returns to following-today after an explicit-date navigation lands on today', async () => {
+    const today = new Date();
+    const todayStr = fmt(today);
+    const tomorrowStr = fmt(addDays(today, 1));
+
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+      const url = String(input);
+      const requestedDate = new URL(url, 'http://localhost').searchParams.get('date') || todayStr;
+      return Promise.resolve(mkResponse(mkData(requestedDate)) as any);
+    });
+
+    const app = new SolarSentinelApp();
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+
+    // Navigate forward to an explicit date: no longer following today.
+    (document.getElementById('next-day') as HTMLButtonElement).click();
+    await flush();
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+
+    vi.useFakeTimers();
+    try {
+      // Device-local time advances so the explicitly-navigated date is now today.
+      vi.setSystemTime(
+        new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 7, 0, 0)
+      );
+
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      const calls = vi.mocked(global.fetch).mock.calls;
+      const lastUrl = String(calls[calls.length - 1][0]);
+      expect(lastUrl).not.toContain('date=');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('resets history state when a silent refresh adopts a different date than what was previously rendered', async () => {
+    const today = new Date();
+    const todayStr = fmt(today);
+    const tomorrowStr = fmt(addDays(today, 1));
+
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(todayStr)) as any);
+
+    const app = new SolarSentinelApp();
+    const priv = app as unknown as {
+      historyMode: boolean;
+      weatherHistory: unknown[];
+    };
+    const init = app.initialize();
+    const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+    errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+    await init;
+
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(todayStr));
+
+    // Simulate the user having opened history mode for the rendered date.
+    priv.historyMode = true;
+    const sentinelHistory = [{ id: 1, fetchedAt: new Date().toISOString(), data: {} }];
+    priv.weatherHistory = sentinelHistory;
+
+    // The next (silent) refresh's response adopts a different date.
+    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse(mkData(tomorrowStr)) as any);
+    window.dispatchEvent(new Event('focus'));
+    await flush();
+
+    expect(priv.historyMode).toBe(false);
+    expect(priv.weatherHistory).toEqual([]);
+    expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+  });
 });

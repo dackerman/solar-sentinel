@@ -54,6 +54,7 @@ describe('WeatherAPI', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31', {
       redirect: 'manual',
+      signal: expect.any(AbortSignal),
     });
     expect(result.timing).toBeDefined();
     expect(result.timing?.cacheStatus).toBe('hit');
@@ -113,6 +114,7 @@ describe('WeatherAPI', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31', {
       redirect: 'manual',
+      signal: expect.any(AbortSignal),
     });
   });
 

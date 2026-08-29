@@ -31,6 +31,8 @@ import type {
 
 export class SolarSentinelApp {
   private static activeFocusRefreshHandler: (() => void) | null = null;
+  private static activeVisibilityRefreshHandler: (() => void) | null = null;
+  private static activePageShowRefreshHandler: ((event: Event) => void) | null = null;
 
   private api = new WeatherAPI();
   private locationService = new LocationService();
@@ -54,6 +56,7 @@ export class SolarSentinelApp {
   private refreshTimer: number | null = null;
   private chartNowLineTimer: number | null = null;
   private refreshInFlight = false;
+  private pendingRefreshTrigger: string | null = null;
   private historyMode = false;
   private weatherHistory: WeatherHistoryEntry[] = [];
   private calendarHistory: DailyCalendarHistoryEntry[] = [];
@@ -78,6 +81,20 @@ export class SolarSentinelApp {
   private lastPerformanceMark = this.appStartTime;
   private readonly handleWindowFocus = () => {
     void this.runAutoRefresh('window focus');
+  };
+  // Resume triggers beyond `focus`: a backgrounded PWA/tab often never fires
+  // `focus` when it comes back to the foreground (e.g. re-activating an
+  // existing tab, or an OS-level app-switch on mobile), so visibility and
+  // bfcache restoration are also treated as "the app is back" signals.
+  private readonly handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      void this.runAutoRefresh('visibility');
+    }
+  };
+  private readonly handlePageShow = (event: Event) => {
+    if ((event as PageTransitionEvent).persisted) {
+      void this.runAutoRefresh('pageshow');
+    }
   };
 
   private readonly REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
@@ -190,6 +207,11 @@ export class SolarSentinelApp {
     let renderedLocalCache = false;
     let requestedCalendar = false;
     const requestedDate = this.currentDate;
+    // Whether a real, previously-rendered date was showing before this load
+    // started (as opposed to nothing having rendered yet, e.g. initial load).
+    // Used below to decide whether a server-adopted date that differs from
+    // requestedDate should also reset history state.
+    const hadPreviousData = this.latestWeatherData !== null;
     // Finalized once location resolution (manual selection / home-first) below
     // has run; declared here so the catch block can also see it.
     let requestedLocation = this.currentLocation;
@@ -257,6 +279,18 @@ export class SolarSentinelApp {
         // Clear the flag so the branch below re-requests it under the
         // adopted date instead of leaving latestCalendarData stale/null.
         requestedCalendar = false;
+        // A resume/refresh silently adopted a different date than what was
+        // actually on screen (e.g. rollover discovered on resume): any
+        // history view/state was scoped to the old date and is now invalid.
+        // Skip this on initial load, where hadPreviousData is false because
+        // nothing has rendered yet.
+        if (hadPreviousData) {
+          this.historyMode = false;
+          this.weatherHistory = [];
+          this.calendarHistory = [];
+          this.historyTimeline = [];
+          this.updateHistoryControls();
+        }
       }
       this.markPerformance('weather-api-complete', {
         durationMs: Math.round(performance.now() - apiStart),
@@ -1552,6 +1586,21 @@ export class SolarSentinelApp {
     SolarSentinelApp.activeFocusRefreshHandler = this.handleWindowFocus;
     window.addEventListener('focus', this.handleWindowFocus);
 
+    if (SolarSentinelApp.activeVisibilityRefreshHandler) {
+      document.removeEventListener(
+        'visibilitychange',
+        SolarSentinelApp.activeVisibilityRefreshHandler
+      );
+    }
+    SolarSentinelApp.activeVisibilityRefreshHandler = this.handleVisibilityChange;
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+
+    if (SolarSentinelApp.activePageShowRefreshHandler) {
+      window.removeEventListener('pageshow', SolarSentinelApp.activePageShowRefreshHandler);
+    }
+    SolarSentinelApp.activePageShowRefreshHandler = this.handlePageShow;
+    window.addEventListener('pageshow', this.handlePageShow);
+
     this.refreshTimer = window.setInterval(async () => {
       await this.runAutoRefresh('timer');
     }, this.REFRESH_INTERVAL_MS);
@@ -1576,7 +1625,10 @@ export class SolarSentinelApp {
     this.normalizeCurrentDateForRefresh();
 
     if (this.refreshInFlight) {
-      this.debugPanel.log(`Auto-refresh skipped (${trigger}): request in flight`);
+      // Usually a request that hung while the page was backgrounded (the API
+      // layer times those out). Queue one follow-up so a resume isn't lost.
+      this.pendingRefreshTrigger = trigger;
+      this.debugPanel.log(`Auto-refresh queued (${trigger}): request in flight`);
       return;
     }
 
@@ -1586,6 +1638,12 @@ export class SolarSentinelApp {
       await this.loadData(true);
     } finally {
       this.refreshInFlight = false;
+    }
+
+    const pending = this.pendingRefreshTrigger;
+    if (pending) {
+      this.pendingRefreshTrigger = null;
+      await this.runAutoRefresh(`${pending} (queued)`);
     }
   }
 
@@ -1610,6 +1668,13 @@ export class SolarSentinelApp {
       this.latestWeatherData = null;
       this.weatherHistory = [];
       this.updateHistoryControls();
+    }
+
+    // An explicit date the user navigated to has caught up to (or was
+    // already at/before) device-local today: resume following today so
+    // future requests omit `date=` again and let the server resolve it.
+    if (this.currentDate <= todayStr) {
+      this.followingToday = true;
     }
   }
 
