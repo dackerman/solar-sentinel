@@ -6,7 +6,10 @@
 //   the JS/CSS it references are content-hashed and precached below.
 // - Hashed /assets/* files: precached at install, cache-first at fetch.
 // - Static assets (icons, logo, manifest, weather art): cache-first.
-// - API endpoints: network-first with short cache fallback for offline.
+// - API endpoints: network-first; the cached copy is served on failure only
+//   if it is under 5 minutes old, checked via a stored `sw-cached-at` header
+//   timestamp (not a setTimeout — the worker can be terminated and restarted
+//   between requests, so in-worker timers can't be relied on to expire it).
 
 // VERSION and PRECACHE_ASSETS are replaced at build time by the
 // sw-precache-manifest plugin in vite.config.ts. In dev they stay as-is
@@ -106,28 +109,62 @@ function cacheFirst(event) {
   });
 }
 
+// API cache entries older than this are treated as stale and never served.
+const API_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+const CACHED_AT_HEADER = 'sw-cached-at';
+
 // API calls - network first with short-term cache fallback
 function networkFirstApi(event) {
   return fetch(event.request)
     .then(response => {
       if (response.ok) {
         const responseClone = response.clone();
-        caches.open(CURRENT_CACHES.api).then(cache => {
-          // Cache API responses temporarily
-          cache.put(event.request, responseClone);
-
-          // Auto-expire API cache after 5 minutes
-          setTimeout(() => {
-            cache.delete(event.request);
-          }, 5 * 60 * 1000);
-        });
+        // Keep the worker alive until the (now two-step) cache write lands.
+        event.waitUntil(
+          caches
+            .open(CURRENT_CACHES.api)
+            .then(cache => {
+              // Stamp the cached copy with a wall-clock timestamp so freshness
+              // can be checked later regardless of whether the worker that
+              // wrote it is still alive - service workers are terminated
+              // seconds after going idle, so a setTimeout scheduled here would
+              // never fire in practice.
+              const headers = new Headers(responseClone.headers);
+              headers.set(CACHED_AT_HEADER, String(Date.now()));
+              return responseClone.blob().then(body => {
+                const stamped = new Response(body, {
+                  status: responseClone.status,
+                  statusText: responseClone.statusText,
+                  headers
+                });
+                return cache.put(event.request, stamped);
+              });
+            })
+            .catch(() => undefined)
+        );
       }
       return response;
     })
-    .catch(() => {
-      // Fallback to cached API data when offline
-      console.log('API network failed, serving from cache:', event.request.url);
-      return caches.match(event.request);
+    .catch(error => {
+      // Fallback to cached API data when offline, but only if it's still fresh.
+      return caches.open(CURRENT_CACHES.api).then(cache => {
+        return cache.match(event.request).then(cached => {
+          const cachedAt = cached ? Number(cached.headers.get(CACHED_AT_HEADER)) : NaN;
+          const isFresh = cached && !Number.isNaN(cachedAt) && Date.now() - cachedAt < API_CACHE_MAX_AGE_MS;
+
+          if (isFresh) {
+            console.log('API network failed, serving from cache:', event.request.url);
+            return cached;
+          }
+
+          if (cached) {
+            console.log('API network failed, cached copy is stale, discarding:', event.request.url);
+            cache.delete(event.request);
+          }
+
+          throw error;
+        });
+      });
     });
 }
 
