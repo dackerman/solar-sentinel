@@ -33,6 +33,7 @@ export class SolarSentinelApp {
   private static activeFocusRefreshHandler: (() => void) | null = null;
   private static activeVisibilityRefreshHandler: (() => void) | null = null;
   private static activePageShowRefreshHandler: ((event: Event) => void) | null = null;
+  private static activeOnlineRefreshHandler: (() => void) | null = null;
 
   private api = new WeatherAPI();
   private locationService = new LocationService();
@@ -96,11 +97,23 @@ export class SolarSentinelApp {
       void this.runAutoRefresh('pageshow');
     }
   };
+  // The browser reporting connectivity restored is another resume-like signal:
+  // it's often the first thing to fire after a phone's Wi-Fi reconnects, ahead
+  // of (or instead of) focus/visibility/pageshow.
+  private readonly handleOnline = () => {
+    void this.runAutoRefresh('online');
+  };
 
   private readonly REFRESH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private readonly NOW_LINE_INTERVAL_MS = 60 * 1000; // 1 minute
   private readonly STALE_LAST_UPDATED_MS = 30 * 60 * 1000; // 30 minutes
+  // A resume-triggered refresh (focus/visibility/pageshow/online) that fails
+  // gets exactly one retry after this delay, rather than waiting for the next
+  // 5-minute timer tick — the first request after a phone wakes is the one
+  // most likely to hit a network still reconnecting.
+  private readonly RESUME_RETRY_DELAY_MS = 5000;
   private lastRenderedUpdateTime: number | null = null;
+  private resumeRetryTimer: number | null = null;
 
   async initialize(): Promise<void> {
     this.debugPanel = new DebugPanel();
@@ -200,7 +213,7 @@ export class SolarSentinelApp {
       ?.addEventListener('click', () => this.locationPicker?.toggle());
   }
 
-  private async loadData(silent = false): Promise<void> {
+  private async loadData(silent = false): Promise<boolean> {
     const reason = silent ? 'auto-refresh' : 'user-initiated';
     this.markPerformance('load-start', { reason, date: this.currentDate });
     this.debugPanel.log(`Loading UV data for ${this.currentDate}`, { reason });
@@ -323,6 +336,7 @@ export class SolarSentinelApp {
       if (!requestedCalendar && isCurrentRequest) {
         this.requestForecastCalendar(silent && !renderedLocalCache);
       }
+      return true;
     } catch (error) {
       // Same staleness guard as the success path: a request the user has
       // already navigated away from must not show an error banner over a
@@ -344,7 +358,7 @@ export class SolarSentinelApp {
       }
 
       if (!isCurrentRequest) {
-        return;
+        return false;
       }
 
       if (!silent && !renderedLocalCache) {
@@ -355,6 +369,7 @@ export class SolarSentinelApp {
           errorMessage.textContent = (error as Error).message;
         }
       }
+      return false;
     }
   }
 
@@ -1601,6 +1616,12 @@ export class SolarSentinelApp {
     SolarSentinelApp.activePageShowRefreshHandler = this.handlePageShow;
     window.addEventListener('pageshow', this.handlePageShow);
 
+    if (SolarSentinelApp.activeOnlineRefreshHandler) {
+      window.removeEventListener('online', SolarSentinelApp.activeOnlineRefreshHandler);
+    }
+    SolarSentinelApp.activeOnlineRefreshHandler = this.handleOnline;
+    window.addEventListener('online', this.handleOnline);
+
     this.refreshTimer = window.setInterval(async () => {
       await this.runAutoRefresh('timer');
     }, this.REFRESH_INTERVAL_MS);
@@ -1633,11 +1654,16 @@ export class SolarSentinelApp {
     }
 
     this.refreshInFlight = true;
+    let succeeded = false;
     try {
       this.debugPanel.log(`Auto-refresh triggered (${trigger})`);
-      await this.loadData(true);
+      succeeded = await this.loadData(true);
     } finally {
       this.refreshInFlight = false;
+    }
+
+    if (!succeeded) {
+      this.maybeScheduleResumeRetry(trigger);
     }
 
     const pending = this.pendingRefreshTrigger;
@@ -1645,6 +1671,28 @@ export class SolarSentinelApp {
       this.pendingRefreshTrigger = null;
       await this.runAutoRefresh(`${pending} (queued)`);
     }
+  }
+
+  // Resume-type triggers (the app coming back to the foreground/online) get
+  // exactly one retry shortly after a failure, rather than waiting up to 5
+  // minutes for the next timer tick — see RESUME_RETRY_DELAY_MS. A retry that
+  // itself fails does not schedule another (the trigger string already ends
+  // in "(retry)"), and timer-triggered refreshes never retry this way.
+  private maybeScheduleResumeRetry(trigger: string): void {
+    const isResumeTrigger = ['visibility', 'pageshow', 'window focus', 'online'].includes(trigger);
+    if (!isResumeTrigger || trigger.endsWith('(retry)')) {
+      return;
+    }
+
+    if (this.resumeRetryTimer) {
+      window.clearTimeout(this.resumeRetryTimer);
+    }
+
+    this.debugPanel.log(`Auto-refresh failed (${trigger}); retrying in 5s`);
+    this.resumeRetryTimer = window.setTimeout(() => {
+      this.resumeRetryTimer = null;
+      void this.runAutoRefresh(`${trigger} (retry)`);
+    }, this.RESUME_RETRY_DELAY_MS);
   }
 
   private normalizeCurrentDateForRefresh(): void {

@@ -80,6 +80,13 @@ describe('Auto-refresh behavior', () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    // A couple of tests below replace the shared Chart.js mock's
+    // implementation (e.g. to hand out specific chart instances); restore the
+    // default here so that doesn't leak into later tests that create charts.
+    vi.mocked((global as any).Chart).mockImplementation(() => ({
+      destroy: vi.fn(),
+      update: vi.fn(),
+    }));
   });
 
   it('skips refresh when a request is already in flight', async () => {
@@ -276,6 +283,85 @@ describe('Auto-refresh behavior', () => {
       'none'
     );
     expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes from the backend when the browser reports coming back online', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    window.dispatchEvent(new Event('online'));
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries once ~5s after a resume refresh fails, then renders the retry data', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // Retry data resolves to a later "last updated" time than the initial load.
+    vi.setSystemTime(new Date(Date.now() + 60 * 1000));
+    mockWeatherFetch();
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(document.getElementById('current-time')?.textContent).toMatch(/Last updated:/);
+  });
+
+  it('does not chain retries when the retry itself fails', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+
+    // No further retry scheduled after the retry itself failed.
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not retry a failed timer-triggered refresh', async () => {
+    mockWeatherFetch();
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    // No retry ~5s later, and no additional attempt before the next timer tick.
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('marks the last-updated stamp stale after 30 minutes with no successful refresh', async () => {
