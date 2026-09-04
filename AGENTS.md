@@ -48,7 +48,8 @@
 - Chart.js is lazily imported from `chart.js/auto`; do not re-add a blocking CDN script
 - Weather art lives as 512px lossless originals in `art-src/weather-art/`; `./scripts/compress-weather-art` (ImageMagick) emits the served 384px lossy copies into `public/weather-art/v2/` (committed). Art URLs are path-versioned and cached immutable — any art change goes to a new `/v3/` directory
 - Service worker serves the app shell stale-while-revalidate and precaches hashed `/assets/*` bundles at install; the precache manifest and cache version are injected into `dist/sw.js` at build time by the `sw-precache-manifest` plugin in `vite.config.ts` — do not hand-edit `VERSION` in `public/sw.js`
-- Performance instrumentation is intentional: frontend logs `Perf:` entries to the debug panel/console, and API responses include `Server-Timing` plus `metadata.performance`
+- Performance instrumentation is intentional: frontend logs `Perf:` entries to the debug panel/console, and API responses include `Server-Timing` plus `metadata.performance`. Keep the panel readable: one consolidated mark per chart render, no zero-information lines on silent refreshes
+- The debug panel logs `Service worker build <hash>` shortly after first paint; the hash is the `VERSION` in the served `/sw.js` (check with `curl -s http://localhost:49877/sw.js | grep VERSION`), so it doubles as the deployed-build check on a phone
 
 ## Weather Data
 - Open-Meteo hourly fields: `uv_index`, `uv_index_clear_sky`, `precipitation_probability`, `temperature_2m`, `apparent_temperature`, `cloud_cover`, `relative_humidity_2m`, `weather_code`

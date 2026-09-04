@@ -4,7 +4,7 @@ export class DebugPanel {
   private entries: DebugEntry[] = [];
   private isVisible = false;
   private isMinimized = false;
-  private readonly maxEntries = 150;
+  private readonly maxEntries = 300;
   private readonly consoleLoggingEnabled = this.getConsoleLoggingEnabled();
 
   constructor() {

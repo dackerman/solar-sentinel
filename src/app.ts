@@ -117,13 +117,39 @@ export class SolarSentinelApp {
 
   async initialize(): Promise<void> {
     this.debugPanel = new DebugPanel();
-    this.markPerformance('app-created');
     this.setupEventListeners();
-    this.markPerformance('event-listeners-ready');
     await this.loadData();
+    void this.logServiceWorkerBuild();
     this.scheduleAutoRefresh();
     this.scheduleCacheSweep();
     this.markPerformance('initialize-complete');
+  }
+
+  private async logServiceWorkerBuild(): Promise<void> {
+    if (!('serviceWorker' in navigator) || !('caches' in window)) {
+      this.debugPanel.log('Service worker: unavailable');
+      return;
+    }
+
+    try {
+      await navigator.serviceWorker.ready;
+    } catch (error) {
+      this.debugPanel.log('Service worker: ready failed', { error: (error as Error).message });
+      return;
+    }
+
+    const names = await caches.keys();
+    const version = names
+      .map(name => name.match(/^solar-sentinel-static-v(.+)$/))
+      .find(Boolean)?.[1];
+
+    if (version) {
+      this.debugPanel.log(`Service worker build ${version}`, {
+        controlled: Boolean(navigator.serviceWorker.controller),
+      });
+    } else {
+      this.debugPanel.log('Service worker build: not installed yet');
+    }
   }
 
   private setupEventListeners(): void {
@@ -216,7 +242,6 @@ export class SolarSentinelApp {
   private async loadData(silent = false): Promise<boolean> {
     const reason = silent ? 'auto-refresh' : 'user-initiated';
     this.markPerformance('load-start', { reason, date: this.currentDate });
-    this.debugPanel.log(`Loading UV data for ${this.currentDate}`, { reason });
     let renderedLocalCache = false;
     let requestedCalendar = false;
     const requestedDate = this.currentDate;
@@ -312,7 +337,6 @@ export class SolarSentinelApp {
         localCacheWriteMs: data.timing?.cacheWriteDuration,
         cacheStatus: data.timing?.cacheStatus,
         serverTiming: data.timing?.serverTiming,
-        serverPerformance: data.metadata?.performance,
       });
 
       const cacheStatus = data.timing?.cacheStatus || (data.metadata?.cached ? 'hit' : 'miss');
@@ -797,7 +821,6 @@ export class SolarSentinelApp {
   private async renderCharts(data: WeatherData): Promise<void> {
     const chartStart = performance.now();
     const renderToken = ++this.chartRenderToken;
-    this.markPerformance('charts-render-start', { date: data.date, renderToken });
 
     const destroyStart = performance.now();
     this.clearChartNowLineTimer();
@@ -809,10 +832,7 @@ export class SolarSentinelApp {
       this.weatherChart.destroy();
       this.weatherChart = null;
     }
-    this.markPerformance('charts-destroyed', {
-      durationMs: Math.round(performance.now() - destroyStart),
-      renderToken,
-    });
+    const destroyMs = Math.round(performance.now() - destroyStart);
 
     const uvCanvas = document.getElementById('uvChart') as HTMLCanvasElement;
     const weatherCanvas = document.getElementById('weatherChart') as HTMLCanvasElement;
@@ -828,22 +848,14 @@ export class SolarSentinelApp {
       weatherCanvas.style.height = '384px';
       weatherCanvas.width = weatherCanvas.offsetWidth;
       weatherCanvas.height = 384;
-      this.markPerformance('chart-canvases-sized', {
-        durationMs: Math.round(performance.now() - canvasStart),
-        uvWidth: uvCanvas.width,
-        weatherWidth: weatherCanvas.width,
-        renderToken,
-      });
+      const sizeMs = Math.round(performance.now() - canvasStart);
 
       const chartCreateStart = performance.now();
       const [uvChart, weatherChart] = await Promise.all([
         createUVChart(uvCanvas, data),
         createWeatherChart(weatherCanvas, data),
       ]);
-      this.markPerformance('chart-instances-created', {
-        durationMs: Math.round(performance.now() - chartCreateStart),
-        renderToken,
-      });
+      const createMs = Math.round(performance.now() - chartCreateStart);
 
       if (renderToken !== this.chartRenderToken) {
         uvChart.destroy();
@@ -857,6 +869,12 @@ export class SolarSentinelApp {
       this.scheduleChartNowLineUpdates(data.date);
       this.markPerformance('charts-render-complete', {
         durationMs: Math.round(performance.now() - chartStart),
+        destroyMs,
+        sizeMs,
+        createMs,
+        uvWidth: uvCanvas.width,
+        weatherWidth: weatherCanvas.width,
+        date: data.date,
         renderToken,
       });
     } else {
@@ -1593,7 +1611,6 @@ export class SolarSentinelApp {
       clearInterval(this.refreshTimer);
     }
 
-    this.debugPanel.log('Scheduled 5-min auto-refresh timer');
     if (SolarSentinelApp.activeFocusRefreshHandler) {
       window.removeEventListener('focus', SolarSentinelApp.activeFocusRefreshHandler);
     }
@@ -1630,7 +1647,9 @@ export class SolarSentinelApp {
   private scheduleCacheSweep(): void {
     const runSweep = () => {
       const removed = this.api.sweepExpiredCache();
-      this.debugPanel.log(`Cache sweep removed ${removed} expired entries`);
+      if (removed > 0) {
+        this.debugPanel.log(`Cache sweep removed ${removed} expired entries`);
+      }
     };
     const idleCallback = (
       window as Window & { requestIdleCallback?: (callback: () => void) => number }
