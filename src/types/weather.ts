@@ -95,7 +95,7 @@ export interface RequestTiming {
   responseDuration?: number;
   parseDuration?: number;
   cacheWriteDuration?: number;
-  cacheStatus?: 'hit' | 'miss' | 'local' | 'unknown';
+  cacheStatus?: 'hit' | 'miss' | 'local' | 'unknown' | 'sw-fallback';
   serverTiming?: string | null;
 }
 

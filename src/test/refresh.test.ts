@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SolarSentinelApp } from '../app.js';
+import { DebugPanel } from '../components/debug.js';
 import type { WeatherData } from '../types/weather.js';
 
 // happy-dom aliases PageTransitionEvent to plain Event, so its constructor
@@ -141,6 +142,25 @@ describe('Auto-refresh behavior', () => {
     window.dispatchEvent(new Event('focus'));
 
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('logs Auto-refresh done with ok: true after a successful refresh', async () => {
+    mockWeatherFetch();
+    const logSpy = vi.spyOn(DebugPanel.prototype, 'log');
+
+    const app = new SolarSentinelApp();
+    await app.initialize();
+
+    window.dispatchEvent(new Event('focus'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    const doneCall = logSpy.mock.calls.find(call =>
+      String(call[0]).startsWith('Auto-refresh done')
+    );
+    expect(doneCall).toBeDefined();
+    expect(doneCall?.[0]).toBe('Auto-refresh done (window focus)');
+    expect(doneCall?.[1]).toMatchObject({ ok: true });
+    expect(typeof (doneCall?.[1] as { ms: number }).ms).toBe('number');
   });
 
   it('refreshes from the backend when the document becomes visible again', async () => {

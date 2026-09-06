@@ -34,6 +34,7 @@ export class SolarSentinelApp {
   private static activeVisibilityRefreshHandler: (() => void) | null = null;
   private static activePageShowRefreshHandler: ((event: Event) => void) | null = null;
   private static activeOnlineRefreshHandler: (() => void) | null = null;
+  private static activeVisibilityLogHandler: (() => void) | null = null;
 
   private api = new WeatherAPI();
   private locationService = new LocationService();
@@ -91,6 +92,14 @@ export class SolarSentinelApp {
     if (document.visibilityState === 'visible') {
       void this.runAutoRefresh('visibility');
     }
+  };
+  // Logs every raw visibility transition (hidden AND visible), independent of
+  // whether it triggers a refresh, so the debug log shows whether the app was
+  // ever backgrounded/foregrounded at all — useful when a refresh never fires.
+  private readonly handleVisibilityLog = () => {
+    this.debugPanel.log(`Visibility: ${document.visibilityState}`, {
+      online: navigator.onLine,
+    });
   };
   private readonly handlePageShow = (event: Event) => {
     if ((event as PageTransitionEvent).persisted) {
@@ -345,6 +354,7 @@ export class SolarSentinelApp {
         cacheAge: data.metadata?.cacheAge,
         lastUpdated: data.metadata?.lastUpdated,
         duration: data.timing?.duration,
+        date: data.date,
       });
 
       const apiRenderStart = performance.now();
@@ -1627,6 +1637,12 @@ export class SolarSentinelApp {
     SolarSentinelApp.activeVisibilityRefreshHandler = this.handleVisibilityChange;
     document.addEventListener('visibilitychange', this.handleVisibilityChange);
 
+    if (SolarSentinelApp.activeVisibilityLogHandler) {
+      document.removeEventListener('visibilitychange', SolarSentinelApp.activeVisibilityLogHandler);
+    }
+    SolarSentinelApp.activeVisibilityLogHandler = this.handleVisibilityLog;
+    document.addEventListener('visibilitychange', this.handleVisibilityLog);
+
     if (SolarSentinelApp.activePageShowRefreshHandler) {
       window.removeEventListener('pageshow', SolarSentinelApp.activePageShowRefreshHandler);
     }
@@ -1674,12 +1690,22 @@ export class SolarSentinelApp {
 
     this.refreshInFlight = true;
     let succeeded = false;
+    const refreshStart = performance.now();
     try {
-      this.debugPanel.log(`Auto-refresh triggered (${trigger})`);
+      this.debugPanel.log(`Auto-refresh triggered (${trigger})`, {
+        online: navigator.onLine,
+        visibility: document.visibilityState,
+        date: this.currentDate,
+        followingToday: this.followingToday,
+      });
       succeeded = await this.loadData(true);
     } finally {
       this.refreshInFlight = false;
     }
+    this.debugPanel.log(`Auto-refresh done (${trigger})`, {
+      ok: succeeded,
+      ms: Math.round(performance.now() - refreshStart),
+    });
 
     if (!succeeded) {
       this.maybeScheduleResumeRetry(trigger);

@@ -46,9 +46,11 @@ describe('WeatherAPI', () => {
     };
     mockResponse.clone.mockReturnValue(mockResponse);
     vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
-    mockResponse.headers.get.mockImplementation((header: string) =>
-      header === 'Server-Timing' ? 'parseRequest;dur=1, total;dur=2' : 'hit'
-    );
+    mockResponse.headers.get.mockImplementation((header: string) => {
+      if (header === 'Server-Timing') return 'parseRequest;dur=1, total;dur=2';
+      if (header === 'X-Cache-Status') return 'hit';
+      return null;
+    });
 
     const result = await api.fetchWeatherData(mockLocation, '2025-08-31');
 

@@ -28,7 +28,7 @@ export class DebugPanel {
       const parsed = JSON.parse(raw) as DebugEntry[];
       if (!Array.isArray(parsed) || parsed.length === 0) return [];
       parsed.push({
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: this.formatTimestamp(new Date()),
         message: '— restored from previous page load —',
       });
       return parsed;
@@ -87,7 +87,7 @@ export class DebugPanel {
   }
 
   log(message: string, data?: unknown): void {
-    const timestamp = new Date().toLocaleTimeString();
+    const timestamp = this.formatTimestamp(new Date());
     const entry: DebugEntry = { timestamp, message, data };
 
     if (this.consoleLoggingEnabled) {
@@ -309,6 +309,13 @@ export class DebugPanel {
     } catch {
       // sessionStorage unavailable or full; the in-memory log still works.
     }
+  }
+
+  // Persisted logs now span days (sessionStorage survives reloads across a
+  // backgrounded/resumed app), so the timestamp includes the date, e.g.
+  // "9/5 7:54:20 AM", not just the time.
+  private formatTimestamp(d: Date): string {
+    return `${d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })} ${d.toLocaleTimeString()}`;
   }
 
   private getConsoleLoggingEnabled(): boolean {

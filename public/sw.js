@@ -154,7 +154,14 @@ function networkFirstApi(event) {
 
           if (isFresh) {
             console.log('API network failed, serving from cache:', event.request.url);
-            return cached;
+            const ageMs = Date.now() - cachedAt;
+            const headers = new Headers(cached.headers);
+            headers.set('sw-served-from-cache', String(ageMs));
+            return new Response(cached.body, {
+              status: cached.status,
+              statusText: cached.statusText,
+              headers
+            });
           }
 
           if (cached) {

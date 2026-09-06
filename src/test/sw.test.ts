@@ -173,6 +173,11 @@ describe('sw.js networkFirstApi', () => {
 
     const second = await dispatchFetch(handlers, url);
     expect(await second.json()).toEqual({ hello: 'world' });
+
+    const servedFromCacheAge = second.headers.get('sw-served-from-cache');
+    expect(servedFromCacheAge).not.toBeNull();
+    expect(Number(servedFromCacheAge)).not.toBeNaN();
+    expect(Number(servedFromCacheAge)).toBeGreaterThanOrEqual(0);
   });
 
   it('rejects when the fallback is stale (30 minutes old) and deletes the stale entry', async () => {

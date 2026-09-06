@@ -55,6 +55,10 @@ export class WeatherAPI {
     }
 
     const cacheStatus = response.headers.get('X-Cache-Status') as 'hit' | 'miss' | null;
+    // Set by the service worker (networkFirstApi) when the network failed and
+    // a still-fresh cached copy was served instead — lets the debug log show
+    // that the "response" never actually reached the real backend.
+    const swServedFromCache = response.headers.get('sw-served-from-cache');
     const serverTiming = response.headers.get('Server-Timing');
     const parseStart = performance.now();
     const data = await response.json();
@@ -75,7 +79,7 @@ export class WeatherAPI {
         responseDuration,
         parseDuration,
         cacheWriteDuration,
-        cacheStatus: cacheStatus || 'unknown',
+        cacheStatus: swServedFromCache ? 'sw-fallback' : cacheStatus || 'unknown',
         serverTiming,
       },
     } as WeatherData & { timing: RequestTiming };
@@ -154,6 +158,10 @@ export class WeatherAPI {
     }
 
     const cacheStatus = response.headers.get('X-Cache-Status') as 'hit' | 'miss' | null;
+    // Set by the service worker (networkFirstApi) when the network failed and
+    // a still-fresh cached copy was served instead — lets the debug log show
+    // that the "response" never actually reached the real backend.
+    const swServedFromCache = response.headers.get('sw-served-from-cache');
     const serverTiming = response.headers.get('Server-Timing');
     const parseStart = performance.now();
     const data = await response.json();
@@ -173,7 +181,7 @@ export class WeatherAPI {
         responseDuration,
         parseDuration,
         cacheWriteDuration,
-        cacheStatus: cacheStatus || 'unknown',
+        cacheStatus: swServedFromCache ? 'sw-fallback' : cacheStatus || 'unknown',
         serverTiming,
       },
     } as DailyCalendarData & { timing: RequestTiming };
