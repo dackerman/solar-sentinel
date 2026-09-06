@@ -36,6 +36,8 @@ const setupDOM = () => {
 };
 
 describe('Auto-refresh behavior', () => {
+  let weatherFetch: any;
+
   const mkData = (date = new Date().toLocaleDateString('en-CA')): WeatherData => ({
     labels: ['12:00 AM'],
     uv: [0],
@@ -62,7 +64,7 @@ describe('Auto-refresh behavior', () => {
   };
 
   const mockWeatherFetch = () => {
-    vi.mocked(global.fetch).mockImplementation(async input => {
+    weatherFetch.mockImplementation(async (input: any) => {
       const url = new URL(input.toString(), 'http://localhost');
       const date = url.searchParams.get('date') || new Date().toLocaleDateString('en-CA');
 
@@ -73,7 +75,21 @@ describe('Auto-refresh behavior', () => {
   beforeEach(() => {
     setupDOM();
     vi.clearAllMocks();
+    weatherFetch = vi.fn();
+    const clientLogFetch = vi.fn(async (..._args: unknown[]) => ({
+      ok: true,
+      json: async () => ({ accepted: 0, received: 0 }),
+    }));
+    vi.mocked(global.fetch).mockImplementation(((input: any, init: any) =>
+      input.toString().includes('/api/client-log')
+        ? clientLogFetch(input, init)
+        : weatherFetch(input, init)) as any);
     localStorage.clear();
+    sessionStorage.clear();
+    Object.defineProperty(navigator, 'sendBeacon', {
+      value: vi.fn(() => true),
+      configurable: true,
+    });
     vi.useFakeTimers();
     vi.mocked(navigator.geolocation.getCurrentPosition).mockImplementation((_success, error) => {
       error?.({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
@@ -81,6 +97,7 @@ describe('Auto-refresh behavior', () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    delete (navigator as any).sendBeacon;
     // A couple of tests below replace the shared Chart.js mock's
     // implementation (e.g. to hand out specific chart instances); restore the
     // default here so that doesn't leak into later tests that create charts.
@@ -91,10 +108,10 @@ describe('Auto-refresh behavior', () => {
   });
 
   it('skips refresh when a request is already in flight', async () => {
-    vi.mocked(global.fetch).mockResolvedValueOnce(mkResponse() as any);
+    weatherFetch.mockResolvedValueOnce(mkResponse() as any);
 
     let resolveRefresh!: (value: any) => void;
-    vi.mocked(global.fetch).mockImplementationOnce(
+    weatherFetch.mockImplementationOnce(
       () =>
         new Promise(resolve => {
           resolveRefresh = resolve;
@@ -107,15 +124,15 @@ describe('Auto-refresh behavior', () => {
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
 
     // Once the hung request settles, the skipped refresh runs exactly once as
     // a queued follow-up — so a resume during a stuck request isn't lost.
     resolveRefresh(mkResponse());
     await vi.advanceTimersByTimeAsync(0);
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(weatherFetch).toHaveBeenCalledTimes(3);
     await vi.advanceTimersByTimeAsync(0);
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(weatherFetch).toHaveBeenCalledTimes(3);
   });
 
   it('refreshes every five minutes while the page stays open', async () => {
@@ -124,13 +141,13 @@ describe('Auto-refresh behavior', () => {
     const app = new SolarSentinelApp();
     await app.initialize();
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000 - 1);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
   });
 
   it('refreshes from the backend when the window regains focus', async () => {
@@ -141,7 +158,7 @@ describe('Auto-refresh behavior', () => {
 
     window.dispatchEvent(new Event('focus'));
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
   });
 
   it('logs Auto-refresh done with ok: true after a successful refresh', async () => {
@@ -175,7 +192,7 @@ describe('Auto-refresh behavior', () => {
     });
     document.dispatchEvent(new Event('visibilitychange'));
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
   });
 
   it('does not refresh when visibilitychange fires while the document is hidden', async () => {
@@ -190,7 +207,7 @@ describe('Auto-refresh behavior', () => {
     });
     document.dispatchEvent(new Event('visibilitychange'));
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes from the backend on a bfcache pageshow restore', async () => {
@@ -201,7 +218,7 @@ describe('Auto-refresh behavior', () => {
 
     window.dispatchEvent(makePageShowEvent(true));
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
   });
 
   it('does not refresh on pageshow when not restored from bfcache', async () => {
@@ -212,7 +229,7 @@ describe('Auto-refresh behavior', () => {
 
     window.dispatchEvent(makePageShowEvent(false));
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes across a midnight rollover when resumed via visibilitychange without timers firing', async () => {
@@ -233,10 +250,7 @@ describe('Auto-refresh behavior', () => {
     document.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(0);
 
-    const refreshUrl = new URL(
-      vi.mocked(global.fetch).mock.calls[1][0].toString(),
-      'http://localhost'
-    );
+    const refreshUrl = new URL(weatherFetch.mock.calls[1][0].toString(), 'http://localhost');
     expect(refreshUrl.searchParams.get('date')).toBeNull();
 
     const expectedLabel = new Date(2026, 4, 2).toLocaleDateString('en-US', {
@@ -256,10 +270,7 @@ describe('Auto-refresh behavior', () => {
 
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
 
-    const refreshUrl = new URL(
-      vi.mocked(global.fetch).mock.calls[1][0].toString(),
-      'http://localhost'
-    );
+    const refreshUrl = new URL(weatherFetch.mock.calls[1][0].toString(), 'http://localhost');
 
     // Following today (the default, no explicit navigation happened), the
     // refresh omits date= entirely and lets the server resolve "today" —
@@ -291,7 +302,7 @@ describe('Auto-refresh behavior', () => {
       await Promise.resolve();
     }
 
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(60 * 1000);
 
@@ -302,7 +313,7 @@ describe('Auto-refresh behavior', () => {
     expect(vi.mocked((global as any).Chart).mock.results[1].value.update).toHaveBeenCalledWith(
       'none'
     );
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes from the backend when the browser reports coming back online', async () => {
@@ -313,7 +324,7 @@ describe('Auto-refresh behavior', () => {
 
     window.dispatchEvent(new Event('online'));
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
   });
 
   it('retries once ~5s after a resume refresh fails, then renders the retry data', async () => {
@@ -321,9 +332,9 @@ describe('Auto-refresh behavior', () => {
 
     const app = new SolarSentinelApp();
     await app.initialize();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
 
-    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    weatherFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
       get: () => 'visible',
@@ -331,7 +342,7 @@ describe('Auto-refresh behavior', () => {
     document.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
 
     // Retry data resolves to a later "last updated" time than the initial load.
     vi.setSystemTime(new Date(Date.now() + 60 * 1000));
@@ -339,7 +350,7 @@ describe('Auto-refresh behavior', () => {
 
     await vi.advanceTimersByTimeAsync(5000);
 
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(weatherFetch).toHaveBeenCalledTimes(3);
     expect(document.getElementById('current-time')?.textContent).toMatch(/Last updated:/);
   });
 
@@ -348,24 +359,24 @@ describe('Auto-refresh behavior', () => {
 
     const app = new SolarSentinelApp();
     await app.initialize();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
 
-    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    weatherFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
       get: () => 'visible',
     });
     document.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(0);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
 
-    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    weatherFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await vi.advanceTimersByTimeAsync(5000);
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(weatherFetch).toHaveBeenCalledTimes(3);
 
     // No further retry scheduled after the retry itself failed.
     await vi.advanceTimersByTimeAsync(5000);
-    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(weatherFetch).toHaveBeenCalledTimes(3);
   });
 
   it('does not retry a failed timer-triggered refresh', async () => {
@@ -373,15 +384,15 @@ describe('Auto-refresh behavior', () => {
 
     const app = new SolarSentinelApp();
     await app.initialize();
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
 
-    vi.mocked(global.fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    weatherFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
 
     // No retry ~5s later, and no additional attempt before the next timer tick.
     await vi.advanceTimersByTimeAsync(5000);
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(weatherFetch).toHaveBeenCalledTimes(2);
   });
 
   it('marks the last-updated stamp stale after 30 minutes with no successful refresh', async () => {
@@ -411,11 +422,13 @@ describe('Auto-refresh behavior', () => {
     await vi.advanceTimersByTimeAsync(60 * 1000);
 
     expect(stamp.classList.contains('text-amber-600')).toBe(true);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(weatherFetch).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('Session expiry', () => {
+  let weatherFetch: any;
+
   const mkData = (date = new Date().toLocaleDateString('en-CA')): WeatherData => ({
     labels: ['12:00 AM'],
     uv: [0],
@@ -448,7 +461,7 @@ describe('Session expiry', () => {
   });
 
   const mockWeatherFetch = () => {
-    vi.mocked(global.fetch).mockImplementation(async input => {
+    weatherFetch.mockImplementation(async (input: any) => {
       const url = new URL(input.toString(), 'http://localhost');
       const date = url.searchParams.get('date') || new Date().toLocaleDateString('en-CA');
 
@@ -459,7 +472,21 @@ describe('Session expiry', () => {
   beforeEach(() => {
     setupDOM();
     vi.clearAllMocks();
+    weatherFetch = vi.fn();
+    const clientLogFetch = vi.fn(async (..._args: unknown[]) => ({
+      ok: true,
+      json: async () => ({ accepted: 0, received: 0 }),
+    }));
+    vi.mocked(global.fetch).mockImplementation(((input: any, init: any) =>
+      input.toString().includes('/api/client-log')
+        ? clientLogFetch(input, init)
+        : weatherFetch(input, init)) as any);
     localStorage.clear();
+    sessionStorage.clear();
+    Object.defineProperty(navigator, 'sendBeacon', {
+      value: vi.fn(() => true),
+      configurable: true,
+    });
     vi.useFakeTimers();
     vi.mocked(navigator.geolocation.getCurrentPosition).mockImplementation((_success, error) => {
       error?.({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
@@ -467,6 +494,7 @@ describe('Session expiry', () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    delete (navigator as any).sendBeacon;
   });
 
   it('shows the auth banner when a load hits an expired session after local cache already painted', async () => {
@@ -478,7 +506,7 @@ describe('Session expiry', () => {
     await primer.initialize();
 
     setupDOM();
-    vi.mocked(global.fetch).mockResolvedValueOnce(opaqueRedirectResponse() as any);
+    weatherFetch.mockResolvedValueOnce(opaqueRedirectResponse() as any);
 
     const app = new SolarSentinelApp();
     await app.initialize();
@@ -492,7 +520,7 @@ describe('Session expiry', () => {
     const app = new SolarSentinelApp();
     await app.initialize();
 
-    vi.mocked(global.fetch).mockResolvedValueOnce(opaqueRedirectResponse() as any);
+    weatherFetch.mockResolvedValueOnce(opaqueRedirectResponse() as any);
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
     expect(document.getElementById('auth-banner')?.classList.contains('hidden')).toBe(false);
 

@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Query the client debug log the PWA ships to the server (see /api/client-log in server.js).
+# Talks to the container's local port, so no Cloudflare Access token is needed.
+#
+#   scripts/client-log                      # newest 50 rows
+#   scripts/client-log -q Auto-refresh      # substring match (case-insensitive) on message/data
+#   scripts/client-log -s 2026-09-05T11:00:00Z -u 2026-09-05T12:00:00Z -n 500
+#   scripts/client-log -d <deviceId>        # one device only
+#   scripts/client-log --devices            # list device ids seen recently
+set -euo pipefail
+BASE="${SOLAR_SENTINEL_URL:-http://localhost:49877}"
+limit=50 q="" since="" until="" device="" load="" devices=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -q) q="$2"; shift 2 ;;
+    -n) limit="$2"; shift 2 ;;
+    -s) since="$2"; shift 2 ;;
+    -u) until="$2"; shift 2 ;;
+    -d) device="$2"; shift 2 ;;
+    -l) load="$2"; shift 2 ;;
+    --devices) devices=1; shift ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+enc() { node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$1"; }
+url="$BASE/api/client-log?limit=$limit"
+[ -n "$q" ] && url="$url&q=$(enc "$q")"
+[ -n "$since" ] && url="$url&since=$(enc "$since")"
+[ -n "$until" ] && url="$url&until=$(enc "$until")"
+[ -n "$device" ] && url="$url&device=$(enc "$device")"
+[ -n "$load" ] && url="$url&load=$(enc "$load")"
+[ "$devices" = 1 ] && url="$BASE/api/client-log?limit=2000"
+curl -sf "$url" | node -e '
+let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+  const rows = JSON.parse(s).rows;
+  if (process.argv[1] === "devices") {
+    const seen = new Map();
+    for (const r of rows) { const v = seen.get(r.deviceId) || { n: 0, last: 0, build: r.build, ua: r.userAgent }; v.n++; v.last = Math.max(v.last, r.at); seen.set(r.deviceId, v); }
+    for (const [id, v] of seen) console.log(id, "rows:", v.n, "last:", new Date(v.last).toLocaleString(), "build:", v.build, "\n   ", v.ua);
+    return;
+  }
+  for (const r of rows.slice().reverse()) {
+    const data = r.data === null || r.data === undefined ? "" : " | " + (typeof r.data === "string" ? r.data : JSON.stringify(r.data));
+    console.log(`[${r.timestamp}] (${r.deviceId.slice(0, 8)}/${r.loadId.slice(0, 6)}) ${r.message}${data}`);
+  }
+});' "$([ "$devices" = 1 ] && echo devices || echo rows)"

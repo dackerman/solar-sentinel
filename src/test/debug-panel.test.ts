@@ -146,6 +146,28 @@ describe('DebugPanel', () => {
     vi.useRealTimers();
   });
 
+  it('tracks unshipped entries via getUnshippedEntries and persists markShipped across reload', () => {
+    vi.useFakeTimers();
+    const panel = new DebugPanel();
+    panel.log('Entry A');
+    panel.log('Entry B');
+    vi.runAllTimers();
+
+    const unshipped = panel.getUnshippedEntries();
+    expect(unshipped.map(e => e.message)).toEqual(['Entry A', 'Entry B']);
+
+    panel.markShipped([unshipped[0]]);
+    vi.runAllTimers();
+    expect(panel.getUnshippedEntries().map(e => e.message)).toEqual(['Entry B']);
+
+    const restarted = new DebugPanel();
+    // The divider entry restored on construction is local-only (shipped),
+    // so only the still-unshipped "Entry B" should remain.
+    expect(restarted.getUnshippedEntries().map(e => e.message)).toEqual(['Entry B']);
+
+    vi.useRealTimers();
+  });
+
   it('applies a red tint to messages that look like failures', () => {
     const panel = new DebugPanel();
     panel.log('Location failed (200ms)');

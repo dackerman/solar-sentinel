@@ -58,6 +58,27 @@ apiHistoryDb.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_api_call_history_lookup
     ON api_call_history (route, location_key, date, status_code, fetched_at);
+
+  CREATE TABLE IF NOT EXISTS client_log (
+    id INTEGER PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    load_id TEXT NOT NULL,
+    build TEXT,
+    user_agent TEXT,
+    seq INTEGER NOT NULL,
+    client_at INTEGER NOT NULL,
+    client_timestamp TEXT,
+    message TEXT NOT NULL,
+    data TEXT,
+    received_at INTEGER NOT NULL,
+    UNIQUE(device_id, load_id, seq)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_client_log_device_at
+    ON client_log (device_id, client_at);
+
+  CREATE INDEX IF NOT EXISTS idx_client_log_at
+    ON client_log (client_at);
 `);
 
 const insertApiHistoryStatement = apiHistoryDb.prepare(`
@@ -270,6 +291,195 @@ function dedupeApiHistory() {
 pruneApiHistory();
 dedupeApiHistory();
 setInterval(pruneApiHistory, 24 * 60 * 60 * 1000);
+
+const CLIENT_LOG_MAX_ENTRIES = 300;
+const CLIENT_LOG_MAX_DATA_CHARS = 4000;
+const CLIENT_LOG_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+
+const insertClientLogStatement = apiHistoryDb.prepare(`
+  INSERT OR IGNORE INTO client_log (
+    device_id, load_id, build, user_agent, seq, client_at, client_timestamp, message, data, received_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const pruneClientLogStatement = apiHistoryDb.prepare(`
+  DELETE FROM client_log WHERE received_at < ?
+`);
+
+function pruneClientLog() {
+  try {
+    const cutoff = Date.now() - CLIENT_LOG_RETENTION_MS;
+    const result = pruneClientLogStatement.run(cutoff);
+    if (result.changes > 0) {
+      console.log(`Client log prune removed ${result.changes} row(s)`);
+    }
+  } catch (error) {
+    console.error('Client log prune error:', error.message);
+  }
+}
+
+pruneClientLog();
+setInterval(pruneClientLog, 24 * 60 * 60 * 1000).unref();
+
+function isValidClientLogString(value, minLen, maxLen) {
+  return typeof value === 'string' && value.length >= minLen && value.length <= maxLen;
+}
+
+function validateClientLogEntry(entry) {
+  if (!entry || typeof entry !== 'object') return 'Invalid log entry';
+  if (!Number.isInteger(entry.seq) || entry.seq < 0) return 'Invalid entry.seq';
+  if (!Number.isInteger(entry.at)) return 'Invalid entry.at';
+  if (!isValidClientLogString(entry.timestamp, 0, 40)) return 'Invalid entry.timestamp';
+  if (!isValidClientLogString(entry.message, 1, 500)) return 'Invalid entry.message';
+  return null;
+}
+
+// Validates and narrows an incoming client-log POST body. Returns either
+// { error } or the validated fields, never both.
+function parseClientLogRequest(body) {
+  if (!body || typeof body !== 'object') return { error: 'Invalid request body' };
+
+  const { deviceId, loadId, build, userAgent, entries } = body;
+
+  if (!isValidClientLogString(deviceId, 1, 64)) return { error: 'Invalid deviceId' };
+  if (!isValidClientLogString(loadId, 1, 64)) return { error: 'Invalid loadId' };
+  if (!isValidClientLogString(build, 0, 32)) return { error: 'Invalid build' };
+  if (!isValidClientLogString(userAgent, 0, 300)) return { error: 'Invalid userAgent' };
+  if (!Array.isArray(entries)) return { error: 'entries must be an array' };
+  if (entries.length > CLIENT_LOG_MAX_ENTRIES) {
+    return { error: `entries must not exceed ${CLIENT_LOG_MAX_ENTRIES}` };
+  }
+
+  for (const entry of entries) {
+    const entryError = validateClientLogEntry(entry);
+    if (entryError) return { error: entryError };
+  }
+
+  return { deviceId, loadId, build, userAgent, entries };
+}
+
+// JSON-encodes entry.data for storage, truncating to keep rows small.
+// null/undefined (and values JSON can't represent) are stored as NULL.
+function serializeClientLogData(data) {
+  if (data === null || data === undefined) return null;
+  let json;
+  try {
+    json = JSON.stringify(data);
+  } catch {
+    return null;
+  }
+  if (typeof json !== 'string') return null;
+  if (json.length > CLIENT_LOG_MAX_DATA_CHARS) {
+    return `${json.slice(0, CLIENT_LOG_MAX_DATA_CHARS)}…`;
+  }
+  return json;
+}
+
+// Inserts a validated batch of entries in one transaction; duplicates
+// (device_id, load_id, seq) are ignored. Returns the count actually inserted.
+function insertClientLogEntries(deviceId, loadId, build, userAgent, entries) {
+  const receivedAt = Date.now();
+  let accepted = 0;
+
+  apiHistoryDb.exec('BEGIN');
+  try {
+    for (const entry of entries) {
+      const result = insertClientLogStatement.run(
+        deviceId,
+        loadId,
+        build,
+        userAgent,
+        entry.seq,
+        entry.at,
+        entry.timestamp,
+        entry.message,
+        serializeClientLogData(entry.data),
+        receivedAt
+      );
+      if (result.changes > 0) accepted += 1;
+    }
+    apiHistoryDb.exec('COMMIT');
+  } catch (error) {
+    apiHistoryDb.exec('ROLLBACK');
+    throw error;
+  }
+
+  return accepted;
+}
+
+// Accepts an ISO date string or an epoch-ms value (as a query-string number).
+function parseClientLogTimeParam(value) {
+  if (value === undefined || value === '') return undefined;
+  if (/^-?\d+$/.test(value)) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function buildClientLogQuery({ device, load, since, until, q, limit }) {
+  const clauses = [];
+  const params = [];
+
+  if (device) {
+    clauses.push('device_id = ?');
+    params.push(device);
+  }
+  if (load) {
+    clauses.push('load_id = ?');
+    params.push(load);
+  }
+  if (since !== undefined) {
+    clauses.push('client_at >= ?');
+    params.push(since);
+  }
+  if (until !== undefined) {
+    clauses.push('client_at <= ?');
+    params.push(until);
+  }
+  if (q) {
+    clauses.push("(LOWER(message) LIKE ? OR LOWER(COALESCE(data, '')) LIKE ?)");
+    const needle = `%${q.toLowerCase()}%`;
+    params.push(needle, needle);
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+  const sql = `
+    SELECT id, device_id, load_id, build, user_agent, seq, client_at, client_timestamp, message, data
+    FROM client_log
+    ${where}
+    ORDER BY client_at DESC, seq DESC
+    LIMIT ?
+  `;
+  params.push(limit);
+
+  return { sql, params };
+}
+
+function mapClientLogRow(row) {
+  let data = null;
+  if (row.data !== null && row.data !== undefined) {
+    try {
+      data = JSON.parse(row.data);
+    } catch {
+      data = row.data;
+    }
+  }
+
+  return {
+    id: row.id,
+    deviceId: row.device_id,
+    loadId: row.load_id,
+    build: row.build,
+    userAgent: row.user_agent,
+    seq: row.seq,
+    at: row.client_at,
+    timestamp: row.client_timestamp,
+    message: row.message,
+    data,
+  };
+}
 
 // Cache cleanup function - removes old location forecasts
 function cleanupCache() {
@@ -1139,6 +1349,65 @@ app.get('/api/history', (req, res) => {
   });
 });
 
+// Telemetry sink for the phone PWA's in-app debug log. Body parsing is scoped
+// to this route only (256kb limit) — the app has no global JSON body parser.
+app.post('/api/client-log', express.json({ limit: '256kb' }), (req, res) => {
+  res.set('Cache-Control', 'no-store');
+
+  const parsed = parseClientLogRequest(req.body);
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  const { deviceId, loadId, build, userAgent, entries } = parsed;
+
+  try {
+    const accepted = insertClientLogEntries(deviceId, loadId, build, userAgent, entries);
+    console.log('Client log received', {
+      deviceId,
+      loadId,
+      received: entries.length,
+      accepted,
+    });
+    res.json({ accepted, received: entries.length });
+  } catch (error) {
+    console.error('Client log insert error:', error.message);
+    res.status(500).json({ error: 'Failed to store client log' });
+  }
+});
+
+// Convert body-parser errors (malformed JSON, oversized payload) on the
+// client-log route into a plain 400 JSON response rather than Express's
+// default HTML error page. Scoped by path since express.json() is only
+// mounted on that one route.
+app.use((err, req, res, next) => {
+  if (err && req.path === '/api/client-log') {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+  next(err);
+});
+
+app.get('/api/client-log', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+
+  const device = getStringQueryParam(req.query.device);
+  const load = getStringQueryParam(req.query.load);
+  const q = getStringQueryParam(req.query.q);
+  const since = parseClientLogTimeParam(getStringQueryParam(req.query.since));
+  const until = parseClientLogTimeParam(getStringQueryParam(req.query.until));
+  const limitParam = parseInt(getStringQueryParam(req.query.limit), 10);
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 2000) : 200;
+
+  try {
+    const { sql, params } = buildClientLogQuery({ device, load, since, until, q, limit });
+    const rows = apiHistoryDb.prepare(sql).all(...params);
+    res.json({ rows: rows.map(mapClientLogRow) });
+  } catch (error) {
+    console.error('Client log read error:', error.message);
+    res.status(500).json({ error: 'Failed to load client log' });
+  }
+});
+
 // Re-auth entry point: Cloudflare Access intercepts this request before it
 // reaches Express when the session is unauthenticated, triggering the login
 // flow. Once authenticated, bounce back to the app root. Must never be
@@ -1179,7 +1448,7 @@ app.get('/api/uv-today/poll', async (req, res) => {
 });
 
 // Export the app for testing
-export { apiHistoryDb, dedupeApiHistory };
+export { apiHistoryDb, dedupeApiHistory, pruneClientLog };
 export default app;
 
 // Only start server if this file is run directly (not imported)

@@ -88,6 +88,10 @@ export interface DebugEntry {
   timestamp: string;
   message: string;
   data?: unknown;
+  seq: number;
+  at: number;
+  loadId: string;
+  shipped?: boolean;
 }
 
 export interface RequestTiming {

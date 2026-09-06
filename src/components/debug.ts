@@ -5,6 +5,13 @@ const PERSIST_DEBOUNCE_MS = 500;
 const COPIED_LABEL_MS = 1500;
 const NEAR_BOTTOM_THRESHOLD_PX = 8;
 
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
 export class DebugPanel {
   private entries: DebugEntry[];
   private isVisible = false;
@@ -15,6 +22,8 @@ export class DebugPanel {
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly maxEntries = 300;
   private readonly consoleLoggingEnabled = this.getConsoleLoggingEnabled();
+  private readonly loadId = generateId();
+  private nextSeq = 0;
 
   constructor() {
     this.entries = this.loadPersistedEntries();
@@ -25,13 +34,40 @@ export class DebugPanel {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       if (!raw) return [];
-      const parsed = JSON.parse(raw) as DebugEntry[];
+      const parsed = JSON.parse(raw) as Array<Partial<DebugEntry>>;
       if (!Array.isArray(parsed) || parsed.length === 0) return [];
-      parsed.push({
+      const normalized: DebugEntry[] = parsed.map((entry, index) => {
+        if (typeof entry.seq === 'number' && typeof entry.loadId === 'string') {
+          return {
+            timestamp: entry.timestamp ?? '',
+            message: entry.message ?? '',
+            data: entry.data,
+            seq: entry.seq,
+            at: typeof entry.at === 'number' ? entry.at : 0,
+            loadId: entry.loadId,
+            shipped: entry.shipped,
+          };
+        }
+        // Legacy entry predating shipping metadata: keep it local-only.
+        return {
+          timestamp: entry.timestamp ?? '',
+          message: entry.message ?? '',
+          data: entry.data,
+          seq: index,
+          at: 0,
+          loadId: 'legacy',
+          shipped: true,
+        };
+      });
+      normalized.push({
         timestamp: this.formatTimestamp(new Date()),
         message: '— restored from previous page load —',
+        seq: 0,
+        at: 0,
+        loadId: this.loadId,
+        shipped: true,
       });
-      return parsed;
+      return normalized;
     } catch {
       return [];
     }
@@ -87,8 +123,16 @@ export class DebugPanel {
   }
 
   log(message: string, data?: unknown): void {
-    const timestamp = this.formatTimestamp(new Date());
-    const entry: DebugEntry = { timestamp, message, data };
+    const now = new Date();
+    const timestamp = this.formatTimestamp(now);
+    const entry: DebugEntry = {
+      timestamp,
+      message,
+      data,
+      seq: this.nextSeq++,
+      at: now.getTime(),
+      loadId: this.loadId,
+    };
 
     if (this.consoleLoggingEnabled) {
       console.debug(`[Solar Sentinel] ${message}`, data ?? '');
@@ -101,6 +145,23 @@ export class DebugPanel {
 
     this.schedulePersist();
     this.updateDisplay();
+  }
+
+  /** Entries not yet shipped to the server, in log order. */
+  getUnshippedEntries(): DebugEntry[] {
+    return this.entries.filter(entry => !entry.shipped);
+  }
+
+  /** Marks the given entry objects (by reference) as shipped and persists the flag. */
+  markShipped(entries: DebugEntry[]): void {
+    if (entries.length === 0) return;
+    const shippedSet = new Set(entries);
+    for (const entry of this.entries) {
+      if (shippedSet.has(entry)) {
+        entry.shipped = true;
+      }
+    }
+    this.schedulePersist();
   }
 
   toggle(): void {
@@ -303,7 +364,15 @@ export class DebugPanel {
             data = undefined;
           }
         }
-        return { timestamp: entry.timestamp, message: entry.message, data };
+        return {
+          timestamp: entry.timestamp,
+          message: entry.message,
+          data,
+          seq: entry.seq,
+          at: entry.at,
+          loadId: entry.loadId,
+          shipped: entry.shipped,
+        };
       });
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(safeEntries));
     } catch {

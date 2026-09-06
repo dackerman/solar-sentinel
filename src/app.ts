@@ -2,6 +2,7 @@ import { WeatherAPI, AuthExpiredError } from './services/api.js';
 import { LocationService } from './services/location.js';
 import { SavedLocationsService } from './services/savedLocations.js';
 import { DebugPanel } from './components/debug.js';
+import { ClientLogShipper } from './services/clientLog.js';
 import { LocationPicker } from './components/locationPicker.js';
 import { GeocodingService } from './services/geocoding.js';
 import { SwipeNavigator } from './utils/swipeNavigation.js';
@@ -35,6 +36,7 @@ export class SolarSentinelApp {
   private static activePageShowRefreshHandler: ((event: Event) => void) | null = null;
   private static activeOnlineRefreshHandler: (() => void) | null = null;
   private static activeVisibilityLogHandler: (() => void) | null = null;
+  private static activeClientLogShipper: ClientLogShipper | null = null;
 
   private api = new WeatherAPI();
   private locationService = new LocationService();
@@ -42,6 +44,7 @@ export class SolarSentinelApp {
   private readonly geocodingService = new GeocodingService();
   private locationPicker: LocationPicker | null = null;
   private debugPanel!: DebugPanel;
+  private serviceWorkerBuild = '';
 
   private currentLocation: Location = this.locationService.getDefaultLocation();
   private currentDate = new Date().toLocaleDateString('en-CA');
@@ -129,6 +132,12 @@ export class SolarSentinelApp {
     this.setupEventListeners();
     await this.loadData();
     void this.logServiceWorkerBuild();
+    SolarSentinelApp.activeClientLogShipper?.stop();
+    SolarSentinelApp.activeClientLogShipper = new ClientLogShipper({
+      panel: this.debugPanel,
+      getBuild: () => this.serviceWorkerBuild,
+    });
+    SolarSentinelApp.activeClientLogShipper.start();
     this.scheduleAutoRefresh();
     this.scheduleCacheSweep();
     this.markPerformance('initialize-complete');
@@ -153,6 +162,7 @@ export class SolarSentinelApp {
       .find(Boolean)?.[1];
 
     if (version) {
+      this.serviceWorkerBuild = version;
       this.debugPanel.log(`Service worker build ${version}`, {
         controlled: Boolean(navigator.serviceWorker.controller),
       });
