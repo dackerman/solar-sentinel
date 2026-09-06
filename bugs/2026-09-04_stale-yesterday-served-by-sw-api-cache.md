@@ -37,3 +37,19 @@ Uninstall/reinstall of the PWA does not clear Chrome's Cache Storage for the ori
   delete and rethrow so the page sees a real network error. No in-worker timers for expiry.
 - App: refresh on `online`; a failed resume-triggered refresh retries once after 5 s instead of
   waiting for the 5-minute interval.
+
+## Recurrence (2026-09-05 morning, reported 2026-09-06)
+
+- Screenshot 7:54 AM Sept 5: "Friday, September 4", non-today layout, "Last updated: 10:12 PM".
+  Phone was on build 5a3e5a951151 (SW fix present), so the worker cannot have served day-old data.
+- Server logs (local): phone's last full load Sept 4 22:21:51 (data lastUpdated 22:12:33 ✓).
+  Sept 5 07:54:20: `/api/daily-calendar` only, home coords. No weather request off the healthcheck
+  cadence between 07:40 and 07:54:41. 07:54:41: full weather+calendar (the pull-to-refresh).
+  Same calendar-only blip at Sept 4 22:21:23, 28 s before a full load.
+- Ruled out: Cloudflare edge cache (`cf-cache-status: DYNAMIC`, no Cache-Control on the API);
+  browser heuristic cache (no Last-Modified, so any hit would revalidate against origin and be logged).
+- Remaining candidates are on the phone and need the client log: first request after wake hung
+  on a dead connection (expect "Load error … timed out after 20s" + retry), the resume event never
+  fired (expect no entries at all until the reload), or a locally answered response (expect a
+  "Weather API response" with an old `date`). Commit after 89cf16c adds the fields to tell these
+  apart; the panel search + Copy is the way to collect them.
