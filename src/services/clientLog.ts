@@ -7,6 +7,12 @@ const DEFAULT_FLUSH_INTERVAL_MS = 60_000;
 const DEFAULT_MAX_BATCH = 300;
 const STARTUP_FLUSH_DELAY_MS = 5000;
 const MAX_MESSAGE_LENGTH = 500;
+// Chrome enforces a 64KB body cap on keepalive fetch/sendBeacon requests.
+// Stay well under it so a large backlog never fails a batch outright.
+const MAX_BATCH_BYTES = 40_000;
+// Safety valve so one flush() call can't loop forever draining a backlog.
+const MAX_BATCHES_PER_FLUSH = 20;
+const TOO_LARGE_PLACEHOLDER = '[too large]';
 
 function generateId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -100,21 +106,77 @@ export class ClientLogShipper {
       // The server dedupes on (deviceId, loadId, seq) and seq restarts at 0
       // on every page load, so entries restored from a previous load must go
       // out under their own loadId — one batch per load, in log order.
+      // Within a load, a batch is further capped to stay under the 64KB
+      // keepalive body limit, so a large backlog drains over several POSTs.
       const loadIds = [...new Set(unshipped.map(entry => entry.loadId))];
-      for (const loadId of loadIds) {
-        const entries = unshipped.filter(entry => entry.loadId === loadId).slice(0, this.maxBatch);
-        await this.send(entries, reason);
+      let shippedCount = 0;
+      let batchesSent = 0;
+
+      outer: for (const loadId of loadIds) {
+        const entries = unshipped.filter(entry => entry.loadId === loadId);
+        const batches = this.buildBatches(entries);
+        for (const batch of batches) {
+          if (batchesSent >= MAX_BATCHES_PER_FLUSH) break outer;
+          batchesSent++;
+          const ok = await this.send(batch, reason);
+          if (!ok) break outer;
+          shippedCount += batch.length;
+        }
+      }
+
+      // One confirmation per flush (not per batch) so a big drain doesn't
+      // spam the log with a line per POST.
+      if (shippedCount > 0) {
+        this.panel.log('Client log shipped', { count: shippedCount, reason });
       }
     } finally {
       this.flushInFlight = false;
     }
   }
 
-  private async send(entries: DebugEntry[], reason: string): Promise<void> {
-    const payload = this.buildPayload(entries);
-    const json = JSON.stringify(payload);
-    const useBeacon =
-      (reason === 'hidden' || reason === 'pagehide') && typeof navigator.sendBeacon === 'function';
+  /** Splits one load's entries, in order, into batches under MAX_BATCH_BYTES. */
+  private buildBatches(entries: DebugEntry[]): DebugEntry[][] {
+    // Size incrementally: the envelope once, then each entry's own JSON plus
+    // a separator, so a 300-entry backlog isn't re-serialized per candidate.
+    if (entries.length === 0) return [];
+    const envelopeBytes = JSON.stringify({
+      ...this.buildPayload([entries[0]]),
+      entries: [],
+    }).length;
+    const entryBytes = (entry: DebugEntry): number =>
+      JSON.stringify(this.buildPayload([entry]).entries[0]).length + 1;
+
+    const batches: DebugEntry[][] = [];
+    let i = 0;
+    while (i < entries.length) {
+      // Always take at least one entry per batch, even if it alone is huge;
+      // send() truncates an oversized singleton at transmit time.
+      const batch: DebugEntry[] = [entries[i]];
+      let size = envelopeBytes + entryBytes(entries[i]);
+      i++;
+      while (i < entries.length && batch.length < this.maxBatch) {
+        const next = entryBytes(entries[i]);
+        if (size + next > MAX_BATCH_BYTES) break;
+        batch.push(entries[i]);
+        size += next;
+        i++;
+      }
+      batches.push(batch);
+    }
+    return batches;
+  }
+
+  /** Sends one batch. Returns whether it was accepted (and marks it shipped). */
+  private async send(entries: DebugEntry[], reason: string): Promise<boolean> {
+    let payload = this.buildPayload(entries);
+    let json = JSON.stringify(payload);
+    if (entries.length === 1 && json.length > MAX_BATCH_BYTES) {
+      payload = this.buildPayload([{ ...entries[0], data: TOO_LARGE_PLACEHOLDER }]);
+      json = JSON.stringify(payload);
+    }
+
+    const isPageGoingAway = reason === 'hidden' || reason === 'pagehide';
+    const useBeacon = isPageGoingAway && typeof navigator.sendBeacon === 'function';
 
     if (useBeacon) {
       let delivered = false;
@@ -127,9 +189,12 @@ export class ClientLogShipper {
         delivered = false;
       }
       if (delivered) {
-        this.markShippedAndLog(entries, reason);
+        this.panel.markShipped(entries);
+        return true;
       }
-      return;
+      // sendBeacon unavailable or refused the payload (still capped by the
+      // same 64KB limit, but our batches are already well under it): fall
+      // back to a keepalive fetch since the page may still be going away.
     }
 
     try {
@@ -137,19 +202,17 @@ export class ClientLogShipper {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: json,
-        keepalive: true,
+        ...(isPageGoingAway ? { keepalive: true } : {}),
       });
       if (response.ok) {
-        this.markShippedAndLog(entries, reason);
+        this.panel.markShipped(entries);
+        return true;
       }
+      return false;
     } catch {
       // Network failure: entries stay unshipped and go out on the next flush.
+      return false;
     }
-  }
-
-  private markShippedAndLog(entries: DebugEntry[], reason: string): void {
-    this.panel.markShipped(entries);
-    this.panel.log('Client log shipped', { count: entries.length, reason });
   }
 
   private buildPayload(entries: DebugEntry[]): ClientLogPayload {

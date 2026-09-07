@@ -42,7 +42,9 @@ describe('ClientLogShipper', () => {
     const [url, init] = vi.mocked(global.fetch).mock.calls[0];
     expect(url).toBe('/api/client-log');
     expect((init as RequestInit).method).toBe('POST');
-    expect((init as RequestInit).keepalive).toBe(true);
+    // 'startup' keeps the page alive on its own; no need for keepalive (and
+    // no 64KB body cap that comes with it).
+    expect((init as RequestInit).keepalive).toBeFalsy();
 
     const body = lastFetchBody();
     expect(typeof body.deviceId).toBe('string');
@@ -264,10 +266,117 @@ describe('ClientLogShipper batching across page loads', () => {
     const byMessages = Object.fromEntries(bodies.map(b => [messagesIn(b).join(','), b.loadId]));
     expect(Object.keys(byMessages).sort()).toEqual(['new one', 'old one,old two']);
     expect(byMessages['new one']).not.toBe(byMessages['old one,old two']);
-    // Only the shipper's own confirmation lines remain unshipped.
-    expect(current.getUnshippedEntries().map(e => e.message)).toEqual([
-      'Client log shipped',
-      'Client log shipped',
-    ]);
+    // The confirmation is logged once per flush (total count across every
+    // batch it sent), not once per batch/loadId.
+    expect(current.getUnshippedEntries().map(e => e.message)).toEqual(['Client log shipped']);
+    const [shippedLog] = current.getUnshippedEntries();
+    expect(shippedLog.data).toEqual({ count: 3, reason: 'startup' });
+  });
+});
+
+describe('ClientLogShipper large-backlog batching and transport rules', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    sessionStorage.clear();
+    localStorage.clear();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'sendBeacon');
+  });
+
+  function seedBacklog(count: number, dataSize: number, loadId = 'backlog-load'): void {
+    const bigData = 'x'.repeat(dataSize);
+    const persisted = Array.from({ length: count }, (_, i) => ({
+      timestamp: '9/5 1:00:00 PM',
+      message: `entry ${i}`,
+      data: bigData,
+      seq: i,
+      at: 1000 + i,
+      loadId,
+      shipped: false,
+    }));
+    sessionStorage.setItem('solar_sentinel_debug_log', JSON.stringify(persisted));
+  }
+
+  it('drains a 400-entry backlog across multiple sub-40KB POSTs and logs one shipped confirmation', async () => {
+    seedBacklog(400, 300);
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true } as unknown as Response);
+
+    const panel = new DebugPanel();
+    const shipper = new ClientLogShipper({ panel, getBuild: () => '' });
+
+    await shipper.flush('startup');
+
+    const calls = vi.mocked(global.fetch).mock.calls;
+    expect(calls.length).toBeGreaterThan(1);
+
+    let totalEntries = 0;
+    for (const [, init] of calls) {
+      const body = (init as RequestInit).body as string;
+      expect(body.length).toBeLessThanOrEqual(40_000);
+      totalEntries += JSON.parse(body).entries.length;
+    }
+    expect(totalEntries).toBe(400);
+
+    expect(panel.getUnshippedEntries().filter(e => e.message.startsWith('entry ')).length).toBe(0);
+
+    const shippedLogs = panel.getUnshippedEntries().filter(e => e.message === 'Client log shipped');
+    expect(shippedLogs).toHaveLength(1);
+    expect(shippedLogs[0].data).toEqual({ count: 400, reason: 'startup' });
+  });
+
+  it('keeps an earlier batch shipped when a later batch in the same flush fails, and drains the rest next flush', async () => {
+    seedBacklog(400, 300);
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce({ ok: true } as unknown as Response)
+      .mockResolvedValueOnce({ ok: false } as unknown as Response)
+      .mockResolvedValue({ ok: true } as unknown as Response);
+
+    const panel = new DebugPanel();
+    const shipper = new ClientLogShipper({ panel, getBuild: () => '' });
+
+    await shipper.flush('startup');
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    const firstBatchCount = JSON.parse(
+      (vi.mocked(global.fetch).mock.calls[0][1] as RequestInit).body as string
+    ).entries.length;
+    const remaining = panel.getUnshippedEntries().filter(e => e.message.startsWith('entry '));
+    expect(remaining.length).toBe(400 - firstBatchCount);
+
+    await shipper.flush('startup');
+
+    expect(panel.getUnshippedEntries().filter(e => e.message.startsWith('entry ')).length).toBe(0);
+  });
+
+  it('omits keepalive for interval/startup posts, and falls back to a keepalive fetch when sendBeacon fails on hide', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({ ok: true } as unknown as Response);
+
+    const panel1 = new DebugPanel();
+    panel1.log('interval entry');
+    const shipper1 = new ClientLogShipper({ panel: panel1, getBuild: () => '' });
+    await shipper1.flush('interval');
+    expect((vi.mocked(global.fetch).mock.calls[0][1] as RequestInit).keepalive).toBeFalsy();
+
+    const panel2 = new DebugPanel();
+    panel2.log('startup entry');
+    const shipper2 = new ClientLogShipper({ panel: panel2, getBuild: () => '' });
+    await shipper2.flush('startup');
+    expect((vi.mocked(global.fetch).mock.calls[1][1] as RequestInit).keepalive).toBeFalsy();
+
+    const sendBeacon = vi.fn(() => false);
+    Object.defineProperty(navigator, 'sendBeacon', { value: sendBeacon, configurable: true });
+
+    const panel3 = new DebugPanel();
+    panel3.log('hidden entry');
+    const shipper3 = new ClientLogShipper({ panel: panel3, getBuild: () => '' });
+    await shipper3.flush('hidden');
+
+    expect(sendBeacon).toHaveBeenCalledTimes(1);
+    const hiddenCall = vi.mocked(global.fetch).mock.calls[2];
+    expect((hiddenCall[1] as RequestInit).keepalive).toBe(true);
+    expect(panel3.getUnshippedEntries().some(e => e.message === 'hidden entry')).toBe(false);
   });
 });
