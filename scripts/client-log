@@ -4,7 +4,7 @@
 #
 #   scripts/client-log                      # newest 50 rows
 #   scripts/client-log -q Auto-refresh      # substring match (case-insensitive) on message/data
-#   scripts/client-log -s 2026-09-05T11:00:00Z -u 2026-09-05T12:00:00Z -n 500
+#   scripts/client-log -s "today 00:00" -u "today 12:00" -n 500   # local time; ISO with Z also works
 #   scripts/client-log -d <deviceId>        # one device only
 #   scripts/client-log --devices            # list device ids seen recently
 set -euo pipefail
@@ -23,10 +23,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 enc() { node -e 'process.stdout.write(encodeURIComponent(process.argv[1]))' "$1"; }
+# since/until: any string GNU date understands; bare times are local, ISO with Z is UTC.
+ms() { date -d "$1" +%s000; }
 url="$BASE/api/client-log?limit=$limit"
 [ -n "$q" ] && url="$url&q=$(enc "$q")"
-[ -n "$since" ] && url="$url&since=$(enc "$since")"
-[ -n "$until" ] && url="$url&until=$(enc "$until")"
+[ -n "$since" ] && url="$url&since=$(ms "$since")"
+[ -n "$until" ] && url="$url&until=$(ms "$until")"
 [ -n "$device" ] && url="$url&device=$(enc "$device")"
 [ -n "$load" ] && url="$url&load=$(enc "$load")"
 [ "$devices" = 1 ] && url="$BASE/api/client-log?limit=2000"
