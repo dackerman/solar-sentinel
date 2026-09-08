@@ -689,6 +689,28 @@ describe('Server API Endpoints', () => {
     });
   });
 
+  describe('API responses are never HTTP-cacheable', () => {
+    // A restored Android tab replays HTTP-cached API responses without
+    // validation for requests made before the load event; no-store means
+    // there is nothing on disk to replay.
+    it.each(['/api/weather', '/api/daily-calendar', '/api/uv-today', '/api/daily-summary'])(
+      'sends Cache-Control: no-store on %s',
+      async path => {
+        const testDate = getTestDate(6);
+        mockFetch.mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(getMockCombinedData(testDate)),
+        });
+        const response = await request(app)
+          .get(path)
+          .query({ lat: 42.8006, lon: -71.3048, date: testDate });
+        expect(response.status).toBe(200);
+        expect(response.headers['cache-control']).toBe('no-store');
+      }
+    );
+  });
+
   describe('GET /auth/refresh', () => {
     it('redirects to / with no-store caching so Cloudflare Access sees the raw request', async () => {
       const response = await request(app).get('/auth/refresh');

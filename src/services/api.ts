@@ -435,7 +435,13 @@ export class WeatherAPI {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
 
-    const request = fetch(url, { redirect: 'manual', signal: controller.signal })
+    // cache: 'no-store' is load-bearing. Chrome loads a restored tab (e.g. the
+    // Android PWA relaunched after its process was killed) as a history
+    // navigation, and requests issued before the load event then get
+    // force-cache semantics: any HTTP-cached response is replayed without
+    // validation, however old. That replayed yesterday's weather on first
+    // open. An explicit cache mode on the request overrides the frame policy.
+    const request = fetch(url, { redirect: 'manual', cache: 'no-store', signal: controller.signal })
       .catch(error => {
         if (controller.signal.aborted) {
           throw new Error(`Request timed out after 20s: ${url}`);

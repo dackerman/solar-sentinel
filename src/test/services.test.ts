@@ -56,6 +56,7 @@ describe('WeatherAPI', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31', {
       redirect: 'manual',
+      cache: 'no-store',
       signal: expect.any(AbortSignal),
     });
     expect(result.timing).toBeDefined();
@@ -116,8 +117,31 @@ describe('WeatherAPI', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/weather?lat=42.8006&lon=-71.3048&date=2025-08-31', {
       redirect: 'manual',
+      cache: 'no-store',
       signal: expect.any(AbortSignal),
     });
+  });
+
+  it('bypasses the HTTP cache explicitly so a restored tab cannot replay a stale response', async () => {
+    // Chrome loads a restored/back-forward tab with force-cache semantics for
+    // requests issued before the load event; only an explicit cache mode on
+    // the request overrides that.
+    const mockResponse = {
+      ok: true,
+      type: 'basic',
+      headers: { get: vi.fn().mockReturnValue(null) },
+      json: vi.fn().mockResolvedValue({ startDate: '2025-08-31', days: [] }),
+      clone: vi.fn(),
+    };
+    mockResponse.clone.mockReturnValue(mockResponse);
+    vi.mocked(global.fetch).mockResolvedValue(mockResponse as any);
+
+    await api.fetchDailyCalendar(mockLocation, null);
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/daily-calendar?lat=42.8006&lon=-71.3048',
+      expect.objectContaining({ cache: 'no-store' })
+    );
   });
 
   it('should throw AuthExpiredError when the response is an opaque redirect (Cloudflare Access login)', async () => {

@@ -1236,6 +1236,15 @@ function prewarmHomeForecast() {
   refreshForecastInBackground(HOME_LOCATION.lat, HOME_LOCATION.lon, cacheKey);
 }
 
+// API responses must never land in the browser's HTTP cache: a restored tab
+// replays cached responses for early requests without validation (see
+// fetchOnce in src/services/api.ts). The app keeps its own caches
+// (localStorage + service worker) with explicit freshness rules instead.
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
 // UV API endpoint
 app.get('/api/uv-today', async (req, res) => {
   await handleForecastRequest(

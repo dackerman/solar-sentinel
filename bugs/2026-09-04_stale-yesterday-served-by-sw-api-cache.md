@@ -53,3 +53,35 @@ Uninstall/reinstall of the PWA does not clear Chrome's Cache Storage for the ori
   fired (expect no entries at all until the reload), or a locally answered response (expect a
   "Weather API response" with an old `date`). Commit after 89cf16c adds the fields to tell these
   apart; the panel search + Copy is the way to collect them.
+
+## Root cause found (2026-09-08 02:38, from the shipped client log)
+
+Cold start of the Android PWA (`Perf: load-start reason user-initiated`, local cache miss):
+```
+Date resolved by server: 2026-09-08 → 2026-09-07
+Weather API response: hit (19ms) | cacheAge 381757, lastUpdated 2026-09-07T20:19:22Z, date 2026-09-07
+Perf: forecast-calendar-api-complete | responseMs 119   ← this one reached the server (docker log 06:38:39Z)
+```
+The weather body is a byte-identical replay of the response received at 4:25:43 PM the previous
+day (same server `cacheAge` to the millisecond), delivered in 19 ms; the server saw no weather
+request. Not the SW (no `sw-fallback`, and its fallback refuses entries >5 min). Not Cloudflare
+(`cf-cache-status: DYNAMIC`, no cache rules).
+
+**Chrome's HTTP cache on a restored tab.** When the WebAPK process has been killed and the app is
+relaunched, Chrome restores the tab as a history navigation. For history/back-forward loads, Blink
+gives subresource requests issued *before the document's load event* force-cache semantics: any
+HTTP-cached response is returned without validation regardless of age
+(`FrameFetchContext::ResourceRequestCachePolicy` → `DetermineFrameCacheMode`, which stops applying
+the frame policy once `LoadEventFinished()`). The weather fetch runs from the DOMContentLoaded
+handler → before `load` → replayed from disk. The calendar fetch runs after the weather response
+→ after `load` → normal → hits origin. Pull-to-refresh is a reload (validate) → always fixed it.
+A plain resume of a live process is not a navigation → most mornings fine. API responses carried
+an ETag and no Cache-Control, so Chrome kept them on disk indefinitely.
+
+Every earlier occurrence matches: Sept 4 06:55:40, Sept 4 22:21:23, Sept 5 07:54:20 — calendar
+hit at origin, no weather hit, then a full load on pull-to-refresh.
+
+## Fix (commit after 76416bd)
+
+- `fetchOnce` sends `cache: 'no-store'`; an explicit request cache mode overrides the frame policy.
+- Server sets `Cache-Control: no-store` on all `/api/*` so nothing is stored to replay.
