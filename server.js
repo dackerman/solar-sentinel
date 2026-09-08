@@ -302,16 +302,29 @@ const insertClientLogStatement = apiHistoryDb.prepare(`
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
-const pruneClientLogStatement = apiHistoryDb.prepare(`
+// Hard size bound on top of the age bound: a hidden desktop tab logs ~16
+// lines per 5-minute refresh, so 30 days alone could reach ~200k rows.
+// 50k rows is ~16 MB and roughly a week at that volume.
+const CLIENT_LOG_MAX_ROWS = 50_000;
+
+const pruneClientLogByAgeStatement = apiHistoryDb.prepare(`
   DELETE FROM client_log WHERE received_at < ?
 `);
 
-function pruneClientLog() {
+// Keep the newest N rows by id (ids are monotonic). The subquery yields NULL
+// when there are fewer than N rows, and `id < NULL` matches nothing.
+const pruneClientLogByCountStatement = apiHistoryDb.prepare(`
+  DELETE FROM client_log
+  WHERE id < (SELECT id FROM client_log ORDER BY id DESC LIMIT 1 OFFSET ?)
+`);
+
+function pruneClientLog({ maxRows = CLIENT_LOG_MAX_ROWS } = {}) {
   try {
     const cutoff = Date.now() - CLIENT_LOG_RETENTION_MS;
-    const result = pruneClientLogStatement.run(cutoff);
-    if (result.changes > 0) {
-      console.log(`Client log prune removed ${result.changes} row(s)`);
+    const byAge = pruneClientLogByAgeStatement.run(cutoff).changes;
+    const byCount = pruneClientLogByCountStatement.run(maxRows - 1).changes;
+    if (byAge + byCount > 0) {
+      console.log(`Client log prune removed ${byAge} old row(s), ${byCount} over the cap`);
     }
   } catch (error) {
     console.error('Client log prune error:', error.message);
@@ -319,7 +332,7 @@ function pruneClientLog() {
 }
 
 pruneClientLog();
-setInterval(pruneClientLog, 24 * 60 * 60 * 1000).unref();
+setInterval(pruneClientLog, 60 * 60 * 1000).unref();
 
 function isValidClientLogString(value, minLen, maxLen) {
   return typeof value === 'string' && value.length >= minLen && value.length <= maxLen;

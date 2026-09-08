@@ -325,4 +325,37 @@ describe('pruneClientLog', () => {
     }>;
     expect(rows.map(row => row.device_id)).toEqual(['device-new']);
   });
+
+  it('keeps only the newest maxRows rows regardless of age', () => {
+    const insert = apiHistoryDb.prepare(`
+      INSERT INTO client_log (
+        device_id, load_id, build, user_agent, seq, client_at, client_timestamp, message, data, received_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const now = Date.now();
+    for (let i = 0; i < 6; i++) {
+      insert.run('device', 'load', '1.0', 'agent', i, now + i, '', `row ${i}`, null, now + i);
+    }
+
+    pruneClientLog({ maxRows: 4 });
+
+    const rows = apiHistoryDb.prepare('SELECT message FROM client_log ORDER BY id').all() as Array<{
+      message: string;
+    }>;
+    expect(rows.map(row => row.message)).toEqual(['row 2', 'row 3', 'row 4', 'row 5']);
+  });
+
+  it('is a no-op when under the row cap', () => {
+    const insert = apiHistoryDb.prepare(`
+      INSERT INTO client_log (
+        device_id, load_id, build, user_agent, seq, client_at, client_timestamp, message, data, received_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const now = Date.now();
+    insert.run('device', 'load', '1.0', 'agent', 0, now, '', 'only row', null, now);
+
+    pruneClientLog({ maxRows: 4 });
+
+    expect(apiHistoryDb.prepare('SELECT COUNT(*) n FROM client_log').get()).toEqual({ n: 1 });
+  });
 });
