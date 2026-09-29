@@ -82,6 +82,10 @@ export class SolarSentinelApp {
   private lastHistoryCalendarId: number | string | null = null;
   private forecastArtMode = false;
   private chartRenderToken = 0;
+  // What the charts last drew (not `latestWeatherData`: history scrubbing renders
+  // snapshots through the same path), so a lost canvas context can be redrawn.
+  private lastChartData: WeatherData | null = null;
+  private chartRedrawPending = false;
   private readonly appStartTime = performance.now();
   private lastPerformanceMark = this.appStartTime;
   private readonly handleWindowFocus = () => {
@@ -256,6 +260,47 @@ export class SolarSentinelApp {
     document
       .getElementById('location-display')
       ?.addEventListener('click', () => this.locationPicker?.toggle());
+
+    this.setupChartContextListeners();
+  }
+
+  // Charts are drawn once (no animation, not responsive), so nothing repaints them
+  // if the browser drops the canvas backing store. Android kills the GPU process
+  // while the PWA sits in the background: draws into the lost context are no-ops,
+  // then the context is restored with a cleared bitmap. Redraw when that happens.
+  // Never preventDefault() on `contextlost` — that would stop the browser restoring.
+  private setupChartContextListeners(): void {
+    for (const id of ['uvChart', 'weatherChart']) {
+      const canvas = document.getElementById(id);
+      canvas?.addEventListener('contextlost', () => {
+        this.debugPanel.log('Chart canvas context lost', { canvas: id });
+      });
+      canvas?.addEventListener('contextrestored', () => {
+        this.debugPanel.log('Chart canvas context restored', { canvas: id });
+        this.scheduleChartRedraw();
+      });
+    }
+  }
+
+  // Both canvases usually restore back-to-back; coalesce them into a single redraw.
+  private scheduleChartRedraw(): void {
+    if (this.chartRedrawPending) return;
+    this.chartRedrawPending = true;
+    requestAnimationFrame(() => {
+      this.chartRedrawPending = false;
+      if (!this.lastChartData) return;
+      void this.renderCharts(this.lastChartData).catch(error => {
+        this.markPerformance('charts-error', { error: (error as Error).message });
+        this.debugPanel.log('Chart render error', { error: (error as Error).message });
+      });
+    });
+  }
+
+  private isChartContextLost(...canvases: HTMLCanvasElement[]): boolean {
+    return canvases.some(canvas => {
+      const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | null;
+      return typeof ctx?.isContextLost === 'function' && ctx.isContextLost();
+    });
   }
 
   private async loadData(silent = false): Promise<boolean> {
@@ -841,6 +886,7 @@ export class SolarSentinelApp {
   private async renderCharts(data: WeatherData): Promise<void> {
     const chartStart = performance.now();
     const renderToken = ++this.chartRenderToken;
+    this.lastChartData = data;
 
     const destroyStart = performance.now();
     this.clearChartNowLineTimer();
@@ -894,6 +940,7 @@ export class SolarSentinelApp {
         createMs,
         uvWidth: uvCanvas.width,
         weatherWidth: weatherCanvas.width,
+        contextLost: this.isChartContextLost(uvCanvas, weatherCanvas),
         date: data.date,
         renderToken,
       });
