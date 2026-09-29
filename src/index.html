@@ -190,13 +190,23 @@
                     </div>
                     <div class="flex items-center gap-1.5">
                       <span>💨</span>
-                      <span class="font-semibold text-gray-800"
-                        ><span id="current-wind-dual">--</span
-                        ><span
-                          id="current-wind-gust-dual"
-                          class="ml-1 text-xs font-normal text-gray-500"
-                        ></span
-                      ></span>
+                      <span class="flex flex-col leading-tight">
+                        <span
+                          id="current-wind-dual"
+                          class="whitespace-nowrap font-semibold text-gray-800"
+                          >--</span
+                        >
+                        <span class="flex flex-wrap gap-x-1 text-[11px] text-gray-500">
+                          <span
+                            id="current-wind-dir-dual"
+                            class="whitespace-nowrap empty:hidden"
+                          ></span>
+                          <span
+                            id="current-wind-gust-dual"
+                            class="whitespace-nowrap empty:hidden"
+                          ></span>
+                        </span>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -238,13 +248,23 @@
                     </div>
                     <div class="flex items-center gap-1.5">
                       <span>💨</span>
-                      <span class="font-semibold text-gray-800"
-                        ><span id="today-wind-dual">--</span
-                        ><span
-                          id="today-wind-gust-dual"
-                          class="ml-1 text-xs font-normal text-gray-500"
-                        ></span
-                      ></span>
+                      <span class="flex flex-col leading-tight">
+                        <span
+                          id="today-wind-dual"
+                          class="whitespace-nowrap font-semibold text-gray-800"
+                          >--</span
+                        >
+                        <span class="flex flex-wrap gap-x-1 text-[11px] text-gray-500">
+                          <span
+                            id="today-wind-dir-dual"
+                            class="whitespace-nowrap empty:hidden"
+                          ></span>
+                          <span
+                            id="today-wind-gust-dual"
+                            class="whitespace-nowrap empty:hidden"
+                          ></span>
+                        </span>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -334,7 +354,7 @@
             <h3 class="text-lg font-semibold mb-2 sm:mb-4">Wind</h3>
             <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
               <span>💨 Speed (mph)</span>
-              <span>Dashed: gusts · Arrows point downwind</span>
+              <span>Arrows: where wind blows · Dashed: gusts</span>
             </div>
             <div style="height: 384px; width: 100%; position: relative">
               <canvas

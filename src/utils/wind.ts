@@ -41,3 +41,8 @@ export function formatGustSuffix(
 export function hasWindData(values: Array<number | null | undefined> | undefined): boolean {
   return Array.isArray(values) && values.some(isNum);
 }
+
+/** "8 mph", or "--" when the speed is missing. */
+export function formatWindSpeed(speed: number | null | undefined): string {
+  return isNum(speed) ? `${Math.round(speed)} mph` : '--';
+}

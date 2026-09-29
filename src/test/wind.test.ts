@@ -3,10 +3,11 @@ import {
   degreesToCardinal,
   formatGustSuffix,
   formatWind,
+  formatWindSpeed,
   hasNotableGust,
   hasWindData,
 } from '../utils/wind.js';
-import { createWindChart } from '../utils/charts.js';
+import { createWindChart, getWindArrowAngles } from '../utils/charts.js';
 import { SolarSentinelApp } from '../app.js';
 import { DebugPanel } from '../components/debug.js';
 import type { DailyCalendarDay, WeatherData } from '../types/weather.js';
@@ -44,6 +45,8 @@ describe('wind utils', () => {
     expect(formatGustSuffix(8, 10)).toBeNull();
     expect(formatGustSuffix(null, 30)).toBeNull();
     expect(formatGustSuffix(8, undefined)).toBeNull();
+    expect(formatWindSpeed(8.4)).toBe('8 mph');
+    expect(formatWindSpeed(null)).toBe('--');
   });
 
   it('detects wind data presence', () => {
@@ -82,11 +85,24 @@ describe('createWindChart', () => {
     expect(speed.data).toEqual([5, null, 10]);
     expect(gust.borderDash).toBeTruthy();
     expect(gust.pointRadius).toBe(0);
-    expect(speed.pointRotation).toEqual([270, 0, 90]); // deg + 180
-    expect(speed.pointRadius[1]).toBe(0); // no arrow for null points
+    expect(speed.pointRadius).toBe(0);
+    expect(config.plugins.map((plugin: { id: string }) => plugin.id)).toContain('wind-arrows');
     expect(config.options.scales.y.beginAtZero).toBe(true);
     expect(config.options.responsive).toBe(false);
     expect(config.options.animation).toBe(false);
+  });
+
+  it('points arrows downwind and skips hours without data', () => {
+    const angles = getWindArrowAngles(data, 1);
+    expect(angles[0]).toBeCloseTo((270 * Math.PI) / 180); // from E, blows W
+    expect(angles[1]).toBeNull();
+    expect(angles[2]).toBeCloseTo((90 * Math.PI) / 180);
+    expect(getWindArrowAngles(data, 2)[2]).not.toBeNull();
+    expect(getWindArrowAngles({ ...data, windDirection: undefined }, 1)).toEqual([
+      null,
+      null,
+      null,
+    ]);
   });
 
   it('does not throw when wind arrays are absent', async () => {
@@ -131,8 +147,8 @@ describe('wind in the UI', () => {
       <span id="current-time"></span>
       <button id="prev-day"></button><button id="next-day"></button><button id="debug-btn"></button>
       <div id="dual-display" class="hidden">
-        <span id="current-wind-dual">--</span><span id="current-wind-gust-dual"></span>
-        <span id="today-wind-dual">--</span><span id="today-wind-gust-dual"></span>
+        <span id="current-wind-dual">--</span><span id="current-wind-dir-dual"></span><span id="current-wind-gust-dual"></span>
+        <span id="today-wind-dual">--</span><span id="today-wind-dir-dual"></span><span id="today-wind-gust-dual"></span>
       </div>
       <div id="single-display" class="hidden">
         <span id="current-wind">--</span><span id="wind-label">Wind</span>
@@ -167,9 +183,11 @@ describe('wind in the UI', () => {
       daily: { ...base.daily!, windMax: 14, gustMax: 30, windDirection: 270 },
     };
     app.updateCurrentConditions(data);
-    expect(text('current-wind-dual')).toBe('8 mph NW');
+    expect(text('current-wind-dual')).toBe('8 mph');
+    expect(text('current-wind-dir-dual')).toBe('NW');
     expect(text('current-wind-gust-dual')).toBe('gust 18');
-    expect(text('today-wind-dual')).toBe('14 mph W');
+    expect(text('today-wind-dual')).toBe('14 mph');
+    expect(text('today-wind-dir-dual')).toBe('W');
     expect(text('today-wind-gust-dual')).toBe('gust 30');
 
     app.updateCurrentConditions({

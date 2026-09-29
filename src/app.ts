@@ -5,7 +5,13 @@ import { DebugPanel } from './components/debug.js';
 import { ClientLogShipper } from './services/clientLog.js';
 import { LocationPicker } from './components/locationPicker.js';
 import { GeocodingService } from './services/geocoding.js';
-import { formatGustSuffix, formatWind, hasWindData } from './utils/wind.js';
+import {
+  degreesToCardinal,
+  formatGustSuffix,
+  formatWind,
+  formatWindSpeed,
+  hasWindData,
+} from './utils/wind.js';
 import { SwipeNavigator } from './utils/swipeNavigation.js';
 import {
   createUVChart,
@@ -716,9 +722,10 @@ export class SolarSentinelApp {
       this.updateElement('current-precip-dual', `${precip}%`);
       this.updateElement('current-humidity-dual', `${humidity}%`);
       const windSpeed = data.windSpeed?.[currentIndex];
+      this.updateElement('current-wind-dual', formatWindSpeed(windSpeed));
       this.updateElement(
-        'current-wind-dual',
-        formatWind(windSpeed, data.windDirection?.[currentIndex])
+        'current-wind-dir-dual',
+        degreesToCardinal(data.windDirection?.[currentIndex]) ?? ''
       );
       this.updateElement(
         'current-wind-gust-dual',
@@ -769,7 +776,8 @@ export class SolarSentinelApp {
     this.updateElement('today-temp-dual', `${tempHigh}°/${tempLow}°F`);
     this.updateElement('today-uv-dual', uvMax);
     this.updateElement('today-precip-dual', `${precipMax}%`);
-    this.updateElement('today-wind-dual', formatWind(dailyData.windMax, dailyData.windDirection));
+    this.updateElement('today-wind-dual', formatWindSpeed(dailyData.windMax));
+    this.updateElement('today-wind-dir-dual', degreesToCardinal(dailyData.windDirection) ?? '');
     this.updateElement(
       'today-wind-gust-dual',
       formatGustSuffix(dailyData.windMax, dailyData.gustMax) ?? ''

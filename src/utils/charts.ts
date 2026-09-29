@@ -542,35 +542,59 @@ export async function createWeatherChart(
   });
 }
 
-// A small upward-pointing arrow (shaft + head). Chart.js draws canvas point styles at
-// their natural size and rotates them by the per-point `pointRotation`.
-function createArrowMarker(color: string, size: number): HTMLCanvasElement | string {
-  try {
-    const arrow = document.createElement('canvas');
-    arrow.width = size;
-    arrow.height = size;
-    const ctx = arrow.getContext('2d');
-    if (!ctx || typeof ctx.beginPath !== 'function') return 'triangle';
-    const mid = size / 2;
-    const head = size * 0.36;
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 1.6;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(mid, size - 1.5);
-    ctx.lineTo(mid, head + 1);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(mid, 0.8);
-    ctx.lineTo(mid - head * 0.85, head + 1.5);
-    ctx.lineTo(mid + head * 0.85, head + 1.5);
-    ctx.closePath();
-    ctx.fill();
-    return arrow;
-  } catch {
-    return 'triangle';
-  }
+const WIND_ARROW_ROW_HEIGHT = 26;
+
+// Downwind direction (radians, canvas-clockwise from up) for each hour that gets an arrow.
+export function getWindArrowAngles(data: WeatherData, every: number): Array<number | null> {
+  const speeds = data.windSpeed ?? [];
+  const directions = data.windDirection ?? [];
+  return data.labels.map((_, i) => {
+    const speed = speeds[i];
+    const deg = directions[i];
+    if (i % every !== 0 || typeof speed !== 'number' || typeof deg !== 'number') return null;
+    if (!Number.isFinite(deg)) return null;
+    // Meteorological direction is where the wind comes FROM; point where it blows TO.
+    return (((deg + 180) % 360) * Math.PI) / 180;
+  });
+}
+
+// Draws a row of direction arrows in the strip reserved above the plot area, so they stay
+// legible instead of sitting on top of the speed line.
+function createWindArrowsPlugin(angles: Array<number | null>, size: number): any {
+  return {
+    id: 'wind-arrows',
+    afterDraw(chart: any) {
+      const { ctx, chartArea, scales } = chart;
+      if (!ctx || !chartArea || !scales?.x) return;
+      const cy = chartArea.top - WIND_ARROW_ROW_HEIGHT / 2;
+      const half = size / 2;
+      const head = size * 0.42;
+
+      angles.forEach((angle, i) => {
+        if (angle === null) return;
+        const cx = scales.x.getPixelForValue(i);
+        if (!Number.isFinite(cx)) return;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+        ctx.strokeStyle = '#0369a1';
+        ctx.fillStyle = '#0369a1';
+        ctx.lineWidth = 1.75;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(0, half);
+        ctx.lineTo(0, -half + head * 0.8);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, -half);
+        ctx.lineTo(-head * 0.6, -half + head);
+        ctx.lineTo(head * 0.6, -half + head);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      });
+    },
+  };
 }
 
 export async function createWindChart(
@@ -580,20 +604,8 @@ export async function createWindChart(
   const Chart = await getChartConstructor();
   const speeds = data.windSpeed ?? [];
   const gusts = data.windGusts ?? [];
-  const directions = data.windDirection ?? [];
   const narrow = window.innerWidth < 640;
-  const arrowEvery = narrow ? 2 : 1;
-  const arrow = createArrowMarker('#0369a1', narrow ? 13 : 16);
-  const showArrow = (i: number) =>
-    i % arrowEvery === 0 &&
-    typeof speeds[i] === 'number' &&
-    typeof directions[i] === 'number' &&
-    Number.isFinite(directions[i]);
-  const radii = data.labels.map((_, i) => (showArrow(i) ? 8 : 0));
-  // Arrow points where the wind blows TO: opposite of the meteorological "from" heading.
-  const rotations = data.labels.map((_, i) =>
-    showArrow(i) ? ((directions[i] as number) + 180) % 360 : 0
-  );
+  const angles = getWindArrowAngles(data, narrow ? 2 : 1);
 
   return new Chart(canvas.getContext('2d'), {
     type: 'line',
@@ -608,11 +620,8 @@ export async function createWindChart(
           borderWidth: 2.5,
           fill: false,
           tension: 0.3,
-          pointStyle: arrow,
-          pointRadius: radii,
-          pointHoverRadius: radii,
-          pointRotation: rotations,
-          pointBorderWidth: 0,
+          pointRadius: 0,
+          pointHoverRadius: 3,
         },
         {
           label: 'Gusts (mph)',
@@ -632,8 +641,10 @@ export async function createWindChart(
       responsive: false,
       maintainAspectRatio: false,
       animation: false,
+      layout: { padding: { top: WIND_ARROW_ROW_HEIGHT } },
       plugins: {
-        legend: { display: true, position: 'top' },
+        // Legend goes below so the arrow row can hug the top of the plot.
+        legend: { display: true, position: 'bottom' },
         tooltip: { mode: 'index', intersect: false },
       },
       scales: {
@@ -659,6 +670,6 @@ export async function createWindChart(
         },
       },
     },
-    plugins: [createTimeMarkersPlugin(data)],
+    plugins: [createTimeMarkersPlugin(data), createWindArrowsPlugin(angles, narrow ? 14 : 16)],
   });
 }
