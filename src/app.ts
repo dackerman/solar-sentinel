@@ -5,10 +5,12 @@ import { DebugPanel } from './components/debug.js';
 import { ClientLogShipper } from './services/clientLog.js';
 import { LocationPicker } from './components/locationPicker.js';
 import { GeocodingService } from './services/geocoding.js';
+import { formatGustSuffix, formatWind, hasWindData } from './utils/wind.js';
 import { SwipeNavigator } from './utils/swipeNavigation.js';
 import {
   createUVChart,
   createWeatherChart,
+  createWindChart,
   getForecastTempBackgroundColor,
   getUVColor,
   getTempLineColor,
@@ -58,6 +60,7 @@ export class SolarSentinelApp {
   private followingToday = true;
   private uvChart: ChartInstance | null = null;
   private weatherChart: ChartInstance | null = null;
+  private windChart: ChartInstance | null = null;
   private refreshTimer: number | null = null;
   private chartNowLineTimer: number | null = null;
   private refreshInFlight = false;
@@ -270,7 +273,7 @@ export class SolarSentinelApp {
   // then the context is restored with a cleared bitmap. Redraw when that happens.
   // Never preventDefault() on `contextlost` — that would stop the browser restoring.
   private setupChartContextListeners(): void {
-    for (const id of ['uvChart', 'weatherChart']) {
+    for (const id of ['uvChart', 'weatherChart', 'windChart']) {
       const canvas = document.getElementById(id);
       canvas?.addEventListener('contextlost', () => {
         this.debugPanel.log('Chart canvas context lost', { canvas: id });
@@ -712,6 +715,15 @@ export class SolarSentinelApp {
       this.updateElement('current-uv-dual', uv);
       this.updateElement('current-precip-dual', `${precip}%`);
       this.updateElement('current-humidity-dual', `${humidity}%`);
+      const windSpeed = data.windSpeed?.[currentIndex];
+      this.updateElement(
+        'current-wind-dual',
+        formatWind(windSpeed, data.windDirection?.[currentIndex])
+      );
+      this.updateElement(
+        'current-wind-gust-dual',
+        formatGustSuffix(windSpeed, data.windGusts?.[currentIndex]) ?? ''
+      );
 
       // Color code values
       this.setElementColor('current-uv-dual', getUVColor(parseFloat(uv)));
@@ -757,6 +769,11 @@ export class SolarSentinelApp {
     this.updateElement('today-temp-dual', `${tempHigh}°/${tempLow}°F`);
     this.updateElement('today-uv-dual', uvMax);
     this.updateElement('today-precip-dual', `${precipMax}%`);
+    this.updateElement('today-wind-dual', formatWind(dailyData.windMax, dailyData.windDirection));
+    this.updateElement(
+      'today-wind-gust-dual',
+      formatGustSuffix(dailyData.windMax, dailyData.gustMax) ?? ''
+    );
 
     this.setElementColor('today-uv-dual', getUVColor(parseFloat(uvMax)));
     this.setElementColor('today-temp-dual', getTempLineColor(tempHigh));
@@ -794,6 +811,12 @@ export class SolarSentinelApp {
     this.updateElement('current-uv', uvMax);
     this.updateElement('current-precip', `${precipMax}%`);
     this.updateElement('current-humidity', `${humidityMax}%`);
+    this.updateElement('current-wind', formatWind(dailyData.windMax, dailyData.windDirection));
+    const hasGusts = typeof dailyData.gustMax === 'number' && Number.isFinite(dailyData.gustMax);
+    this.updateElement(
+      'wind-label',
+      hasGusts ? `Wind · gusts ${Math.round(dailyData.gustMax as number)}` : 'Wind'
+    );
 
     this.setElementColor('current-uv', getUVColor(parseFloat(uvMax)));
     this.setElementColor('current-temp', getTempLineColor(tempHigh));
@@ -898,10 +921,18 @@ export class SolarSentinelApp {
       this.weatherChart.destroy();
       this.weatherChart = null;
     }
+    if (this.windChart) {
+      this.windChart.destroy();
+      this.windChart = null;
+    }
     const destroyMs = Math.round(performance.now() - destroyStart);
 
     const uvCanvas = document.getElementById('uvChart') as HTMLCanvasElement;
     const weatherCanvas = document.getElementById('weatherChart') as HTMLCanvasElement;
+    // Optional: the wind card is hidden (and not drawn) when the data has no wind.
+    const windCanvas = document.getElementById('windChart') as HTMLCanvasElement | null;
+    const showWind = !!windCanvas && hasWindData(data.windSpeed);
+    document.getElementById('wind-chart-container')?.classList.toggle('hidden', !showWind);
 
     if (uvCanvas && weatherCanvas) {
       const canvasStart = performance.now();
@@ -914,24 +945,33 @@ export class SolarSentinelApp {
       weatherCanvas.style.height = '384px';
       weatherCanvas.width = weatherCanvas.offsetWidth;
       weatherCanvas.height = 384;
+      if (showWind && windCanvas) {
+        windCanvas.style.width = '100%';
+        windCanvas.style.height = '384px';
+        windCanvas.width = windCanvas.offsetWidth;
+        windCanvas.height = 384;
+      }
       const sizeMs = Math.round(performance.now() - canvasStart);
 
       const chartCreateStart = performance.now();
-      const [uvChart, weatherChart] = await Promise.all([
+      const [uvChart, weatherChart, windChart] = await Promise.all([
         createUVChart(uvCanvas, data),
         createWeatherChart(weatherCanvas, data),
+        showWind && windCanvas ? createWindChart(windCanvas, data) : Promise.resolve(null),
       ]);
       const createMs = Math.round(performance.now() - chartCreateStart);
 
       if (renderToken !== this.chartRenderToken) {
         uvChart.destroy();
         weatherChart.destroy();
+        windChart?.destroy();
         this.markPerformance('stale-charts-discarded', { renderToken });
         return;
       }
 
       this.uvChart = uvChart;
       this.weatherChart = weatherChart;
+      this.windChart = windChart;
       this.scheduleChartNowLineUpdates(data.date);
       this.markPerformance('charts-render-complete', {
         durationMs: Math.round(performance.now() - chartStart),
@@ -940,7 +980,12 @@ export class SolarSentinelApp {
         createMs,
         uvWidth: uvCanvas.width,
         weatherWidth: weatherCanvas.width,
-        contextLost: this.isChartContextLost(uvCanvas, weatherCanvas),
+        windWidth: showWind && windCanvas ? windCanvas.width : 0,
+        contextLost: this.isChartContextLost(
+          uvCanvas,
+          weatherCanvas,
+          ...(showWind && windCanvas ? [windCanvas] : [])
+        ),
         date: data.date,
         renderToken,
       });
@@ -974,6 +1019,7 @@ export class SolarSentinelApp {
   private updateChartsNowLine(): void {
     this.uvChart?.update('none');
     this.weatherChart?.update('none');
+    this.windChart?.update('none');
     this.updateLastUpdatedStaleness();
   }
 
@@ -1434,9 +1480,13 @@ export class SolarSentinelApp {
     notice.textContent = `No saved forecast for ${dayLabel} at this point in time.`;
     // Never hide #current-conditions here: it contains the history scrubber,
     // close button, and this notice — hiding it locks the user out of history mode.
-    ['dual-display', 'single-display', 'chart-container', 'weather-chart-container'].forEach(id =>
-      document.getElementById(id)?.classList.add('hidden')
-    );
+    [
+      'dual-display',
+      'single-display',
+      'chart-container',
+      'weather-chart-container',
+      'wind-chart-container',
+    ].forEach(id => document.getElementById(id)?.classList.add('hidden'));
     this.updateElement('date-display', dayLabel);
     this.updateDateNavigationControls();
   }
@@ -1476,6 +1526,10 @@ export class SolarSentinelApp {
     const high = Math.round(day.tempMax);
     const low = Math.round(day.tempMin);
     const precip = Math.max(0, Math.min(100, Math.round(day.precipMax || 0)));
+    const windMax =
+      typeof day.windMax === 'number' && Number.isFinite(day.windMax)
+        ? Math.round(day.windMax)
+        : null;
     const cloudCover = this.getForecastDaytimeAverage(day.cloudCover);
     const highColor = getTempLineColor(high);
     const lowColor = getTempLineColor(low);
@@ -1518,7 +1572,7 @@ export class SolarSentinelApp {
                   <div class="text-[10px] sm:text-xs font-semibold" style="color: ${lowColor}">Low ${low}°</div>
                 </div>
                 <div class="mt-1 sm:mt-2 flex justify-center text-[10px] sm:text-xs text-gray-600">
-                  <span>🌧 ${precip}%</span>
+                  <span>🌧 ${precip}%${windMax !== null ? ` · 💨 ${windMax}` : ''}</span>
                 </div>`
           }
         </div>

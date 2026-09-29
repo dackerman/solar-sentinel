@@ -9,6 +9,10 @@ export interface WeatherData {
   cloudCover: number[];
   humidity: number[];
   weatherCode?: Array<number | undefined>;
+  // Wind (mph; direction is degrees the wind blows FROM). Absent in older cached responses.
+  windSpeed?: Array<number | null>;
+  windGusts?: Array<number | null>;
+  windDirection?: Array<number | null>;
   date: string;
   daily?: DailyData;
   metadata?: {
@@ -28,6 +32,9 @@ export interface DailyData {
   precipMax: number;
   humidityMax: number;
   weatherCode?: number;
+  windMax?: number | null;
+  gustMax?: number | null;
+  windDirection?: number | null;
   metadata?: {
     cached: boolean;
     cacheAge: number;
@@ -47,6 +54,9 @@ export interface DailyCalendarDay {
   cloudCover: number[];
   humidityMax: number;
   weatherCode?: number;
+  windMax?: number | null;
+  gustMax?: number | null;
+  windDirection?: number | null;
 }
 
 export interface DailyCalendarData {

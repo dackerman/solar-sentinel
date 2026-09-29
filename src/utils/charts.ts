@@ -541,3 +541,124 @@ export async function createWeatherChart(
     plugins: [createTimeMarkersPlugin(data)],
   });
 }
+
+// A small upward-pointing arrow (shaft + head). Chart.js draws canvas point styles at
+// their natural size and rotates them by the per-point `pointRotation`.
+function createArrowMarker(color: string, size: number): HTMLCanvasElement | string {
+  try {
+    const arrow = document.createElement('canvas');
+    arrow.width = size;
+    arrow.height = size;
+    const ctx = arrow.getContext('2d');
+    if (!ctx || typeof ctx.beginPath !== 'function') return 'triangle';
+    const mid = size / 2;
+    const head = size * 0.36;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(mid, size - 1.5);
+    ctx.lineTo(mid, head + 1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mid, 0.8);
+    ctx.lineTo(mid - head * 0.85, head + 1.5);
+    ctx.lineTo(mid + head * 0.85, head + 1.5);
+    ctx.closePath();
+    ctx.fill();
+    return arrow;
+  } catch {
+    return 'triangle';
+  }
+}
+
+export async function createWindChart(
+  canvas: HTMLCanvasElement,
+  data: WeatherData
+): Promise<ChartInstance> {
+  const Chart = await getChartConstructor();
+  const speeds = data.windSpeed ?? [];
+  const gusts = data.windGusts ?? [];
+  const directions = data.windDirection ?? [];
+  const narrow = window.innerWidth < 640;
+  const arrowEvery = narrow ? 2 : 1;
+  const arrow = createArrowMarker('#0369a1', narrow ? 13 : 16);
+  const showArrow = (i: number) =>
+    i % arrowEvery === 0 &&
+    typeof speeds[i] === 'number' &&
+    typeof directions[i] === 'number' &&
+    Number.isFinite(directions[i]);
+  const radii = data.labels.map((_, i) => (showArrow(i) ? 8 : 0));
+  // Arrow points where the wind blows TO: opposite of the meteorological "from" heading.
+  const rotations = data.labels.map((_, i) =>
+    showArrow(i) ? ((directions[i] as number) + 180) % 360 : 0
+  );
+
+  return new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [
+        {
+          label: 'Wind (mph)',
+          data: speeds,
+          borderColor: '#0369a1',
+          backgroundColor: 'transparent',
+          borderWidth: 2.5,
+          fill: false,
+          tension: 0.3,
+          pointStyle: arrow,
+          pointRadius: radii,
+          pointHoverRadius: radii,
+          pointRotation: rotations,
+          pointBorderWidth: 0,
+        },
+        {
+          label: 'Gusts (mph)',
+          data: gusts,
+          borderColor: '#7dd3fc',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          fill: false,
+          tension: 0.3,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+        },
+      ],
+    },
+    options: {
+      responsive: false,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { display: true, position: 'top' },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      scales: {
+        y: {
+          type: 'linear',
+          display: true,
+          position: 'left',
+          beginAtZero: true,
+          title: { display: window.innerWidth >= 640, text: 'Wind (mph)' },
+          ticks: { callback: (value: string | number) => `${value}` },
+        },
+        x: {
+          title: { display: false },
+          ticks: {
+            maxRotation: window.innerWidth < 640 ? 45 : 0,
+            callback: function (value: number, index: number) {
+              if (window.innerWidth < 640) {
+                return index % 2 === 0 ? (this as any).getLabelForValue(value) : '';
+              }
+              return (this as any).getLabelForValue(value);
+            },
+          },
+        },
+      },
+    },
+    plugins: [createTimeMarkersPlugin(data)],
+  });
+}

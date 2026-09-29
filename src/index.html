@@ -188,6 +188,16 @@
                         >--%</span
                       >
                     </div>
+                    <div class="flex items-center gap-1.5">
+                      <span>💨</span>
+                      <span class="font-semibold text-gray-800"
+                        ><span id="current-wind-dual">--</span
+                        ><span
+                          id="current-wind-gust-dual"
+                          class="ml-1 text-xs font-normal text-gray-500"
+                        ></span
+                      ></span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -226,6 +236,16 @@
                       <span>🌧️</span>
                       <span id="today-precip-dual" class="font-semibold text-gray-800">--%</span>
                     </div>
+                    <div class="flex items-center gap-1.5">
+                      <span>💨</span>
+                      <span class="font-semibold text-gray-800"
+                        ><span id="today-wind-dual">--</span
+                        ><span
+                          id="today-wind-gust-dual"
+                          class="ml-1 text-xs font-normal text-gray-500"
+                        ></span
+                      ></span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -238,8 +258,8 @@
               >
                 <img id="daily-weather-art" class="weather-art-image hidden" alt="" />
               </div>
-              <div class="grid w-full flex-1 grid-cols-2 gap-4 text-center md:grid-cols-4">
-                <div class="bg-gray-50 rounded-lg p-3">
+              <div class="grid w-full flex-1 grid-cols-2 gap-4 text-center md:grid-cols-5">
+                <div class="bg-gray-50 rounded-lg p-3 col-span-2 md:col-span-1">
                   <div class="text-2xl mb-1">🌡️</div>
                   <div id="current-temp" class="text-xl font-bold text-gray-800">--°F</div>
                   <div id="temp-label" class="text-xs text-gray-600">Temperature</div>
@@ -258,6 +278,11 @@
                   <div class="text-2xl mb-1">💧</div>
                   <div id="current-humidity" class="text-xl font-bold text-gray-800">--%</div>
                   <div id="humidity-label" class="text-xs text-gray-600">Humidity</div>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-3">
+                  <div class="text-2xl mb-1">💨</div>
+                  <div id="current-wind" class="text-xl font-bold text-gray-800">--</div>
+                  <div id="wind-label" class="text-xs text-gray-600">Wind</div>
                 </div>
               </div>
             </div>
@@ -296,6 +321,24 @@
             <div style="height: 384px; width: 100%; position: relative">
               <canvas
                 id="weatherChart"
+                style="height: 384px !important; width: 100% !important"
+              ></canvas>
+            </div>
+          </div>
+
+          <!-- Wind Chart container -->
+          <div
+            id="wind-chart-container"
+            class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6 mb-6"
+          >
+            <h3 class="text-lg font-semibold mb-2 sm:mb-4">Wind</h3>
+            <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
+              <span>💨 Speed (mph)</span>
+              <span>Dashed: gusts · Arrows point downwind</span>
+            </div>
+            <div style="height: 384px; width: 100%; position: relative">
+              <canvas
+                id="windChart"
                 style="height: 384px !important; width: 100% !important"
               ></canvas>
             </div>
