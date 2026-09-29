@@ -43,6 +43,9 @@ function getMockHourlyData(date: string, timezone = 'America/New_York') {
       cloud_cover: [75, 60, 40, 30, 55, 45],
       relative_humidity_2m: [85, 88, 92, 45, 38, 42],
       weather_code: [3, 3, 45, 1, 2, 2],
+      wind_speed_10m: [5, 6, 7, 12, 14, 10],
+      wind_gusts_10m: [10, 11, 12, 22, 25, 18],
+      wind_direction_10m: [270, 280, 290, 300, 310, 320],
     },
   };
 }
@@ -58,6 +61,9 @@ function getMockDailyData(dates: string[], timezone = 'America/New_York') {
       precipitation_probability_max: [35, 20],
       relative_humidity_2m_max: [92, 78],
       weather_code: [61, 2],
+      wind_speed_10m_max: [14, 9],
+      wind_gusts_10m_max: [25, 16],
+      wind_direction_10m_dominant: [300, 180],
     },
   };
 }
@@ -82,6 +88,9 @@ function getMockTwoDayData(dateA: string, dateB: string, timezone = 'America/New
       cloud_cover: [20, 30, 40, 50],
       relative_humidity_2m: [50, 55, 60, 65],
       weather_code: [1, 2, 2, 3],
+      wind_speed_10m: [3, 4, 5, 6],
+      wind_gusts_10m: [8, 9, 10, 11],
+      wind_direction_10m: [90, 100, 110, 120],
     },
     daily: {
       time: [dateA, dateB],
@@ -91,6 +100,9 @@ function getMockTwoDayData(dateA: string, dateB: string, timezone = 'America/New
       precipitation_probability_max: [20, 40],
       relative_humidity_2m_max: [55, 65],
       weather_code: [2, 3],
+      wind_speed_10m_max: [4, 6],
+      wind_gusts_10m_max: [9, 11],
+      wind_direction_10m_dominant: [95, 115],
     },
   };
 }
@@ -300,6 +312,58 @@ describe('Server API Endpoints', () => {
       expect(response.headers['x-cache-status']).toBe('miss');
       expect(response.headers['server-timing']).toContain('total;dur=');
       expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('includes wind in hourly and daily data and requests it in mph', async () => {
+      const testDate = getTestDate(7);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockCombinedData(testDate)),
+      });
+
+      const response = await request(app).get('/api/weather').query({ date: testDate });
+
+      expect(response.status).toBe(200);
+      expect(response.body.windSpeed).toEqual([5, 6, 7, 12, 14, 10]);
+      expect(response.body.windGusts).toEqual([10, 11, 12, 22, 25, 18]);
+      expect(response.body.windDirection).toEqual([270, 280, 290, 300, 310, 320]);
+      expect(response.body.daily).toMatchObject({ windMax: 14, gustMax: 25, windDirection: 300 });
+      const url = String(mockFetch.mock.calls[0][0]);
+      expect(url).toContain('wind_speed_unit=mph');
+      expect(url).toContain('wind_speed_10m,wind_gusts_10m,wind_direction_10m');
+      expect(url).toContain('wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant');
+    });
+
+    it('returns null wind values for a forecast without wind fields', async () => {
+      const testDate = getTestDate(8);
+      const data = getMockCombinedData(testDate) as any;
+      delete data.hourly.wind_speed_10m;
+      delete data.hourly.wind_gusts_10m;
+      delete data.hourly.wind_direction_10m;
+      delete data.daily.wind_speed_10m_max;
+      delete data.daily.wind_gusts_10m_max;
+      delete data.daily.wind_direction_10m_dominant;
+
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(data) });
+
+      const response = await request(app).get('/api/weather').query({ date: testDate });
+
+      expect(response.status).toBe(200);
+      expect(response.body.windSpeed).toEqual([null, null, null, null, null, null]);
+      expect(response.body.windGusts).toHaveLength(6);
+      expect(response.body.windDirection.every((v: unknown) => v === null)).toBe(true);
+      expect(response.body.daily).toMatchObject({
+        windMax: null,
+        gustMax: null,
+        windDirection: null,
+      });
+
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve(data) });
+      const cal = await request(app).get('/api/daily-calendar').query({ date: testDate });
+      expect(cal.status).toBe(200);
+      expect(cal.body.days[0]).toMatchObject({ windMax: null, gustMax: null, windDirection: null });
     });
   });
 
@@ -539,6 +603,9 @@ describe('Server API Endpoints', () => {
         precipitation: [10, 5, 0, 20, 35, 15],
         cloudCover: [75, 60, 40, 30, 55, 45],
         weatherCode: 61,
+        windMax: 14,
+        gustMax: 25,
+        windDirection: 300,
       });
       expect(response.headers['x-cache-status']).toBe('miss');
       expect(response.headers['server-timing']).toContain('total;dur=');

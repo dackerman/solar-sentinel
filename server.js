@@ -648,6 +648,8 @@ function filterDateData(hourlyData, targetDate) {
     ? todayIndices.map(i => hourlyData.weather_code[i])
     : todayIndices.map(() => undefined);
 
+  const hourlyField = field => todayIndices.map(i => hourlyData[field]?.[i] ?? null);
+
   return {
     labels,
     timestamps: todayIndices.map(i => hourlyData.time[i]),
@@ -659,6 +661,9 @@ function filterDateData(hourlyData, targetDate) {
     cloudCover: cloudValues,
     humidity: humidityValues,
     weatherCode: weatherCodeValues,
+    windSpeed: hourlyField('wind_speed_10m'),
+    windGusts: hourlyField('wind_gusts_10m'),
+    windDirection: hourlyField('wind_direction_10m'),
     date: targetDate,
   };
 }
@@ -679,6 +684,9 @@ function extractDailyData(dailyData, targetDate) {
     precipMax: dailyData.precipitation_probability_max[dateIndex],
     humidityMax: dailyData.relative_humidity_2m_max[dateIndex],
     weatherCode: dailyData.weather_code?.[dateIndex],
+    windMax: dailyData.wind_speed_10m_max?.[dateIndex] ?? null,
+    gustMax: dailyData.wind_gusts_10m_max?.[dateIndex] ?? null,
+    windDirection: dailyData.wind_direction_10m_dominant?.[dateIndex] ?? null,
   };
 }
 
@@ -709,6 +717,9 @@ function buildDailyCalendarData(dailyData, hourlyData, startDate) {
       cloudCover: hourlyCloudCoverByDate.get(date) || [],
       humidityMax: dailyData.relative_humidity_2m_max[index],
       weatherCode: dailyData.weather_code?.[index],
+      windMax: dailyData.wind_speed_10m_max?.[index] ?? null,
+      gustMax: dailyData.wind_gusts_10m_max?.[index] ?? null,
+      windDirection: dailyData.wind_direction_10m_dominant?.[index] ?? null,
     }))
     .filter(day => day.date >= startDate);
 
@@ -951,7 +962,7 @@ function hasUsableForecast(data, requestedDate, requiredFields) {
 async function fetchForecastFromOpenMeteo(lat, lon) {
   const upstreamStart = performance.now();
   const response = await fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m,weather_code&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max,weather_code&timezone=auto&temperature_unit=fahrenheit&forecast_days=16`
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=uv_index,uv_index_clear_sky,precipitation_probability,temperature_2m,apparent_temperature,cloud_cover,relative_humidity_2m,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m&daily=temperature_2m_max,temperature_2m_min,uv_index_max,precipitation_probability_max,relative_humidity_2m_max,weather_code,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant&timezone=auto&temperature_unit=fahrenheit&wind_speed_unit=mph&forecast_days=16`
   );
   const responseMs = roundTiming(performance.now() - upstreamStart);
 
@@ -1235,6 +1246,8 @@ function buildWidgetData(forecastData, requestedDate, baseUrl) {
     tempHigh: daily.tempMax,
     tempLow: daily.tempMin,
     uvNow: hourly.uv_index[nowIndex],
+    windNow: hourly.wind_speed_10m?.[nowIndex] ?? null,
+    windDirectionNow: hourly.wind_direction_10m?.[nowIndex] ?? null,
     uvMax: daily.uvMax,
     rain,
     hourly: hourlySeries,

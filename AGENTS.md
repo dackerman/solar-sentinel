@@ -53,7 +53,8 @@
 - The debug panel is shipped to the server automatically (`src/services/clientLog.ts` → `POST /api/client-log`, flushed on hide/pagehide via `sendBeacon`, once a minute, and 5 s after startup; deduped on `(deviceId, loadId, seq)`; rows pruned hourly to the newest 50,000 and to 30 days, ~16 MB max). Read it with `scripts/client-log -q Auto-refresh` (`GET /api/client-log?device=&load=&since=&until=&q=&limit=`) instead of asking for a copy from the phone. When debugging a "shows yesterday" report, pull `Visibility`, `Auto-refresh`, and `Weather API response` lines around the resume time first
 
 ## Weather Data
-- Open-Meteo hourly fields: `uv_index`, `uv_index_clear_sky`, `precipitation_probability`, `temperature_2m`, `apparent_temperature`, `cloud_cover`, `relative_humidity_2m`, `weather_code`
-- Open-Meteo daily fields: `temperature_2m_max`, `temperature_2m_min`, `uv_index_max`, `precipitation_probability_max`, `relative_humidity_2m_max`, `weather_code`
+- Open-Meteo hourly fields: `uv_index`, `uv_index_clear_sky`, `precipitation_probability`, `temperature_2m`, `apparent_temperature`, `cloud_cover`, `relative_humidity_2m`, `weather_code`, `wind_speed_10m`, `wind_gusts_10m`, `wind_direction_10m`
+- Open-Meteo daily fields: `temperature_2m_max`, `temperature_2m_min`, `uv_index_max`, `precipitation_probability_max`, `relative_humidity_2m_max`, `weather_code`, `wind_speed_10m_max`, `wind_gusts_10m_max`, `wind_direction_10m_dominant`
+- Wind is requested with `wind_speed_unit=mph` (speeds and gusts in mph, direction in meteorological "from" degrees). API output: hourly `windSpeed`/`windGusts`/`windDirection` arrays; daily and calendar `windMax`/`gustMax`/`windDirection`; widget `windNow`/`windDirectionNow`. Forecasts cached before wind was added yield `null` for these
 - Forecasts are fetched with `timezone=auto`; "today" and the today→+16 date window are resolved in each location's own timezone after cache lookup (`resolveRequestedDate` in server.js). Past dates clamp to the location's today; the response `date` field is authoritative and the frontend adopts it
 - Date navigation supports today through 16 days ahead

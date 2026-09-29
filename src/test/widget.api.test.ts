@@ -23,6 +23,9 @@ function getMockForecast({ precip = [10, 20, 72, 80] } = {}) {
       cloud_cover: [10, 30, 40, 50],
       relative_humidity_2m: [50, 55, 60, 58],
       weather_code: [1, 2, 3, 3],
+      wind_speed_10m: [4, 6, 8, 5],
+      wind_gusts_10m: [9, 12, 15, 10],
+      wind_direction_10m: [200, 210, 220, 230],
     },
     daily: {
       time: [TODAY],
@@ -58,6 +61,8 @@ describe('GET /api/widget', () => {
     expect(response.status).toBe(200);
     expect(response.body.date).toBe(TODAY);
     expect(response.body.tempNow).toBe(84.1);
+    expect(response.body.windNow).toBe(8);
+    expect(response.body.windDirectionNow).toBe(220);
     expect(response.body.feelsLike).toBe(88.0);
     expect(response.body.tempHigh).toBe(91.2);
     expect(response.body.tempLow).toBe(68.0);
