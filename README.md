@@ -51,21 +51,26 @@ Solar Sentinel is a Progressive Web App (PWA) that displays real-time weather da
 
 ### 🎯 **Technical Excellence**
 - **📱 Mobile-Optimized** - Responsive design with mobile-specific optimizations
-- **🐳 Docker Ready** - Complete containerization with health checks
+- **⚙️ systemd Service** - Runs as a user service; a restart rebuilds and redeploys
 - **📲 PWA Features** - Installable app with offline support
-- **🔒 Security** - Non-root containers, input validation, error handling
+- **🔒 Security** - Unprivileged user service, input validation, error handling
 
 ## 🚀 Quick Start
 
-### Using Docker (Recommended)
+### As a systemd user service (production)
 
 ```bash
 # Clone the repository
 git clone https://github.com/dackerman/solar-sentinel.git
 cd solar-sentinel
+pnpm install
 
-# Build and run with Docker Compose
-docker compose up -d
+# Install and start the service (unit lives in systemd/)
+systemctl --user link "$PWD/systemd/solar-sentinel.service"
+systemctl --user enable --now solar-sentinel.service
+
+# Deploy code changes (restart rebuilds the frontend, then verifies)
+scripts/deploy
 
 # Access the app
 open http://localhost:49877
@@ -123,10 +128,8 @@ pnpm run format
 - **pnpm** - Fast, disk space efficient package manager
 
 ### **Infrastructure**
-- **Docker** - Containerization with multi-stage builds
-- **Docker Compose** - Service orchestration  
-- **Health Checks** - Container monitoring and reliability
-- **Non-root User** - Security best practices
+- **systemd user service** - `systemd/solar-sentinel.service`, restart-on-failure
+- **Node 22 built-ins** - `node:sqlite` for history; no native dependencies
 
 ## 🏗️ Architecture
 
@@ -158,10 +161,8 @@ pnpm run format
 - **Mobile optimizations** - Reduced margins, smaller fonts, rotated labels
 
 ### Infrastructure
-- **Docker** containerization with Node 20 Alpine
-- **Health checks** for container monitoring
-- **Non-root user** (`uvapp:1001`) for security
-- **Auto-restart** policy for reliability
+- **systemd user service** on the host's Node 22 (`ExecStartPre` runs the Vite build)
+- **Auto-restart** on failure
 - **PWA manifest** and service worker for offline capability
 
 ## 📍 Location Handling
@@ -183,14 +184,16 @@ pnpm run format
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `43187` | Internal server port |
+| `PORT` | `43187` | Server port (the systemd unit sets `49877`) |
+| `SQLITE_DB_PATH` | `data/solar-sentinel.sqlite` | History / client-log database |
 | `NODE_ENV` | `production` | Runtime environment |
 
-### Docker Ports
+### Ports
 
-| Internal | External | Description |
-|----------|----------|-------------|
-| `43187` | `49877` | Web application |
+| Port | Description |
+|------|-------------|
+| `49877` | Production (systemd service; Cloudflare tunnel target) |
+| `43187` | `pnpm run dev` server |
 
 ## 📊 UV Index Scale
 
@@ -253,8 +256,8 @@ solar-sentinel/
 ├── package.json                # Dependencies & scripts
 ├── tsconfig.json               # TypeScript configuration
 ├── vitest.config.ts            # Test configuration
-├── Dockerfile                  # Production container
-├── docker-compose.yml          # Service orchestration
+├── systemd/solar-sentinel.service # Production systemd user unit
+├── scripts/deploy              # Restart service + verify
 ├── AGENTS.md                   # Development guide for AI
 └── README.md                   # This file
 ```
@@ -374,8 +377,9 @@ The temperature line uses thermal comfort bands for quick visual reference:
 The application includes comprehensive health checks:
 
 ```bash
-# Docker health check
-docker compose ps
+# Service status and logs
+systemctl --user status solar-sentinel
+journalctl --user -u solar-sentinel -f
 
 # Manual health check
 curl http://localhost:49877/api/uv-today

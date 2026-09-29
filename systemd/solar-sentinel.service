@@ -1,0 +1,19 @@
+[Unit]
+Description=Solar Sentinel weather app (Express + Vite build)
+After=network-online.target
+
+[Service]
+WorkingDirectory=/home/david/code/solar-sentinel
+# Rebuild the frontend on every (re)start so a restart is a full deploy.
+ExecStartPre=/home/david/.npm-store/bin/pnpm run build
+ExecStart=/run/current-system/sw/bin/node server.js
+Environment=NODE_ENV=production
+# Same external port the Docker container used; Cloudflare tunnel, phone, and widget point here.
+Environment=PORT=49877
+Environment=PATH=/home/david/.npm-store/bin:/run/wrappers/bin:/run/current-system/sw/bin
+Restart=on-failure
+RestartSec=3
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

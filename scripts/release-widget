@@ -52,4 +52,4 @@ NODE
 echo
 echo "Staged $DEST"
 echo "Next: add a changelog entry to public/widget/manifest.json if this is a new version,"
-echo "then commit public/widget/ and deploy (docker compose down && docker compose up -d --build)."
+echo "then commit public/widget/ and deploy (scripts/deploy)."

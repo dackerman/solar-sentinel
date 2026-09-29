@@ -10,12 +10,14 @@
 - `pnpm run format` - Format code with Prettier
 - `pnpm run format:check` - Check Prettier formatting
 - `pnpm run dev` - Development with auto-restart
-- `docker compose down && docker compose up -d --build` - Rebuild Docker image after code changes
+- `scripts/deploy` - Deploy code changes (restarts the systemd service, which rebuilds, then verifies)
 
-## Docker
-- External port is `49877`; internal app port is `43187`
-- Docker copies files at build time, so `docker compose restart` does **not** apply code changes
-- Use a full rebuild for code changes: `docker compose down && docker compose up -d --build`
+## Production service
+- Runs as the systemd **user** service `solar-sentinel` straight from this checkout; the unit is `systemd/solar-sentinel.service` (linked into `~/.config/systemd/user` via `systemctl --user link`)
+- Serves on port `49877` (Cloudflare tunnel target, tailnet); `pnpm run dev` uses `43187`
+- `ExecStartPre` runs `pnpm run build`, so `systemctl --user restart solar-sentinel` (or `scripts/deploy`) is a full deploy; uncommitted working-tree changes go live on restart
+- SQLite history/client log: `data/solar-sentinel.sqlite` (gitignored)
+- Logs: `journalctl --user -u solar-sentinel`
 
 ## Code Style
 - **Imports**: Use `.js` extensions for local imports (TS/ES module requirement)

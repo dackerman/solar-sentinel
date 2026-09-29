@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Rebuild and restart the Docker container, then verify the app responds.
-# Docker copies files at build time, so a plain restart never picks up code changes.
+# Rebuild and restart the systemd user service, then verify the app responds.
+# The unit's ExecStartPre runs `pnpm run build`, so a restart is a full deploy.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-docker compose down
-docker compose up -d --build
+systemctl --user restart solar-sentinel.service
 
 echo "Waiting for app on :49877..."
 for _ in $(seq 1 30); do
@@ -17,5 +16,5 @@ for _ in $(seq 1 30); do
 done
 
 echo "Deploy failed — app not responding on :49877 after 60s" >&2
-docker logs --tail 20 solar-sentinel >&2
+journalctl --user -u solar-sentinel.service -n 20 --no-pager >&2
 exit 1
