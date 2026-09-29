@@ -153,7 +153,8 @@ describe('wind in the UI', () => {
       <div id="single-display" class="hidden">
         <span id="current-wind">--</span><span id="wind-label">Wind</span>
       </div>
-      <canvas id="uvChart"></canvas><canvas id="weatherChart"></canvas><canvas id="windChart"></canvas>`;
+      <canvas id="uvChart"></canvas><canvas id="weatherChart"></canvas>
+      <details id="wind-chart-details"><summary>Wind</summary><canvas id="windChart"></canvas></details>`;
   };
 
   let app: any;
@@ -216,6 +217,7 @@ describe('wind in the UI', () => {
     expect(text('current-wind')).toBe('--');
     expect(text('wind-label')).toBe('Wind');
 
+    (document.getElementById('wind-chart-details') as HTMLDetailsElement).open = true;
     document.getElementById('wind-chart-container')!.classList.remove('hidden');
     await app.renderCharts(base);
     expect(document.getElementById('wind-chart-container')!.classList.contains('hidden')).toBe(
@@ -233,6 +235,39 @@ describe('wind in the UI', () => {
       false
     );
     expect(vi.mocked((global as any).Chart)).toHaveBeenCalledTimes(5);
+  });
+
+  it('keeps the wind panel collapsed by default and skips drawing its chart', async () => {
+    app.setupWindChartToggle();
+    const details = document.getElementById('wind-chart-details') as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    await app.renderCharts({ ...base, windSpeed: fill(6), windDirection: fill(0) });
+    expect(document.getElementById('wind-chart-container')!.classList.contains('hidden')).toBe(
+      false
+    );
+    expect(vi.mocked((global as any).Chart)).toHaveBeenCalledTimes(2);
+  });
+
+  it('remembers an opened wind panel and draws the chart when opened', async () => {
+    app.setupWindChartToggle();
+    const details = document.getElementById('wind-chart-details') as HTMLDetailsElement;
+    await app.renderCharts({ ...base, windSpeed: fill(6), windDirection: fill(0) });
+    vi.mocked((global as any).Chart).mockClear();
+
+    details.open = true;
+    details.dispatchEvent(new Event('toggle'));
+    expect(localStorage.getItem('solar_sentinel_wind_chart_open')).toBe('1');
+    await vi.waitFor(() => expect(vi.mocked((global as any).Chart)).toHaveBeenCalledTimes(3));
+
+    setupDOM();
+    const next = new SolarSentinelApp() as any;
+    next.setupWindChartToggle();
+    expect((document.getElementById('wind-chart-details') as HTMLDetailsElement).open).toBe(true);
+
+    const reopened = document.getElementById('wind-chart-details') as HTMLDetailsElement;
+    reopened.open = false;
+    reopened.dispatchEvent(new Event('toggle'));
+    expect(localStorage.getItem('solar_sentinel_wind_chart_open')).toBe('0');
   });
 
   it('adds wind to non-art forecast calendar cells only when present', () => {

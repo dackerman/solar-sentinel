@@ -351,17 +351,30 @@
             id="wind-chart-container"
             class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6 mb-6"
           >
-            <h3 class="text-lg font-semibold mb-2 sm:mb-4">Wind</h3>
-            <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
-              <span>💨 Speed (mph)</span>
-              <span>Arrows: where wind blows · Dashed: gusts</span>
-            </div>
-            <div style="height: 384px; width: 100%; position: relative">
-              <canvas
-                id="windChart"
-                style="height: 384px !important; width: 100% !important"
-              ></canvas>
-            </div>
+            <details id="wind-chart-details" class="group">
+              <summary
+                class="flex cursor-pointer select-none list-none items-center justify-between [&::-webkit-details-marker]:hidden"
+              >
+                <h3 class="text-lg font-semibold">Wind</h3>
+                <span
+                  class="text-gray-400 transition-transform group-open:rotate-180"
+                  aria-hidden="true"
+                  >▾</span
+                >
+              </summary>
+              <div class="mt-2 sm:mt-4">
+                <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
+                  <span>💨 Speed (mph)</span>
+                  <span>Arrows: where wind blows · Dashed: gusts</span>
+                </div>
+                <div style="height: 384px; width: 100%; position: relative">
+                  <canvas
+                    id="windChart"
+                    style="height: 384px !important; width: 100% !important"
+                  ></canvas>
+                </div>
+              </div>
+            </details>
           </div>
 
           <!-- UV Chart container -->

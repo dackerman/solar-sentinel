@@ -44,6 +44,7 @@
 - Geolocation is background-only for startup; Windham loads first unless the device is away from home
 - Users can switch locations from the header location button: a picker with pinned Home, starred favorites, "use my current location", and Open-Meteo geocoding name search (`src/components/locationPicker.ts`, `src/services/geocoding.ts`)
 - Favorites live in localStorage `solar_sentinel_saved_locations`; the explicit selection in `solar_sentinel_selected_location` (`src/services/savedLocations.ts`). A manual pick persists across reloads and disables background geolocation until "use my current location" is chosen
+- The Wind chart card is a `<details>` collapsed by default; opening it is remembered in localStorage `solar_sentinel_wind_chart_open`, and the wind chart is only drawn while open
 - Expired weather/calendar localStorage entries are swept at idle after startup (`WeatherAPI.sweepExpiredCache`)
 - Chart.js is lazily imported from `chart.js/auto`; do not re-add a blocking CDN script
 - Weather art lives as 512px lossless originals in `art-src/weather-art/`; `./scripts/compress-weather-art` (ImageMagick) emits the served 384px lossy copies into `public/weather-art/v2/` (committed). Art URLs are path-versioned and cached immutable — any art change goes to a new `/v3/` directory

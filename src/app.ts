@@ -38,6 +38,8 @@ import type {
   WeatherHistoryEntry,
 } from './types/weather.js';
 
+const WIND_CHART_OPEN_KEY = 'solar_sentinel_wind_chart_open';
+
 export class SolarSentinelApp {
   private static activeFocusRefreshHandler: (() => void) | null = null;
   private static activeVisibilityRefreshHandler: (() => void) | null = null;
@@ -185,6 +187,8 @@ export class SolarSentinelApp {
   }
 
   private setupEventListeners(): void {
+    this.setupWindChartToggle();
+
     // Session-expired banner: bypass the service worker so the request hits
     // Cloudflare Access directly and triggers its login, then returns here.
     document.getElementById('auth-banner')?.addEventListener('click', () => {
@@ -914,6 +918,35 @@ export class SolarSentinelApp {
     return hour;
   }
 
+  private isWindChartOpen(): boolean {
+    return (
+      (document.getElementById('wind-chart-details') as HTMLDetailsElement | null)?.open ?? false
+    );
+  }
+
+  // The wind panel is collapsed by default; opening it is remembered per device.
+  private setupWindChartToggle(): void {
+    const details = document.getElementById('wind-chart-details') as HTMLDetailsElement | null;
+    if (!details) return;
+    try {
+      details.open = localStorage.getItem(WIND_CHART_OPEN_KEY) === '1';
+    } catch {
+      // Storage unavailable: stay collapsed.
+    }
+    details.addEventListener('toggle', () => {
+      try {
+        localStorage.setItem(WIND_CHART_OPEN_KEY, details.open ? '1' : '0');
+      } catch {
+        // Ignore storage failures; the panel still works for this visit.
+      }
+      if (details.open && !this.windChart && this.lastChartData) {
+        void this.renderCharts(this.lastChartData).catch(error => {
+          this.debugPanel.log(`Wind chart render failed: ${(error as Error).message}`);
+        });
+      }
+    });
+  }
+
   private async renderCharts(data: WeatherData): Promise<void> {
     const chartStart = performance.now();
     const renderToken = ++this.chartRenderToken;
@@ -937,10 +970,12 @@ export class SolarSentinelApp {
 
     const uvCanvas = document.getElementById('uvChart') as HTMLCanvasElement;
     const weatherCanvas = document.getElementById('weatherChart') as HTMLCanvasElement;
-    // Optional: the wind card is hidden (and not drawn) when the data has no wind.
+    // Optional: the wind card is hidden when the data has no wind, and the chart is
+    // only drawn while the collapsible panel is open.
     const windCanvas = document.getElementById('windChart') as HTMLCanvasElement | null;
-    const showWind = !!windCanvas && hasWindData(data.windSpeed);
-    document.getElementById('wind-chart-container')?.classList.toggle('hidden', !showWind);
+    const hasWind = !!windCanvas && hasWindData(data.windSpeed);
+    document.getElementById('wind-chart-container')?.classList.toggle('hidden', !hasWind);
+    const showWind = hasWind && this.isWindChartOpen();
 
     if (uvCanvas && weatherCanvas) {
       const canvasStart = performance.now();
