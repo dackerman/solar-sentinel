@@ -19,6 +19,9 @@ export interface WeatherData {
     cached: boolean;
     cacheAge: number;
     lastUpdated: string;
+    // Past-day responses: served from the last stored snapshot of that day.
+    historical?: boolean;
+    snapshotAt?: string;
     performance?: ServerPerformanceMetadata;
   };
   timing?: RequestTiming;
@@ -39,6 +42,9 @@ export interface DailyData {
     cached: boolean;
     cacheAge: number;
     lastUpdated: string;
+    // Past-day responses: served from the last stored snapshot of that day.
+    historical?: boolean;
+    snapshotAt?: string;
     performance?: ServerPerformanceMetadata;
   };
   timing?: RequestTiming;
@@ -67,6 +73,9 @@ export interface DailyCalendarData {
     cached: boolean;
     cacheAge: number;
     lastUpdated: string;
+    // Past-day responses: served from the last stored snapshot of that day.
+    historical?: boolean;
+    snapshotAt?: string;
     performance?: ServerPerformanceMetadata;
   };
   timing?: RequestTiming;

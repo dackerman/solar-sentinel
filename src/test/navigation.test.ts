@@ -12,6 +12,9 @@ const setupDOM = () => {
       <div id="legend" class="hidden"></div>
       <div id="error" class="hidden"></div>
       <div id="date-display"></div>
+      <span id="snapshot-badge" class="hidden"></span>
+      <div id="no-snapshot" class="hidden"></div>
+      <button id="history-toggle" class="hidden"></button>
       <div id="location-display"></div>
       <span id="current-time">--:-- --</span>
       <button id="prev-day">prev</button>
@@ -77,7 +80,7 @@ describe('Date navigation bounds', () => {
     localStorage.clear();
   });
 
-  it('does not navigate before today and not beyond +16 days', async () => {
+  it('does not navigate before today-7 and not beyond +16 days', async () => {
     const today = new Date();
     const fmt = (d: Date) => d.toLocaleDateString('en-CA');
 
@@ -90,9 +93,22 @@ describe('Date navigation bounds', () => {
     errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
     await init;
 
-    // Attempt to go prev-day (should not fetch because date would be < today)
+    // prev-day is allowed down to today-7 (past days are explicit picks)...
+    vi.mocked(global.fetch).mockResolvedValue(mkResponse(mkData(fmt(addDays(today, -1)))) as any);
     (document.getElementById('prev-day') as HTMLButtonElement).click();
-    expect(global.fetch).toHaveBeenCalledTimes(1); // only initial combined call
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    for (let i = 0; i < 6; i++) {
+      (document.getElementById('prev-day') as HTMLButtonElement).click();
+    }
+    expect(global.fetch).toHaveBeenCalledTimes(8);
+    // ...but not before that.
+    (document.getElementById('prev-day') as HTMLButtonElement).click();
+    expect(global.fetch).toHaveBeenCalledTimes(8);
+    vi.mocked(global.fetch).mockReset();
+    vi.mocked(global.fetch).mockResolvedValue(mkResponse(mkData(fmt(today))) as any);
+    for (let i = 0; i < 7; i++) {
+      (document.getElementById('next-day') as HTMLButtonElement).click();
+    }
 
     // Navigate forward up to bounds (best-effort; clicks that exceed bounds are ignored by app)
     for (let i = 0; i < 16; i++) {
@@ -593,5 +609,134 @@ describe('Date navigation bounds', () => {
     expect(priv.historyMode).toBe(false);
     expect(priv.weatherHistory).toEqual([]);
     expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(tomorrowStr));
+  });
+
+  describe('past days', () => {
+    const initApp = async () => {
+      const app = new SolarSentinelApp();
+      const init = app.initialize();
+      const errCb = vi.mocked(navigator.geolocation.getCurrentPosition).mock.calls[0][1]!;
+      errCb({ code: 1, message: 'Permission denied' } as GeolocationPositionError);
+      await init;
+      await flush();
+      return app as unknown as {
+        followingToday: boolean;
+        currentDate: string;
+        normalizeCurrentDateForRefresh: () => void;
+      };
+    };
+
+    const mkHistorical = (date: string, snapshotAt: string): WeatherData => ({
+      ...mkData(date),
+      metadata: {
+        cached: true,
+        cacheAge: 0,
+        lastUpdated: snapshotAt,
+        historical: true,
+        snapshotAt,
+      },
+    });
+
+    it('past dates are explicit picks; only today follows, and refresh does not yank a past date back', async () => {
+      const today = new Date();
+      const todayStr = fmt(today);
+      const yesterdayStr = fmt(addDays(today, -1));
+      vi.mocked(global.fetch).mockReset();
+      vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+        const date = new URL(String(input), 'http://localhost').searchParams.get('date');
+        return Promise.resolve(
+          mkResponse(
+            date && date < todayStr
+              ? mkHistorical(date, `${date}T23:50:00`)
+              : mkData(date || todayStr)
+          ) as any
+        );
+      });
+      const app = await initApp();
+      expect(app.followingToday).toBe(true);
+
+      (document.getElementById('prev-day') as HTMLButtonElement).click();
+      await flush();
+      expect(app.followingToday).toBe(false);
+      expect(app.currentDate).toBe(yesterdayStr);
+
+      app.normalizeCurrentDateForRefresh();
+      expect(app.currentDate).toBe(yesterdayStr);
+      expect(app.followingToday).toBe(false);
+
+      (document.getElementById('next-day') as HTMLButtonElement).click();
+      await flush();
+      expect(app.followingToday).toBe(true);
+    });
+
+    it('shows an "As forecast" badge and hides the history toggle for a past day', async () => {
+      const today = new Date();
+      const todayStr = fmt(today);
+      const yesterdayStr = fmt(addDays(today, -1));
+      const snapshotAt = `${yesterdayStr}T23:50:00`;
+      vi.mocked(global.fetch).mockReset();
+      vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+        const date = new URL(String(input), 'http://localhost').searchParams.get('date');
+        return Promise.resolve(
+          mkResponse(
+            date === yesterdayStr ? mkHistorical(date, snapshotAt) : mkData(todayStr)
+          ) as any
+        );
+      });
+      await initApp();
+      const badge = document.getElementById('snapshot-badge')!;
+      expect(badge.classList.contains('hidden')).toBe(true);
+
+      (document.getElementById('prev-day') as HTMLButtonElement).click();
+      await flush();
+      expect(badge.classList.contains('hidden')).toBe(false);
+      expect(badge.textContent).toContain('As forecast');
+      expect(badge.textContent).toContain('11:50 PM');
+      expect(document.getElementById('history-toggle')?.classList.contains('hidden')).toBe(true);
+
+      (document.getElementById('next-day') as HTMLButtonElement).click();
+      await flush();
+      expect(badge.classList.contains('hidden')).toBe(true);
+    });
+
+    it('shows a friendly empty state on 404 without retrying', async () => {
+      const today = new Date();
+      const todayStr = fmt(today);
+      const yesterdayStr = fmt(addDays(today, -1));
+      vi.mocked(global.fetch).mockReset();
+      vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+        const date = new URL(String(input), 'http://localhost').searchParams.get('date');
+        if (date === yesterdayStr) {
+          const notFound = {
+            ok: false,
+            status: 404,
+            headers: { get: vi.fn().mockReturnValue(null) },
+            json: vi.fn().mockResolvedValue({
+              error: 'No stored forecast for this day',
+              historical: true,
+              date,
+            }),
+            clone: vi.fn(),
+          };
+          notFound.clone.mockReturnValue(notFound);
+          return Promise.resolve(notFound as any);
+        }
+        return Promise.resolve(mkResponse(mkData(todayStr)) as any);
+      });
+      await initApp();
+      const callsBefore = vi.mocked(global.fetch).mock.calls.length;
+
+      (document.getElementById('prev-day') as HTMLButtonElement).click();
+      await flush();
+      await flush();
+
+      expect(document.getElementById('no-snapshot')?.classList.contains('hidden')).toBe(false);
+      expect(document.getElementById('error')?.classList.contains('hidden')).toBe(true);
+      expect(document.getElementById('date-display')?.textContent).toBe(dayLabel(yesterdayStr));
+      expect(vi.mocked(global.fetch).mock.calls.length).toBe(callsBefore + 1);
+      // Navigation stays usable.
+      expect(document.getElementById('prev-day')?.classList.contains('hidden')).toBe(false);
+      expect(document.getElementById('next-day')?.classList.contains('hidden')).toBe(false);
+    });
   });
 });

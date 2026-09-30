@@ -1,4 +1,4 @@
-import { WeatherAPI, AuthExpiredError } from './services/api.js';
+import { WeatherAPI, AuthExpiredError, NoSnapshotError } from './services/api.js';
 import { LocationService } from './services/location.js';
 import { SavedLocationsService } from './services/savedLocations.js';
 import { DebugPanel } from './components/debug.js';
@@ -39,6 +39,17 @@ import type {
 } from './types/weather.js';
 
 const WIND_CHART_OPEN_KEY = 'solar_sentinel_wind_chart_open';
+// How many days back the user may navigate (each shows the last stored snapshot).
+const MAX_PAST_DAYS = 7;
+// Days ahead covered by the forecast (fallback bound before the calendar loads).
+const MAX_FUTURE_DAYS = 16;
+
+function addDays(dateString: string, days: number): string {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 export class SolarSentinelApp {
   private static activeFocusRefreshHandler: (() => void) | null = null;
@@ -66,6 +77,11 @@ export class SolarSentinelApp {
   // kept as the device-local display guess until a response adopts the
   // server-resolved date.
   private followingToday = true;
+  // The location's own "today" as last reported by the server (calendar start /
+  // followed-today response). Needed to bound past-day navigation, because a
+  // past day's calendar snapshot starts at that day rather than at today.
+  // null until known; falls back to the device-local date.
+  private locationToday: string | null = null;
   private uvChart: ChartInstance | null = null;
   private weatherChart: ChartInstance | null = null;
   private windChart: ChartInstance | null = null;
@@ -367,6 +383,13 @@ export class SolarSentinelApp {
           durationMs: Math.round(performance.now() - localRenderStart),
         });
         requestedCalendar = this.requestForecastCalendar(false);
+
+        // A past day's snapshot never changes: the cached copy is final, so
+        // skip the network round trip entirely.
+        if (localData.metadata?.historical) {
+          this.hideAuthBanner();
+          return true;
+        }
       }
 
       const apiStart = performance.now();
@@ -384,6 +407,9 @@ export class SolarSentinelApp {
       const isCurrentRequest = this.isCurrentRequest(requestedLocation, requestedDate);
       if (isCurrentRequest) {
         this.latestWeatherData = data;
+        if (this.followingToday && data.date && !data.metadata?.historical) {
+          this.locationToday = data.date;
+        }
       }
       if (data.date && data.date !== requestedDate && isCurrentRequest) {
         this.debugPanel.log(`Date resolved by server: ${requestedDate} → ${data.date}`);
@@ -452,6 +478,15 @@ export class SolarSentinelApp {
         error: (error as Error).message,
         skippedAsStale: !isCurrentRequest,
       });
+
+      if (error instanceof NoSnapshotError) {
+        // Expected outcome for a past day the server never captured: not an
+        // error banner, and never retried.
+        if (isCurrentRequest) {
+          this.showNoSnapshot();
+        }
+        return true;
+      }
 
       if (error instanceof AuthExpiredError) {
         // Show even when the local cache already painted or the refresh was
@@ -626,6 +661,7 @@ export class SolarSentinelApp {
     // currentDate resets to the device-local guess as the display placeholder
     // until the response adopts the server-resolved date.
     this.followingToday = true;
+    this.locationToday = null;
     this.currentDate = new Date().toLocaleDateString('en-CA');
     this.historyMode = false;
     this.latestWeatherData = null;
@@ -659,6 +695,8 @@ export class SolarSentinelApp {
     if (dateElement) {
       dateElement.textContent = dateDisplay;
     }
+    document.getElementById('no-snapshot')?.classList.add('hidden');
+    this.updateSnapshotBadge(data);
     this.updateDateNavigationControls();
 
     if (data.metadata?.lastUpdated) {
@@ -685,6 +723,52 @@ export class SolarSentinelApp {
       this.markPerformance('charts-error', { error: (error as Error).message });
       this.debugPanel.log('Chart render error', { error: (error as Error).message });
     });
+  }
+
+  // Past days are served from the last snapshot stored that day; say so.
+  private updateSnapshotBadge(data: WeatherData | null): void {
+    const badge = document.getElementById('snapshot-badge');
+    if (!badge) return;
+    const snapshotAt = data?.metadata?.historical ? data.metadata.snapshotAt : undefined;
+    const snapshotDate = snapshotAt ? new Date(snapshotAt) : null;
+    if (!snapshotDate || Number.isNaN(snapshotDate.getTime())) {
+      badge.classList.add('hidden');
+      badge.textContent = '';
+      return;
+    }
+    const label = snapshotDate.toLocaleString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    badge.textContent = `As forecast · ${label}`;
+    badge.classList.remove('hidden');
+  }
+
+  // Friendly empty state for a past day the server never captured.
+  private showNoSnapshot(): void {
+    this.latestWeatherData = null;
+    document.getElementById('loading')?.style.setProperty('display', 'none');
+    document.getElementById('error')?.classList.add('hidden');
+    [
+      'current-conditions',
+      'chart-container',
+      'weather-chart-container',
+      'wind-chart-container',
+    ].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+    const label = this.parseLocalDate(this.currentDate).toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+    this.updateElement('date-display', label);
+    this.updateSnapshotBadge(null);
+    document.getElementById('no-snapshot')?.classList.remove('hidden');
+    this.updateHistoryControls();
+    this.updateDateNavigationControls();
   }
 
   private updateCurrentConditions(data: WeatherData): void {
@@ -1103,7 +1187,9 @@ export class SolarSentinelApp {
     // paint below; it's usually right and harmless on a miss. The actual
     // request always omits the date so the server resolves the location's
     // real today (see fetchDailyCalendar).
-    const startDateGuess = new Date().toLocaleDateString('en-CA');
+    // A past day requests that day's own calendar snapshot instead.
+    const isPast = this.isPastDate(requestedDate);
+    const startDateGuess = isPast ? requestedDate : new Date().toLocaleDateString('en-CA');
     const cacheStart = performance.now();
     const cachedCalendar = this.api.getCachedDailyCalendar(this.currentLocation, startDateGuess);
     this.markPerformance('forecast-calendar-cache-lookup', {
@@ -1123,10 +1209,28 @@ export class SolarSentinelApp {
     }
 
     const apiStart = performance.now();
-    const calendar = await this.api.fetchDailyCalendar(requestedLocation, null);
+    // Snapshots of a past day are immutable: a cached one is final.
+    if (isPast && cachedCalendar?.metadata?.historical) {
+      return;
+    }
+    let calendar: Awaited<ReturnType<WeatherAPI['fetchDailyCalendar']>>;
+    try {
+      calendar = await this.api.fetchDailyCalendar(
+        requestedLocation,
+        isPast ? requestedDate : null
+      );
+    } catch (error) {
+      if (!(error instanceof NoSnapshotError)) throw error;
+      // No stored calendar for that past day: fall back to the current
+      // outlook so the strip and the navigation bounds stay usable.
+      calendar = await this.api.fetchDailyCalendar(requestedLocation, null);
+    }
     const isCurrentRequest = this.isCurrentRequest(requestedLocation, requestedDate);
     if (isCurrentRequest) {
       this.latestCalendarData = calendar;
+      if (!calendar.metadata?.historical && calendar.startDate) {
+        this.locationToday = calendar.startDate;
+      }
     }
     this.markPerformance('forecast-calendar-api-complete', {
       durationMs: Math.round(performance.now() - apiStart),
@@ -1380,7 +1484,7 @@ export class SolarSentinelApp {
 
     if (!panel || !controls || !scrubber || !status || !detail || !toggle) return;
 
-    const canLoadHistory = Boolean(this.latestWeatherData);
+    const canLoadHistory = Boolean(this.latestWeatherData) && !this.isPastDate(this.currentDate);
     const hasHistory = this.historyTimeline.length > 0;
     toggle.classList.toggle('hidden', !canLoadHistory);
     toggle.setAttribute('aria-pressed', String(this.historyMode));
@@ -1562,8 +1666,7 @@ export class SolarSentinelApp {
 
   private renderForecastCalendarDay(day: DailyCalendarDay): string {
     const date = new Date(day.date + 'T00:00:00');
-    const today = new Date().toLocaleDateString('en-CA');
-    const isToday = day.date === today;
+    const isToday = day.date === this.getToday();
     const isSelected = day.date === this.currentDate;
     const { icon, label } = this.getWeatherIcon(day);
     const high = Math.round(day.tempMax);
@@ -1706,12 +1809,26 @@ export class SolarSentinelApp {
     }
 
     this.debugPanel.log(`Forecast day selected: ${this.currentDate} → ${dateString}`);
-    // Navigating back to the calendar's first day means following today
-    // again; any later day is an explicit date the user picked.
-    this.followingToday = dateString === bounds.min;
-    this.currentDate = dateString;
+    this.goToDate(dateString);
+  }
+
+  // Following today means being on the location's real today; every other
+  // date (past or future) is an explicit pick.
+  private goToDate(newDate: string): void {
+    this.followingToday = newDate === this.getToday();
+    this.currentDate = newDate;
     this.latestWeatherData = null;
-    if (this.historyMode) {
+    if (this.isPastDate(newDate) && this.historyMode) {
+      // The condition-history scrubber only applies to today and future days.
+      this.setHistoryUnavailable(false);
+      this.resetHistoryRenderTracking();
+      this.historyMode = false;
+      this.weatherHistory = [];
+      this.calendarHistory = [];
+      this.historyTimeline = [];
+      this.updateHistoryControls();
+      void this.loadData();
+    } else if (this.historyMode) {
       void this.refreshHistoryForDateChange();
       void this.loadData(true);
     } else {
@@ -1852,7 +1969,13 @@ export class SolarSentinelApp {
         date: this.currentDate,
         followingToday: this.followingToday,
       });
-      succeeded = await this.loadData(true);
+      if (this.isPastDate(this.currentDate) && this.pastDayIsSettled()) {
+        // A past day's snapshot is final: nothing to refresh.
+        this.debugPanel.log(`Auto-refresh skipped (${trigger}): past day is final`);
+        succeeded = true;
+      } else {
+        succeeded = await this.loadData(true);
+      }
     } finally {
       this.refreshInFlight = false;
     }
@@ -1908,7 +2031,9 @@ export class SolarSentinelApp {
 
     const todayStr = new Date().toLocaleDateString('en-CA');
 
-    if (this.currentDate < todayStr) {
+    // Past days (up to MAX_PAST_DAYS back) are explicit picks and stay put.
+    // Only a date that has slid out of that window falls back to today.
+    if (this.currentDate < addDays(todayStr, -MAX_PAST_DAYS)) {
       this.debugPanel.log(`Date rollover: ${this.currentDate} → ${todayStr}`);
       this.currentDate = todayStr;
       this.historyMode = false;
@@ -1917,10 +2042,10 @@ export class SolarSentinelApp {
       this.updateHistoryControls();
     }
 
-    // An explicit date the user navigated to has caught up to (or was
-    // already at/before) device-local today: resume following today so
-    // future requests omit `date=` again and let the server resolve it.
-    if (this.currentDate <= todayStr) {
+    // An explicit future date has caught up to device-local today: resume
+    // following today so future requests omit `date=` again and let the
+    // server resolve it.
+    if (this.currentDate === todayStr) {
       this.followingToday = true;
     }
   }
@@ -1935,19 +2060,7 @@ export class SolarSentinelApp {
     if (newDate < bounds.min || newDate > bounds.max) return;
 
     this.debugPanel.log(`Date navigation: ${this.currentDate} → ${newDate}`, { direction });
-    // Navigating back to the calendar's first day means following today
-    // again; any later day is an explicit date the user picked.
-    this.followingToday = newDate === bounds.min;
-    this.currentDate = newDate;
-    this.latestWeatherData = null;
-    if (this.historyMode) {
-      void this.refreshHistoryForDateChange();
-      void this.loadData(true);
-    } else {
-      this.weatherHistory = [];
-      this.updateHistoryControls();
-      this.loadData();
-    }
+    this.goToDate(newDate);
   }
 
   private updateDateNavigationControls(): void {
@@ -1978,19 +2091,40 @@ export class SolarSentinelApp {
     return new Date(year, month - 1, day);
   }
 
-  // Prefer the server-provided calendar range (correct for the location's
-  // timezone); fall back to device-local today..+16 before the calendar loads.
+  // Bounds are location-today −7 .. calendar end (or today +16 before the
+  // calendar loads); today comes from the server when known (correct for the
+  // location's timezone).
   private getDateBounds(): { min: string; max: string } {
-    if (this.latestCalendarData?.startDate && this.latestCalendarData?.endDate) {
-      return { min: this.latestCalendarData.startDate, max: this.latestCalendarData.endDate };
-    }
-    const today = new Date();
-    const max = new Date(today);
-    max.setDate(max.getDate() + 16);
-    return {
-      min: today.toLocaleDateString('en-CA'),
-      max: max.toLocaleDateString('en-CA'),
-    };
+    const today = this.getToday();
+    const calendar = this.latestCalendarData;
+    // A past day's calendar snapshot ends at that day + 15, not at today + 16.
+    const max =
+      calendar?.endDate && !calendar.metadata?.historical
+        ? calendar.endDate
+        : addDays(today, MAX_FUTURE_DAYS);
+    return { min: addDays(today, -MAX_PAST_DAYS), max };
+  }
+
+  // The location's own today: from the server when known, else the device date.
+  private getToday(): string {
+    if (this.locationToday) return this.locationToday;
+    const calendar = this.latestCalendarData;
+    if (calendar?.startDate && !calendar.metadata?.historical) return calendar.startDate;
+    return new Date().toLocaleDateString('en-CA');
+  }
+
+  // The visible past day is already rendered (or confirmed to have no snapshot).
+  private pastDayIsSettled(): boolean {
+    const noSnapshot = !document.getElementById('no-snapshot')?.classList.contains('hidden');
+    return (
+      noSnapshot ||
+      (this.latestWeatherData?.date === this.currentDate &&
+        Boolean(this.latestWeatherData?.metadata?.historical))
+    );
+  }
+
+  private isPastDate(date: string): boolean {
+    return !this.followingToday && date < this.getToday();
   }
 
   private updateElement(id: string, text: string): void {

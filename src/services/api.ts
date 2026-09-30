@@ -20,11 +20,26 @@ export class AuthExpiredError extends Error {
   }
 }
 
+// The server has no stored snapshot for a requested past day (HTTP 404 with
+// `historical: true`). Distinct from a generic failure so the UI can show an
+// empty state instead of an error, and so nothing retries it.
+export class NoSnapshotError extends Error {
+  constructor(
+    readonly date: string,
+    message = 'No stored forecast for this day'
+  ) {
+    super(message);
+    this.name = 'NoSnapshotError';
+  }
+}
+
 export class WeatherAPI {
   private baseURL = '';
   private readonly WEATHER_CACHE_PREFIX = 'solar_sentinel_weather';
   private readonly CALENDAR_CACHE_PREFIX = 'solar_sentinel_calendar';
   private readonly WEATHER_CACHE_DURATION_MS = 6 * 60 * 60 * 1000; // 6 hours
+  // Past-day responses come from an immutable end-of-day snapshot.
+  private readonly HISTORICAL_CACHE_DURATION_MS = 8 * 24 * 60 * 60 * 1000; // 8 days
   private readonly inFlightRequests = new Map<string, Promise<unknown>>();
   // On Android, a request started right before the page is backgrounded can
   // hang indefinitely (no response, no error), leaving refreshInFlight stuck
@@ -51,6 +66,7 @@ export class WeatherAPI {
     const responseDuration = Math.round(responseTime - startTime);
 
     if (!response.ok) {
+      await this.throwIfNoSnapshot(response, date);
       throw new Error(`Weather API failed: ${response.status}`);
     }
 
@@ -85,6 +101,24 @@ export class WeatherAPI {
     } as WeatherData & { timing: RequestTiming };
   }
 
+  private async throwIfNoSnapshot(response: Response, date: string | null): Promise<void> {
+    if (response.status !== 404) return;
+    try {
+      const body = (await response.json()) as { historical?: boolean; date?: string };
+      if (body?.historical) {
+        throw new NoSnapshotError(body.date ?? date ?? '');
+      }
+    } catch (error) {
+      if (error instanceof NoSnapshotError) throw error;
+    }
+  }
+
+  private cacheTtlMs(data: { metadata?: { historical?: boolean } } | undefined): number {
+    return data?.metadata?.historical
+      ? this.HISTORICAL_CACHE_DURATION_MS
+      : this.WEATHER_CACHE_DURATION_MS;
+  }
+
   getCachedWeatherData(
     location: Location,
     date: string
@@ -95,7 +129,7 @@ export class WeatherAPI {
 
       const parsed = JSON.parse(cached);
       const age = Date.now() - parsed.timestamp;
-      if (age > this.WEATHER_CACHE_DURATION_MS) {
+      if (age > this.cacheTtlMs(parsed.data)) {
         localStorage.removeItem(this.getWeatherCacheKey(location, date));
         return null;
       }
@@ -154,6 +188,7 @@ export class WeatherAPI {
     const responseDuration = Math.round(responseTime - startTime);
 
     if (!response.ok) {
+      await this.throwIfNoSnapshot(response, startDate);
       throw new Error(`Daily calendar API failed: ${response.status}`);
     }
 
@@ -198,7 +233,7 @@ export class WeatherAPI {
 
       const parsed = JSON.parse(cached);
       const age = Date.now() - parsed.timestamp;
-      if (age > this.WEATHER_CACHE_DURATION_MS) {
+      if (age > this.cacheTtlMs(parsed.data)) {
         localStorage.removeItem(cacheKey);
         return null;
       }
@@ -264,7 +299,7 @@ export class WeatherAPI {
           const expired =
             !parsed ||
             typeof parsed.timestamp !== 'number' ||
-            Date.now() - parsed.timestamp > this.WEATHER_CACHE_DURATION_MS;
+            Date.now() - parsed.timestamp > this.cacheTtlMs(parsed.data);
           if (expired) keysToRemove.push(key);
         } catch {
           keysToRemove.push(key);
