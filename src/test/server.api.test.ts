@@ -713,8 +713,10 @@ describe('Server API Endpoints', () => {
       });
       await request(app).get('/api/weather?lat=21.31&lon=-157.86');
 
+      // /api/weather serves past days from history; endpoints without a
+      // look-back window still clamp.
       const response = await request(app).get(
-        `/api/weather?lat=21.31&lon=-157.86&date=${yesterday}`
+        `/api/uv-today?lat=21.31&lon=-157.86&date=${yesterday}`
       );
       expect(response.status).toBe(200);
       expect(response.body.date).toBe(honoluluToday);
@@ -737,6 +739,111 @@ describe('Server API Endpoints', () => {
 
       const response = await request(app).get(`/api/weather?lat=21.31&lon=-157.86&date=${tooFar}`);
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe('look back a week (historical snapshots)', () => {
+    const lat = 35.68;
+    const lon = 139.69;
+    const tz = 'Asia/Tokyo';
+    const locationKey = '35.68,139.69';
+    const tokyoToday = new Date().toLocaleDateString('en-CA', { timeZone: tz });
+
+    function storeSnapshot(route: string, date: string, fetchedAt: string, tempMax: number) {
+      const body =
+        route === '/api/weather'
+          ? { date, hourly: [], daily: { tempMax } }
+          : { days: [{ date, tempMax }] };
+      apiHistoryDb
+        .prepare(
+          `INSERT INTO api_call_history (fetched_at, route, request_query_json, lat, lon,
+            location_key, date, cache_key, cache_status, status_code, response_json)
+           VALUES (?, ?, '{}', ?, ?, ?, ?, ?, 'snapshot', 200, ?)`
+        )
+        .run(fetchedAt, route, lat, lon, locationKey, date, locationKey, JSON.stringify(body));
+    }
+
+    function primeForecast() {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(getMockCombinedData(tokyoToday, tz)),
+      });
+      return request(app).get('/api/weather').query({ lat, lon }).expect(200);
+    }
+
+    it('serves the latest stored snapshot for a past day within 7 days', async () => {
+      const day = addDaysForTest(tokyoToday, -3);
+      storeSnapshot('/api/weather', day, '2020-01-01T00:00:00.000Z', 50);
+      storeSnapshot('/api/weather', day, '2020-01-01T06:00:00.000Z', 55);
+      storeSnapshot('/api/weather', day, '2020-01-01T03:00:00.000Z', 52);
+      await primeForecast();
+
+      const response = await request(app).get('/api/weather').query({ lat, lon, date: day });
+      expect(response.status).toBe(200);
+      expect(response.body.date).toBe(day);
+      expect(response.body.daily.tempMax).toBe(55);
+      expect(response.body.metadata.historical).toBe(true);
+      expect(response.body.metadata.snapshotAt).toBe('2020-01-01T06:00:00.000Z');
+      expect(response.headers['cache-control']).toBe('private, max-age=300');
+    });
+
+    it('serves day -7 but clamps older dates to today', async () => {
+      const edge = addDaysForTest(tokyoToday, -7);
+      storeSnapshot('/api/weather', edge, '2020-01-02T00:00:00.000Z', 41);
+      await primeForecast();
+
+      const ok = await request(app).get('/api/weather').query({ lat, lon, date: edge });
+      expect(ok.status).toBe(200);
+      expect(ok.body.metadata.historical).toBe(true);
+
+      const tooOld = await request(app)
+        .get('/api/weather')
+        .query({ lat, lon, date: addDaysForTest(tokyoToday, -8) });
+      expect(tooOld.status).toBe(200);
+      expect(tooOld.body.date).toBe(tokyoToday);
+      expect(tooOld.body.metadata.historical).toBeUndefined();
+    });
+
+    it('returns 404 when no snapshot is stored for a past day', async () => {
+      const day = addDaysForTest(tokyoToday, -5);
+      await primeForecast();
+
+      const response = await request(app).get('/api/weather').query({ lat, lon, date: day });
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({
+        error: 'No stored forecast for this day',
+        historical: true,
+        date: day,
+      });
+    });
+
+    it('serves past daily-calendar snapshots too', async () => {
+      const day = addDaysForTest(tokyoToday, -2);
+      storeSnapshot('/api/daily-calendar', day, '2020-01-03T00:00:00.000Z', 60);
+      await primeForecast();
+
+      const response = await request(app).get('/api/daily-calendar').query({ lat, lon, date: day });
+      expect(response.status).toBe(200);
+      expect(response.body.days[0].date).toBe(day);
+      expect(response.body.metadata.historical).toBe(true);
+      expect(response.body.metadata.snapshotAt).toBe('2020-01-03T00:00:00.000Z');
+    });
+
+    it('still clamps past dates on other endpoints and serves today normally', async () => {
+      const day = addDaysForTest(tokyoToday, -2);
+      storeSnapshot('/api/weather', day, '2020-01-04T00:00:00.000Z', 70);
+      await primeForecast();
+
+      const widget = await request(app).get('/api/widget').query({ lat, lon, date: day });
+      expect(widget.status).toBe(200);
+      expect(widget.body.date).toBe(tokyoToday);
+
+      const today = await request(app).get('/api/weather').query({ lat, lon });
+      expect(today.status).toBe(200);
+      expect(today.body.date).toBe(tokyoToday);
+      expect(today.body.metadata.historical).toBeUndefined();
+      expect(today.headers['cache-control']).toBe('no-store');
     });
   });
 

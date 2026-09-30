@@ -30,7 +30,8 @@ const forecastCache = new Map();
 const forecastRefreshes = new Map();
 const FORECAST_REFRESH_MS = 10 * 60 * 1000;
 const CACHE_RETENTION_MS = 24 * 60 * 60 * 1000;
-const API_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+// 9 days so the final snapshot of day -7 (served as history) survives pruning.
+const API_HISTORY_RETENTION_MS = 9 * 24 * 60 * 60 * 1000;
 
 if (DB_PATH !== ':memory:') {
   mkdirSync(dirname(DB_PATH), { recursive: true });
@@ -118,6 +119,17 @@ const selectApiHistoryStatement = apiHistoryDb.prepare(`
     LIMIT ?
   )
   ORDER BY fetched_at ASC, id ASC
+`);
+
+const selectLatestApiSnapshotStatement = apiHistoryDb.prepare(`
+  SELECT fetched_at, response_json
+  FROM api_call_history
+  WHERE route = ?
+    AND location_key = ?
+    AND date = ?
+    AND status_code = 200
+  ORDER BY fetched_at DESC, id DESC
+  LIMIT 1
 `);
 
 const selectApiHistoryBeforeStatement = apiHistoryDb.prepare(`
@@ -830,6 +842,7 @@ function getApiHistoryEntries({ route, lat, lon, date, limit, before, after }) {
 }
 
 const FORECAST_WINDOW_DAYS = 16;
+const PAST_WINDOW_DAYS = 7;
 
 // Today's date (YYYY-MM-DD) in the given IANA timezone; UTC on bad input.
 function getTodayInTimezone(timeZone) {
@@ -865,11 +878,18 @@ function addDays(dateString, days) {
 
 // The served date can only be resolved once a forecast (and its real timezone)
 // is in hand: missing/past dates clamp to the location's today; dates beyond
-// the forecast window are rejected.
-function resolveRequestedDate(forecastData, requestedDate) {
+// the forecast window are rejected. With `allowPast`, dates within the last
+// PAST_WINDOW_DAYS resolve to `{ date, past: true }` (served from history).
+function resolveRequestedDate(forecastData, requestedDate, { allowPast = false } = {}) {
   const timeZone = forecastData?.timezone || 'UTC';
   const today = getTodayInTimezone(timeZone);
-  if (!requestedDate || requestedDate < today) {
+  if (!requestedDate) {
+    return { date: today };
+  }
+  if (requestedDate < today) {
+    if (allowPast && requestedDate >= addDays(today, -PAST_WINDOW_DAYS)) {
+      return { date: requestedDate, past: true };
+    }
     return { date: today };
   }
   if (requestedDate > addDays(today, FORECAST_WINDOW_DAYS)) {
@@ -1010,7 +1030,7 @@ async function fetchAndCacheForecast(lat, lon, cacheKey) {
   return refresh;
 }
 
-async function getForecast(lat, lon, requestedDate, requiredFields) {
+async function getForecast(lat, lon, requestedDate, requiredFields, options) {
   const lookupStart = performance.now();
   const cacheKey = getForecastCacheKey(lat, lon);
   const cached = forecastCache.get(cacheKey);
@@ -1018,14 +1038,15 @@ async function getForecast(lat, lon, requestedDate, requiredFields) {
 
   const validationStart = performance.now();
   if (cached) {
-    const resolved = resolveRequestedDate(cached.data, requestedDate);
+    const resolved = resolveRequestedDate(cached.data, requestedDate, options);
     if (resolved.error) return { error: resolved.error };
-    if (hasUsableForecast(cached.data, resolved.date, requiredFields)) {
+    if (resolved.past || hasUsableForecast(cached.data, resolved.date, requiredFields)) {
       return {
         cacheKey,
         cacheStatus: 'hit',
         entry: cached,
         date: resolved.date,
+        past: resolved.past,
         performance: {
           cacheLookupMs,
           cacheValidationMs: performance.now() - validationStart,
@@ -1037,13 +1058,14 @@ async function getForecast(lat, lon, requestedDate, requiredFields) {
 
   const forecastWaitStart = performance.now();
   const entry = await fetchAndCacheForecast(lat, lon, cacheKey);
-  const resolved = resolveRequestedDate(entry.data, requestedDate);
+  const resolved = resolveRequestedDate(entry.data, requestedDate, options);
   if (resolved.error) return { error: resolved.error };
   return {
     cacheKey,
     cacheStatus: 'miss',
     entry,
     date: resolved.date,
+    past: resolved.past,
     performance: {
       cacheLookupMs,
       cacheValidationMs,
@@ -1092,7 +1114,36 @@ function sendForecastResponse(req, res, data, entry, cacheStatus, timer) {
   res.json(responseBody);
 }
 
-async function handleForecastRequest(req, res, requiredFields, buildData, logLabel, errorMessage) {
+// Past days are gone from the forecast; the latest stored snapshot for the
+// day is its end-of-day view.
+function sendHistoricalResponse(res, route, cacheKey, date, entry, cacheStatus, timer) {
+  const lookupStart = performance.now();
+  const row = selectLatestApiSnapshotStatement.get(route, cacheKey, date);
+  timer.measure('historyLookup', lookupStart);
+  if (!row) {
+    return res
+      .status(404)
+      .json({ error: 'No stored forecast for this day', historical: true, date });
+  }
+  const body = addMetadata(JSON.parse(row.response_json), entry, cacheStatus, timer.metadata());
+  body.date = date;
+  body.metadata.historical = true;
+  body.metadata.snapshotAt = row.fetched_at;
+  res.set('Cache-Control', 'private, max-age=300');
+  res.set('X-Cache-Status', cacheStatus);
+  res.set('Server-Timing', timer.serverTiming());
+  return res.json(body);
+}
+
+async function handleForecastRequest(
+  req,
+  res,
+  requiredFields,
+  buildData,
+  logLabel,
+  errorMessage,
+  { allowPast = false } = {}
+) {
   const timer = createRequestTimer();
   let responseContext = {
     route: req.path,
@@ -1129,13 +1180,22 @@ async function handleForecastRequest(req, res, requiredFields, buildData, logLab
     };
 
     const forecastStart = performance.now();
-    const forecastResult = await getForecast(lat, lon, requestedDate, requiredFields);
+    const forecastResult = await getForecast(lat, lon, requestedDate, requiredFields, {
+      allowPast,
+    });
     timer.measure('getForecast', forecastStart);
     if (forecastResult.error) {
       responseContext = { ...responseContext, error: forecastResult.error.message };
       return res.status(forecastResult.error.status).json({ error: forecastResult.error.message });
     }
-    const { cacheKey, cacheStatus, entry, date, performance: forecastPerformance } = forecastResult;
+    const {
+      cacheKey,
+      cacheStatus,
+      entry,
+      date,
+      past,
+      performance: forecastPerformance,
+    } = forecastResult;
     Object.entries(forecastPerformance).forEach(([name, duration]) => {
       timer.add(name, duration);
     });
@@ -1146,6 +1206,10 @@ async function handleForecastRequest(req, res, requiredFields, buildData, logLab
       cacheStatus,
       cacheAgeMs: Date.now() - entry.timestamp,
     };
+
+    if (past) {
+      return sendHistoricalResponse(res, req.path, cacheKey, date, entry, cacheStatus, timer);
+    }
 
     const buildStart = performance.now();
     const data = buildData(entry.data, date);
@@ -1303,7 +1367,8 @@ app.get('/api/weather', async (req, res) => {
     ['hourly', 'daily'],
     buildWeatherData,
     'Weather API',
-    'Failed to fetch weather data. Please try again later.'
+    'Failed to fetch weather data. Please try again later.',
+    { allowPast: true }
   );
 });
 
@@ -1329,7 +1394,8 @@ app.get('/api/daily-calendar', async (req, res) => {
     (forecastData, requestedDate) =>
       buildDailyCalendarData(forecastData.daily, forecastData.hourly, requestedDate),
     'Daily calendar API',
-    'Failed to fetch daily calendar data. Please try again later.'
+    'Failed to fetch daily calendar data. Please try again later.',
+    { allowPast: true }
   );
 });
 
