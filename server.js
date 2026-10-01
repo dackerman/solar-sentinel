@@ -756,6 +756,37 @@ function getSafeNumber(value) {
   return Number.isFinite(value) ? value : null;
 }
 
+// The previous PAST_WINDOW_DAYS days for the calendar strip: each day's own
+// end-of-day view (days[0] of its latest calendar snapshot). Past days are
+// immutable, so memoize per (location, today).
+const pastCalendarDaysMemo = new Map();
+
+function getPastCalendarDays(cacheKey, today) {
+  const memoKey = `${cacheKey}|${today}`;
+  const memoized = pastCalendarDaysMemo.get(memoKey);
+  if (memoized) return memoized;
+
+  const pastDays = [];
+  try {
+    for (let offset = PAST_WINDOW_DAYS; offset >= 1; offset--) {
+      const date = addDays(today, -offset);
+      const row = selectLatestApiSnapshotStatement.get('/api/daily-calendar', cacheKey, date);
+      if (!row) continue;
+      const day = JSON.parse(row.response_json)?.days?.[0];
+      if (day?.date === date) pastDays.push(day);
+    }
+  } catch (error) {
+    console.error('Past calendar days error:', error.message);
+    return pastDays;
+  }
+
+  for (const key of pastCalendarDaysMemo.keys()) {
+    if (!key.endsWith(`|${today}`)) pastCalendarDaysMemo.delete(key);
+  }
+  pastCalendarDaysMemo.set(memoKey, pastDays);
+  return pastDays;
+}
+
 function recordForecastSnapshots(lat, lon, cacheKey, forecastData) {
   try {
     if (!forecastData?.hourly?.time || !forecastData?.daily?.time) return;
@@ -1212,7 +1243,7 @@ async function handleForecastRequest(
     }
 
     const buildStart = performance.now();
-    const data = buildData(entry.data, date);
+    const data = buildData(entry.data, date, cacheKey);
     timer.measure('buildData', buildStart);
 
     if (cacheStatus === 'hit') {
@@ -1391,8 +1422,13 @@ app.get('/api/daily-calendar', async (req, res) => {
     req,
     res,
     ['hourly', 'daily'],
-    (forecastData, requestedDate) =>
-      buildDailyCalendarData(forecastData.daily, forecastData.hourly, requestedDate),
+    (forecastData, requestedDate, cacheKey) => ({
+      ...buildDailyCalendarData(forecastData.daily, forecastData.hourly, requestedDate),
+      pastDays:
+        requestedDate === getTodayInTimezone(forecastData.timezone || 'UTC')
+          ? getPastCalendarDays(cacheKey, requestedDate)
+          : [],
+    }),
     'Daily calendar API',
     'Failed to fetch daily calendar data. Please try again later.',
     { allowPast: true }

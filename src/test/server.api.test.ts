@@ -830,6 +830,34 @@ describe('Server API Endpoints', () => {
       expect(response.body.metadata.snapshotAt).toBe('2020-01-03T00:00:00.000Z');
     });
 
+    it('adds pastDays to the current calendar from stored calendar snapshots', async () => {
+      const older = addDaysForTest(tokyoToday, -4);
+      const newer = addDaysForTest(tokyoToday, -2);
+      storeSnapshot('/api/daily-calendar', older, '2020-02-01T00:00:00.000Z', 10);
+      storeSnapshot('/api/daily-calendar', older, '2020-02-01T06:00:00.000Z', 11);
+      storeSnapshot('/api/daily-calendar', newer, '2020-02-02T00:00:00.000Z', 20);
+      await primeForecast();
+
+      const response = await request(app).get('/api/daily-calendar').query({ lat, lon });
+      expect(response.status).toBe(200);
+      expect(response.body.startDate).toBe(tokyoToday);
+      expect(response.body.pastDays.map((d: { date: string }) => d.date)).toEqual([older, newer]);
+      expect(response.body.pastDays.map((d: { tempMax: number }) => d.tempMax)).toEqual([11, 20]);
+
+      // Historical responses and recorded snapshots never carry pastDays.
+      const past = await request(app).get('/api/daily-calendar').query({ lat, lon, date: newer });
+      expect(past.body.pastDays).toBeUndefined();
+      const stored = apiHistoryDb
+        .prepare(
+          `SELECT response_json FROM api_call_history
+           WHERE route = '/api/daily-calendar' AND location_key = ? AND date = ?`
+        )
+        .all(locationKey, tokyoToday) as Array<{ response_json: string }>;
+      for (const row of stored) {
+        expect(JSON.parse(row.response_json).pastDays).toBeUndefined();
+      }
+    });
+
     it('still clamps past dates on other endpoints and serves today normally', async () => {
       const day = addDaysForTest(tokyoToday, -2);
       storeSnapshot('/api/weather', day, '2020-01-04T00:00:00.000Z', 70);

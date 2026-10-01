@@ -738,5 +738,68 @@ describe('Date navigation bounds', () => {
       expect(document.getElementById('prev-day')?.classList.contains('hidden')).toBe(false);
       expect(document.getElementById('next-day')?.classList.contains('hidden')).toBe(false);
     });
+
+    it('renders pastDays muted before the forecast and navigates when one is clicked', async () => {
+      document.body.insertAdjacentHTML(
+        'beforeend',
+        `<div id="forecast-calendar-container" class="hidden">
+           <div id="forecast-calendar"></div><span id="forecast-calendar-range"></span>
+         </div>`
+      );
+      const today = new Date();
+      const todayStr = fmt(today);
+      const mkDay = (date: string) => ({
+        date,
+        tempMax: 70,
+        tempMin: 50,
+        uvMax: 5,
+        precipMax: 10,
+        precipitation: [],
+        cloudCover: [],
+        humidityMax: 60,
+      });
+      const calendar: DailyCalendarData = {
+        startDate: todayStr,
+        endDate: fmt(addDays(today, 1)),
+        days: [mkDay(todayStr), mkDay(fmt(addDays(today, 1)))],
+        pastDays: [-3, -2, -1].map(n => mkDay(fmt(addDays(today, n)))),
+      };
+      const pickStr = fmt(addDays(today, -2));
+      vi.mocked(global.fetch).mockReset();
+      vi.mocked(global.fetch).mockImplementation((input: unknown) => {
+        const url = String(input);
+        if (url.includes('/api/daily-calendar')) {
+          return Promise.resolve(mkResponse(calendar) as any);
+        }
+        const date = new URL(url, 'http://localhost').searchParams.get('date');
+        return Promise.resolve(
+          mkResponse(
+            date && date < todayStr ? mkHistorical(date, `${date}T23:50:00`) : mkData(todayStr)
+          ) as any
+        );
+      });
+      const app = await initApp();
+
+      const cells = document.querySelectorAll<HTMLElement>('[data-forecast-date]');
+      expect(cells.length).toBe(5);
+      expect(cells[0].dataset.forecastDate).toBe(fmt(addDays(today, -3)));
+      const past = document.querySelectorAll('.forecast-day-cell-past');
+      expect(past.length).toBe(3);
+      expect(document.querySelector(`[data-forecast-date="${todayStr}"]`)?.textContent).toContain(
+        'Today'
+      );
+
+      document.querySelector<HTMLElement>(`[data-forecast-date="${pickStr}"]`)!.click();
+      await flush();
+      expect(app.currentDate).toBe(pickStr);
+      expect(app.followingToday).toBe(false);
+      // The strip keeps the current calendar, with the picked day highlighted.
+      expect(document.querySelectorAll('[data-forecast-date]').length).toBe(5);
+      expect(
+        document
+          .querySelector(`[data-forecast-date="${pickStr}"]`)
+          ?.classList.contains('ring-emerald-500')
+      ).toBe(true);
+    });
   });
 });

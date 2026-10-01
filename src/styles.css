@@ -60,6 +60,11 @@
     transition: background-color 320ms ease;
   }
 
+  .forecast-day-cell-past {
+    opacity: 0.6;
+    filter: grayscale(0.5);
+  }
+
   .forecast-day-cell-art {
     background-position: center;
     background-size: 130%;

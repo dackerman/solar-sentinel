@@ -1187,9 +1187,9 @@ export class SolarSentinelApp {
     // paint below; it's usually right and harmless on a miss. The actual
     // request always omits the date so the server resolves the location's
     // real today (see fetchDailyCalendar).
-    // A past day requests that day's own calendar snapshot instead.
-    const isPast = this.isPastDate(requestedDate);
-    const startDateGuess = isPast ? requestedDate : new Date().toLocaleDateString('en-CA');
+    // The strip always shows the current calendar (with its pastDays), even
+    // while a past day is selected.
+    const startDateGuess = new Date().toLocaleDateString('en-CA');
     const cacheStart = performance.now();
     const cachedCalendar = this.api.getCachedDailyCalendar(this.currentLocation, startDateGuess);
     this.markPerformance('forecast-calendar-cache-lookup', {
@@ -1209,26 +1209,11 @@ export class SolarSentinelApp {
     }
 
     const apiStart = performance.now();
-    // Snapshots of a past day are immutable: a cached one is final.
-    if (isPast && cachedCalendar?.metadata?.historical) {
-      return;
-    }
-    let calendar: Awaited<ReturnType<WeatherAPI['fetchDailyCalendar']>>;
-    try {
-      calendar = await this.api.fetchDailyCalendar(
-        requestedLocation,
-        isPast ? requestedDate : null
-      );
-    } catch (error) {
-      if (!(error instanceof NoSnapshotError)) throw error;
-      // No stored calendar for that past day: fall back to the current
-      // outlook so the strip and the navigation bounds stay usable.
-      calendar = await this.api.fetchDailyCalendar(requestedLocation, null);
-    }
+    const calendar = await this.api.fetchDailyCalendar(requestedLocation, null);
     const isCurrentRequest = this.isCurrentRequest(requestedLocation, requestedDate);
     if (isCurrentRequest) {
       this.latestCalendarData = calendar;
-      if (!calendar.metadata?.historical && calendar.startDate) {
+      if (calendar.startDate) {
         this.locationToday = calendar.startDate;
       }
     }
@@ -1265,9 +1250,12 @@ export class SolarSentinelApp {
 
     const previousDayState = this.getForecastCalendarVisualState(calendarElement);
 
-    const leadingCellCount = new Date(calendar.startDate + 'T00:00:00').getDay();
-    const totalCells = Math.ceil((leadingCellCount + calendar.days.length) / 7) * 7;
-    const trailingCellCount = totalCells - leadingCellCount - calendar.days.length;
+    // Stored snapshots may overlap the past strip; days from startDate on win.
+    const pastDays = (calendar.pastDays ?? []).filter(day => day.date < calendar.startDate);
+    const allDays = [...pastDays, ...calendar.days];
+    const leadingCellCount = new Date(allDays[0].date + 'T00:00:00').getDay();
+    const totalCells = Math.ceil((leadingCellCount + allDays.length) / 7) * 7;
+    const trailingCellCount = totalCells - leadingCellCount - allDays.length;
 
     calendarElement.innerHTML = `
       <div class="grid grid-cols-7 gap-px bg-gray-200 rounded-lg overflow-hidden border border-gray-200">
@@ -1283,7 +1271,7 @@ export class SolarSentinelApp {
         ${Array.from({ length: leadingCellCount })
           .map(() => '<div class="bg-gray-50 min-h-24 sm:min-h-32"></div>')
           .join('')}
-        ${calendar.days.map(day => this.renderForecastCalendarDay(day)).join('')}
+        ${allDays.map(day => this.renderForecastCalendarDay(day)).join('')}
         ${Array.from({ length: trailingCellCount })
           .map(() => '<div class="bg-gray-50 min-h-24 sm:min-h-32"></div>')
           .join('')}
@@ -1593,7 +1581,11 @@ export class SolarSentinelApp {
       const calendarId = calendarEntry.id ?? calendarEntry.fetchedAt;
       if (calendarId !== this.lastHistoryCalendarId) {
         this.lastHistoryCalendarId = calendarId;
-        this.renderForecastCalendar(calendarEntry.data);
+        // Stored snapshots predate pastDays; keep showing the current ones.
+        this.renderForecastCalendar({
+          ...calendarEntry.data,
+          pastDays: calendarEntry.data.pastDays ?? this.latestCalendarData?.pastDays,
+        });
       }
     }
     this.updateHistoryLabel(index, weatherEntry);
@@ -1666,7 +1658,9 @@ export class SolarSentinelApp {
 
   private renderForecastCalendarDay(day: DailyCalendarDay): string {
     const date = new Date(day.date + 'T00:00:00');
-    const isToday = day.date === this.getToday();
+    const today = this.getToday();
+    const isToday = day.date === today;
+    const isPastDay = day.date < today;
     const isSelected = day.date === this.currentDate;
     const { icon, label } = this.getWeatherIcon(day);
     const high = Math.round(day.tempMax);
@@ -1698,7 +1692,7 @@ export class SolarSentinelApp {
         : '';
 
     return `
-      <article class="forecast-day-cell min-h-24 cursor-pointer sm:min-h-32 p-1.5 sm:p-3 ${artModeClass} ${highlightClass}" data-forecast-date="${day.date}" style="--forecast-temp-color: ${backgroundColor}; ${artStyle}">
+      <article class="forecast-day-cell min-h-24 cursor-pointer sm:min-h-32 p-1.5 sm:p-3 ${artModeClass} ${highlightClass} ${isPastDay ? 'forecast-day-cell-past' : ''}" data-forecast-date="${day.date}" style="--forecast-temp-color: ${backgroundColor}; ${artStyle}">
         ${!this.forecastArtMode ? this.renderForecastCloudCoverGraph(day.cloudCover, cloudCover) : ''}
         ${!this.forecastArtMode ? this.renderForecastPrecipitationGraph(day.precipitation, precip) : ''}
         <div class="forecast-day-content">
@@ -1845,7 +1839,8 @@ export class SolarSentinelApp {
     const updatedElement = document.getElementById('forecast-calendar-updated');
 
     if (rangeElement) {
-      rangeElement.textContent = `${calendar.days.length}-day outlook, ${start.toLocaleDateString(
+      const pastCount = (calendar.pastDays ?? []).filter(d => d.date < calendar.startDate).length;
+      rangeElement.textContent = `${pastCount > 0 ? `Past ${pastCount} days + ` : ''}${calendar.days.length}-day outlook, ${start.toLocaleDateString(
         'en-US',
         {
           month: 'short',
@@ -2096,12 +2091,7 @@ export class SolarSentinelApp {
   // location's timezone).
   private getDateBounds(): { min: string; max: string } {
     const today = this.getToday();
-    const calendar = this.latestCalendarData;
-    // A past day's calendar snapshot ends at that day + 15, not at today + 16.
-    const max =
-      calendar?.endDate && !calendar.metadata?.historical
-        ? calendar.endDate
-        : addDays(today, MAX_FUTURE_DAYS);
+    const max = this.latestCalendarData?.endDate ?? addDays(today, MAX_FUTURE_DAYS);
     return { min: addDays(today, -MAX_PAST_DAYS), max };
   }
 
@@ -2109,7 +2099,7 @@ export class SolarSentinelApp {
   private getToday(): string {
     if (this.locationToday) return this.locationToday;
     const calendar = this.latestCalendarData;
-    if (calendar?.startDate && !calendar.metadata?.historical) return calendar.startDate;
+    if (calendar?.startDate) return calendar.startDate;
     return new Date().toLocaleDateString('en-CA');
   }
 

@@ -69,6 +69,8 @@ export interface DailyCalendarData {
   startDate: string;
   endDate: string;
   days: DailyCalendarDay[];
+  // Previous days (oldest first) as last forecast at their end of day.
+  pastDays?: DailyCalendarDay[];
   metadata?: {
     cached: boolean;
     cacheAge: number;
