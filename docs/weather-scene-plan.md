@@ -2,6 +2,176 @@
 
 Updated October 6, 2026, after reference comparison and David's zoomed-out camera suggestion. Repository: `/home/david/code/solar-sentinel`.
 
+## October 6 continuation checkpoint
+
+Implementation resumed from commit `9b8ae2b` in the macOS checkout
+`/Users/dackerman/code/solar-sentinel`. The initial R0–R2 layout pass is implemented.
+The remaining sections preserve the original reference plan; camera and street inventory
+below is superseded by this checkpoint where it describes the old implementation.
+
+- `src/scene/cameraPresets.ts` owns the exact original and user-supplied layout views,
+  plus a provisional reference candidate. Layout view is the startup default.
+- The view selector chooses which preset Reset camera restores. Mouse edits survive
+  viewport resize; aspect remains live and unedited mobile presets use 48° FOV.
+- Bokeh is disabled for layout inspection. Its existing implementation is retained for R5.
+- `src/scene/streetLayout.ts` owns a continuous flat street from z=20 to z=−48:
+  cafe sidewalk x=−3.2..4.1, asphalt x=4.1..10.3, opposite sidewalk x=10.3..11.6.
+  Pavement ends at y=0; asphalt sits at y=−0.14. Curbs, slabs, double yellow lines,
+  and a midground crosswalk share these coordinates. Ground beneath the street is
+  lowered so it cannot cover the road.
+- Superseded paving, waterfront water strip, and rail borders are removed. Opposite
+  storefronts move across the new road; curbside trees/planters stay on the sidewalk.
+  The church moves beyond the opposite shops rather than standing in the roadway.
+- Two imported parked cars now replace the composition placeholders (see car-pack update below).
+- Surface snow is now implemented by the snow update below; rain darkening remains a placeholder.
+- The character remains hidden. Browser verification recorded no GLB requests.
+
+Provisional reference camera (not appearance-approved):
+
+```json
+{
+  "position": [-1.4, 7.8, 9.8],
+  "target": [2.4, 1.5, -13],
+  "fov": 44
+}
+```
+
+Verification: typecheck and isolated scene build pass; changed source files are formatted.
+Headless Chrome verified exact user camera exports, orbit edits surviving resize,
+Reset restoring the selected layout preset, all five weather presets with motion paused,
+no browser errors, and no mobile horizontal overflow at 390px. Desktop canvas is
+1102×620. These are correctness checks, not phone GPU performance measurements.
+Baseline captures for this pass are stored in `docs/weather-scene/baselines/2026-10-06-layout.png`
+and `2026-10-06-reference.png`.
+
+Next: R3–R5, starting with a cafe frontage facing the street. Existing cafe sidewalls
+and gabled shells remain visibly unfinished from the elevated view; foliage is still
+chunky, hills are still conical, shadow coverage remains narrow, and winter/night styling
+in the older environment helpers is incomplete. Do not call this reference parity.
+
+Tooling on this Mac: pnpm is installed through Homebrew (`/opt/homebrew/bin/pnpm`,
+Homebrew package 12.9.1); the launcher honors `packageManager: pnpm@9.15.9`.
+Start the demo with `pnpm run scene:dev`.
+
+Local preview: <http://localhost:45379/scene-demo.html>. On this Mac the current tailnet
+address is <http://100.114.59.77:45379/scene-demo.html>; the old `homoiconicity` hostname
+below belongs to the earlier Linux preview host.
+
+## Snow accumulation update
+
+`src/scene/snowAccumulation.ts` adds a shared snow shell to upward-facing surfaces,
+including instanced buildings and street furniture, roofs, awnings, chairs, tables,
+planters, lamp tops, and imported cars. Continuous sidewalk/road blankets bury seams,
+markings, and fallen leaves. Depth grows to 30.48 cm with subtle unevenness; small
+flower heads and narrow rails retain less depth than broad surfaces. Dusting uses
+world-space patches instead of whitening every material. Hidden ancestor groups are
+excluded so the retained character study cannot create floating snow.
+
+The demo now has Light snow and Blizzard presets and an independent 0–12 inch
+accumulation slider. Light snow leaves most surfaces bare; Blizzard uses full cover,
+40 mph wind, dense snowfall (a bounded pool of 10,000 flakes), and pale snow haze.
+Accumulation geometry is built once, refreshed when imported cars arrive, and displaced
+by shared shader uniforms while changing weather. Camera movement does not rebuild it.
+
+Verified light snow, blizzard, and the elevated reference view in the browser without
+shader warnings/errors. Typecheck, scene build, and two focused regression tests pass
+(hidden study exclusion, instanced surface transforms, valid snow-edge normals).
+Captures: `docs/weather-scene/baselines/2026-10-06-light-snow.jpg` and
+`2026-10-06-blizzard.jpg`. This is an appearance prototype; real forecast accumulation,
+seasonal leaf loss, plowing, and physical snow transport are still deferred.
+
+## Car-pack update
+
+David supplied `~/Downloads/generic-passenger-car-pack.zip` and requested imported cars.
+The archive was unpacked into `/tmp/solar-car-pack`; the selected blue compact and yellow
+sedan are served from `src/scene/assets/cars/`. They replace all primitive car envelopes.
+`src/scene/parkedCars.ts` asynchronously loads them and requests a render on completion,
+including during motion pause/reduced motion. Tire bottoms align to asphalt at y=−0.14.
+
+The source contains a single FBX scene with individual body and wheel meshes. Conversion
+retains each selected body plus its four wheels, removes the pack's display rotations,
+and centers/scales each footprint (compact 3.8m long; sedan 4.5m). Original diffuse textures
+are resized to 512px JPEG; dark opaque glazing avoids transparency sorting artifacts.
+The two GLBs total about 1.49 MB; their five shared/model textures total about 314 KB.
+Source and regeneration details are in `src/scene/assets/cars/README.md` and
+`scripts/convert-car-pack.mjs`. Car tops now receive the shared snow shell; wetness remains unfinished.
+
+Typecheck/build pass. Chrome verifies all seven model/texture requests return 200,
+no browser errors, and imported cars appear in reduced motion. Updated reference capture:
+`docs/weather-scene/baselines/2026-10-06-imported-cars.png`.
+
+## Distant village, hills, and lens update
+
+The original low camera is again the startup/default selection, per David's request.
+Layout and reference presets remain available. Left-side building shells and attached
+cafe details now face the street after a 90° counterclockwise turn; the sidewalk seam
+bed is recessed below slab bottoms and edge slabs clear the curbs to prevent z-fighting.
+
+`src/scene/distantVillage.ts` replaces the distant wall of repeated boxes and cone mountains.
+It builds deterministic town blocks at three depths with street openings, varied heights,
+gabled/flat roofs, chimneys, recessed windows/sills, side elevations, and occasional shop
+awnings. Three continuous terrain ridges have broad irregular summits, progressively cooler
+colors, and low-detail woodland crowns seated into the slopes. Instancing keeps repeated
+parts together; distant meshes do not cast into the near-street shadow map.
+
+Desktop bokeh is restored at aperture 0.00022 and max blur 0.006. Focus follows 82% of the
+camera-to-orbit-target distance so edited framing and the low/elevated presets have a useful
+midground focal zone. Mobile stays sharp below 600px. This is restrained artistic depth
+of field; final lighting/material work may justify retuning it.
+
+### Proposed first texture batch
+
+Generate reusable material tiles, starting with brick, paving, and asphalt. The existing
+facade/prop silhouettes still need modeling work; textures should supply surface detail.
+
+| Priority | Tile | Visual target | Application |
+| --- | --- | --- | --- |
+| 1 | Cafe brick | Warm russet/clay, slightly irregular brick faces, thin pale mortar, restrained wear | Near cafe and selected storefront walls; maintain a consistent real brick scale on front/side walls |
+| 2 | Sidewalk concrete | Warm grey fine grain, gentle aggregate variation and worn edges; no large cracks or drawn slab grid | Individual existing slab faces; geometry owns the joints so texture repetition cannot create conflicting seams |
+| 3 | Asphalt | Charcoal fine aggregate, muted mottling, sparse tiny grit; no markings, leaves, or puddles | Road surface; existing markings and weather effects remain separate |
+| 4 | Roof slate | Muted blue-grey/slate or charcoal shingles, restrained row rhythm | Gable roofs; flatter parapet buildings use a simpler dark roof surface |
+| 5 | Painted plaster/stone | Cream mineral grain with modest color variation | Upper facades, sills, planters, and church masonry |
+| 6 | Timber and bark | Warm weathered slats; separate dark branching bark grain | Bench/awning supports and tree trunks with deliberate longitudinal UVs |
+
+Generation brief for the first three: a square seamless tile photographed/rendered straight
+on, diffuse neutral illumination, no perspective, cast shadows, directional sun, highlights,
+text/signage, objects, leaves, or borders; cozy stylized material with small-scale detail.
+Use 1024px masters, derive 512px served variants, and trial each on its actual geometry at
+both low/elevated cameras before multiplying variants. Preserve muted midtones so the
+existing lighting supplies the warmth. Brick should be the first close-crop trial.
+
+Albedo is sRGB; roughness/normal maps are linear. Derive restrained roughness and normal
+maps from coherent surface structure, not arbitrary noise; keep these materials nonmetallic.
+Set texture repeats from world dimensions, with explicit wall and roof UV treatment rather
+than stretching one square image across every box. Keep snow coverage, wetness, fallen
+leaves, glazing reflections, and emissive window interiors separate from baked albedo.
+Do not generate large facade pictures containing windows/doors; those already have geometry.
+No new raster textures have been generated yet—this is the proposed asset batch.
+
+## Street furniture and narrower sidewalk update
+
+Cafe sidewalk is now x=−3.2..2.7 (5.9m wide, reduced by 1.4m). Road width stays 6.2m;
+opposite curb moves to x=8.9 and its sidewalk ends at x=10.2. Opposite storefronts,
+parked cars, church, bench, planter groups, and curb foliage follow the new layout.
+
+`src/scene/streetFurniture.ts` supplies eleven framed lantern posts, six slatted bins,
+and three round pedestal dining tables with two chairs each. Poles have stepped bases,
+collars, lantern frames, glass, roof caps, brass fittings, and small bulb geometry.
+Only two near lamps use non-shadow-casting point lights; bulb emissives and those lights
+respond to daylight. Static parts use shared geometry/material instance batches.
+Cafe seating occupies the facade side, keeping the central walk corridor open. Chairs
+face inward and are placed on 35°, −42°, and 30° axes around their tables; the bench
+runs parallel to the road and faces the cafe sidewalk.
+Typecheck/build and formatting checks pass. Desktop Chrome captures show the original low
+view and elevated layout without browser errors; saved views are
+`docs/weather-scene/baselines/2026-10-06-street-details-low.png` and
+`2026-10-06-street-details-reference.png`.
+The curbside tree row now continues from z=−5 to z=−45.7. Existing banner geometry is
+lowered to attach to the new near lamp; obsolete standalone sidewalk trim is removed.
+
+Remaining art work: full seasonal/wet surface treatment, better tree silhouettes,
+coherent shadows farther along the street, and the first texture batch described above.
+
 ## Start here
 
 We are exploring replacing the app's static weather/day images with one persistent, real-time 3D village scene whose atmosphere responds to weather and time. **The current assignment is a visual mockup, not forecast integration.** David wants to iterate on the appearance before building all the functionality.
@@ -157,7 +327,7 @@ The user encountered a fully unstyled page where the canvas became a 150px-high 
 
 ## What the mockup does—and does not do
 
-Implemented illustrative presets: autumn breeze, snow day, summer heat, rainy evening, clear night. Sliders cover temperature, wind, precipitation, cloud, humidity, and hour. Cloud/sky/light/particle changes and some base snow/puddle effects are visible.
+Implemented illustrative presets: autumn breeze, light snow, snow day, blizzard, summer heat, rainy evening, clear night. Sliders cover temperature, wind, precipitation, snow accumulation (0–12 inches), cloud, humidity, and hour. Cloud/sky/light/particle changes and raised surface snow are visible.
 
 The demo makes deliberately simple assumptions:
 
@@ -165,9 +335,9 @@ The demo makes deliberately simple assumptions:
 - The precipitation slider drives visual rain/snow intensity directly. It is **not** real precipitation amount.
 - Rain versus snow switches at 32°F in the mock mapping.
 - Daylight uses fixed illustrative dawn/dusk hours, not actual sunrise/sunset or location/date.
-- Snow cover is a preset/intensity heuristic, not accumulated weather history.
+- Snow accumulation is an independent artistic depth control, not accumulated weather history.
 - Feels-like and heat are illustrative calculations, not actual API values.
-- `referenceEnvironment.ts` currently does not use temperature/snow cover for its new foliage/buildings. Consequently the snow preset does not transform every new asset consistently.
+- `snowAccumulation.ts` extracts upward-facing surfaces across the village and loaded cars. Artistic season/leaf loss and full foliage wind animation remain unfinished.
 - The retained Meshy outfit is a single winter outfit. Generated clothing was never made dynamically swappable.
 - There is no selected-date forecast adapter, daily/hourly switch, actual hourly scrubber, or app integration.
 

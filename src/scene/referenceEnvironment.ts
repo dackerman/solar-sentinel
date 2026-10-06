@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { addDistantVillage } from './distantVillage.js';
 
 /** Foreground framing and a continuous village street, built from reusable low-poly forms. */
 export function addReferenceEnvironment(scene: THREE.Scene): {
@@ -8,6 +9,7 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
   const root = new THREE.Group();
   root.name = 'reference-village';
   scene.add(root);
+  const disposeDistantVillage = addDistantVillage(scene);
   const geometries: THREE.BufferGeometry[] = [
     new THREE.BoxGeometry(1, 1, 1),
     new THREE.DodecahedronGeometry(1, 0),
@@ -90,20 +92,6 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
     );
   }
 
-  // Continuous paving establishes the perspective lines all the way to the village square.
-  box('#b5a489', 1.6, -0.06, -19, 12, 0.12, 29);
-  for (let z = -30; z < -8; z += 1.1) {
-    for (let x = -3.4; x < 6.2; x += 1.25)
-      box(
-        (Math.floor(z) + Math.floor(x)) % 3 ? '#d8c1a0' : '#c7ae8d',
-        x + (Math.floor(z) % 2) * 0.3,
-        0.017,
-        z,
-        1.19,
-        0.055,
-        1.03
-      );
-  }
   const wallColors = ['#b87958', '#d6b28b', '#b88c72', '#c6916a', '#d9c8a7'];
   function building(
     x: number,
@@ -112,8 +100,10 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
     height: number,
     color: string,
     depth = 3.5,
-    pyramidRoof = true
+    pyramidRoof = true,
+    yaw = 0
   ): void {
+    const batchStarts = new Map([...batches].map(([key, batch]) => [key, batch.transforms.length]));
     box(color, x, height / 2, z, width, height, depth);
     box('#efe0c1', x, 0.19, z, width + 0.15, 0.38, depth + 0.1);
     box('#e8d6b5', x, height - 0.12, z + depth / 2 + 0.08, width + 0.18, 0.19, 0.25);
@@ -148,15 +138,34 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
     box('#52665a', x, 0.8, z + depth / 2 + 0.12, 0.8, 1.6, 0.08);
     box('#dab17c', x, 0.78, z + depth / 2 + 0.18, 0.08, 1.4, 0.06);
     box('#e6bf79', x, 1.87, z + depth / 2 + 0.35, width * 0.78, 0.15, 0.8);
+    if (yaw) {
+      const rotation = new THREE.Matrix4()
+        .makeTranslation(x, 0, z)
+        .multiply(new THREE.Matrix4().makeRotationY(yaw))
+        .multiply(new THREE.Matrix4().makeTranslation(-x, 0, -z));
+      for (const [key, batch] of batches) {
+        for (let i = batchStarts.get(key) ?? 0; i < batch.transforms.length; i++)
+          batch.transforms[i].premultiply(rotation);
+      }
+    }
   }
   for (let i = 0; i < 5; i++) {
-    building(-5.5 - i * 0.12, -6.5 - i * 4.7, 3.3, 5.8 - i * 0.25 + (i % 2) * 0.7, wallColors[i]);
+    building(
+      -5.5 - i * 0.12,
+      -6.5 - i * 4.7,
+      3.3,
+      5.8 - i * 0.25 + (i % 2) * 0.7,
+      wallColors[i],
+      3.5,
+      true,
+      Math.PI / 2
+    );
   }
   // The opposite street has exposed side elevations: from the low camera these
   // windows, shop awnings and rooflines create a continuous receding street wall.
   const roofColors = ['#865449', '#6c5148', '#626473'];
   for (let i = 0; i < 7; i++) {
-    const x = 6.7 + i * 0.1;
+    const x = 11.9 + i * 0.1;
     const z = -4.8 - i * 4.3;
     const width = 3.4;
     const depth = 4.05;
@@ -232,53 +241,24 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
     );
   }
 
-  // Layered foothills and a small far town extend the view beyond the church.
-  // Their muted palette separates atmospheric depth from the warm foreground.
-  for (let layer = 0; layer < 3; layer++) {
-    for (let peak = 0; peak < 9; peak++) {
-      const x = -33 + peak * 8.5 + layer * 1.5;
-      const height = 7 + random() * 7 + layer * 2.5;
-      part(
-        3,
-        ['#8b9b85', '#8b9a9f', '#a8b2bc'][layer],
-        x,
-        height / 2 - 1,
-        -51 - layer * 17,
-        9 + random() * 3,
-        height,
-        7 + random() * 3
-      );
-    }
-  }
-  for (let i = 0; i < 11; i++) {
-    const x = -12 + i * 2.75;
-    const z = -39 - (i % 3) * 2.4;
-    const height = 2.6 + random() * 2.4;
-    box(i % 2 ? '#b3a28b' : '#c6b8a0', x, height / 2, z, 2.1, height, 2.0);
-    part(3, '#777b7b', x, height + 0.53, z, 1.7, 1.2, 1.65, 0, Math.PI / 4);
-    for (let floor = 0; floor < 2; floor++)
-      for (const dx of [-0.5, 0.5])
-        box('#e6bf79', x + dx, 0.85 + floor * 1.2, z + 1.03, 0.36, 0.53, 0.04);
-  }
-
   // Slender church spire and clock read as a recognizable landmark behind the shops.
-  box('#d8c4a3', 4.6, 4.1, -26, 2.2, 8.2, 2.2);
-  box('#e9dbc0', 4.6, 7.9, -26, 2.5, 0.3, 2.5);
-  part(3, '#626473', 4.6, 10.25, -26, 1.7, 4.8, 1.7);
-  box('#a08152', 4.6, 12.95, -26, 0.1, 0.7, 0.1);
-  box('#a08152', 4.6, 13.05, -26, 0.5, 0.1, 0.1);
-  for (const side of [-1, 1]) box('#697578', 4.6 + side * 0.48, 6.95, -24.86, 0.35, 1.1, 0.08);
-  part(2, '#f2e2b9', 4.6, 5.25, -24.84, 0.69, 0.075, 0.69, Math.PI / 2);
-  box('#75674e', 4.6, 5.43, -24.77, 0.05, 0.4, 0.04);
-  box('#75674e', 4.78, 5.25, -24.77, 0.39, 0.05, 0.04);
+  box('#d8c4a3', 12.6, 4.1, -35, 2.2, 8.2, 2.2);
+  box('#e9dbc0', 12.6, 7.9, -35, 2.5, 0.3, 2.5);
+  part(3, '#626473', 12.6, 10.25, -35, 1.7, 4.8, 1.7);
+  box('#a08152', 12.6, 12.95, -35, 0.1, 0.7, 0.1);
+  box('#a08152', 12.6, 13.05, -35, 0.5, 0.1, 0.1);
+  for (const side of [-1, 1]) box('#697578', 12.6 + side * 0.48, 6.95, -33.86, 0.35, 1.1, 0.08);
+  part(2, '#f2e2b9', 12.6, 5.25, -33.84, 0.69, 0.075, 0.69, Math.PI / 2);
+  box('#75674e', 12.6, 5.43, -33.77, 0.05, 0.4, 0.04);
+  box('#75674e', 12.78, 5.25, -33.77, 0.39, 0.05, 0.04);
 
   // Stone planters and floral borders overlap the lower edges, like the reference.
   for (const [x, z, length] of [
     [-3.8, 4.5, 2.1],
-    [4.2, 4, 2.3],
+    [1.7, 4, 2.3],
     [-3.6, -2, 2],
-    [3.4, -2.5, 1.7],
-    [4.8, -8, 2.6],
+    [2.0, -2.5, 1.7],
+    [1.7, -8, 2.6],
   ]) {
     box('#b3a28b', x, 0.26, z, 1.35, 0.5, length);
     box('#d2c1a6', x, 0.54, z, 1.48, 0.13, length + 0.13);
@@ -300,12 +280,6 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
         );
     }
   }
-  for (const z of [3, -1.5, -6, -10.5]) {
-    box('#b6a48c', 3.6, 0.58, z, 0.5, 1.16, 0.5);
-    box('#d8c8ac', 3.6, 1.19, z, 0.68, 0.2, 0.68);
-    box('#5d5848', 3.6, 0.87, z - 2.15, 0.09, 0.1, 4.1);
-  }
-
   // A crooked diagonal trunk, with forks at different points along the bough.
   const trunkPoints = [
     new THREE.Vector3(-4.9, 0, 2.8),
@@ -360,9 +334,9 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
   canopy(-2.2, 5.6, 2, 1.3, 110);
 
   // Smaller individual leaf clusters keep the distant trees airy, rather than spherical.
-  for (let t = 0; t < 5; t++) {
-    const x = 4.3 + t * 0.12,
-      z = -5 - t * 3.4,
+  for (let t = 0; t < 12; t++) {
+    const x = 2.0 + Math.sin(t) * 0.06,
+      z = -5 - t * 3.7,
       height = 3.0 + (t % 2) * 0.35;
     const a = new THREE.Vector3(x, 0, z),
       b = new THREE.Vector3(x + 0.15, height * 0.72, z);
@@ -381,7 +355,7 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
   // Low continuous flower borders tie the foreground planters to the village square.
   for (let i = 0; i < 110; i++) {
     const z = 1 - random() * 24,
-      x = (i % 2 ? -3.2 : 4.6) + (random() - 0.5) * 0.45;
+      x = (i % 2 ? -3.2 : 2.25) + (random() - 0.5) * 0.45;
     const y = 0.2 + random() * 0.24;
     part(1, i % 2 ? '#677d42' : '#84944c', x, y, z, 0.26, 0.23, 0.32);
     for (let j = 0; j < 3; j++)
@@ -463,6 +437,7 @@ export function addReferenceEnvironment(scene: THREE.Scene): {
       if (disposed) return;
       disposed = true;
       scene.remove(root);
+      disposeDistantVillage();
       geometries.forEach(geometry => geometry.dispose());
       materials.forEach(material => material.dispose());
     },

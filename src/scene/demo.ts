@@ -1,6 +1,10 @@
 import { createWeatherScene } from './weatherScene.js';
 import { clamp } from '../utils/weatherScene.js';
-import type { WeatherSceneRenderer, WeatherSceneState } from '../types/weatherScene.js';
+import type {
+  WeatherSceneRenderer,
+  WeatherSceneState,
+  WeatherSceneView,
+} from '../types/weatherScene.js';
 
 interface DemoPreset {
   label: string;
@@ -25,6 +29,28 @@ const presets: Record<string, DemoPreset> = {
     hour: 14,
     snowCover: 0,
   },
+  lightSnow: {
+    label: 'Light snow',
+    description: 'A few flurries, a little dusting',
+    temp: 30,
+    wind: 5,
+    precip: 18,
+    cloud: 72,
+    humidity: 73,
+    hour: 13,
+    snowCover: 0.025,
+  },
+  blizzard: {
+    label: 'Blizzard',
+    description: 'A foot of snow, blowing white',
+    temp: 21,
+    wind: 40,
+    precip: 100,
+    cloud: 100,
+    humidity: 95,
+    hour: 13,
+    snowCover: 1,
+  },
   snow: {
     label: 'Snow day',
     description: 'Cold & snowy',
@@ -34,7 +60,7 @@ const presets: Record<string, DemoPreset> = {
     cloud: 62,
     humidity: 76,
     hour: 13,
-    snowCover: 0.8,
+    snowCover: 0.42,
   },
   summer: {
     label: 'Summer heat',
@@ -70,7 +96,7 @@ const presets: Record<string, DemoPreset> = {
     snowCover: 0,
   },
 };
-const controls = ['temp', 'wind', 'precip', 'cloud', 'humidity', 'hour'] as const;
+const controls = ['temp', 'wind', 'precip', 'cloud', 'humidity', 'hour', 'snowCover'] as const;
 let selected = 'autumn';
 let userPaused = false;
 let inView = true;
@@ -115,7 +141,7 @@ function state(): WeatherSceneState {
     chance: precip,
     rain: temp > 32 ? precip : 0,
     snow: temp <= 32 ? precip : 0,
-    snowCover: temp <= 32 ? Math.max(presets[selected].snowCover, precip * 0.75) : 0,
+    snowCover: Number(input('snowCover').value) / 12,
     wind,
     gust: wind * 1.4,
     windX: 0.95,
@@ -123,7 +149,7 @@ function state(): WeatherSceneState {
     daylight,
     hour,
     heat: clamp((Math.max(temp, feelsLike) - 80) / 20) * (0.4 + humidity * 0.6),
-    fog: 0,
+    fog: temp <= 32 ? Math.pow(precip, 3) * 0.65 : 0,
   };
 }
 function update(): void {
@@ -138,6 +164,7 @@ function update(): void {
     'precip-output',
     s.rain + s.snow ? `${Math.round((s.rain + s.snow) * 100)}% ${s.snow ? 'snow' : 'rain'}` : 'None'
   );
+  text('snowCover-output', `${Number(input('snowCover').value).toFixed(1)} in`);
   text('cloud-output', `${Math.round(s.cloud * 100)}%`);
   text('humidity-output', `${Math.round(s.humidity * 100)}%`);
   const minutes = Math.round(s.hour * 60);
@@ -147,13 +174,14 @@ function update(): void {
   );
   host.setAttribute(
     'aria-label',
-    `${presets[selected].label}, ${Math.round(s.temperature)} degrees Fahrenheit, wind ${Math.round(s.wind)} miles per hour. A traveller in a village.`
+    `${presets[selected].label}, ${Math.round(s.temperature)} degrees Fahrenheit, wind ${Math.round(s.wind)} miles per hour. A village street.`
   );
 }
 function applyPreset(key: string): void {
   selected = key;
   const preset = presets[key];
-  for (const id of controls) input(id).value = String(preset[id]);
+  for (const id of controls)
+    input(id).value = String(id === 'snowCover' ? preset.snowCover * 12 : preset[id]);
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-preset]'))
     button.setAttribute('aria-pressed', String(button.dataset.preset === key));
   text('forecast-label', preset.label);
@@ -176,6 +204,9 @@ function boot(): void {
         retry.hidden = !message;
       },
       showCamera
+    );
+    renderer.setCameraView(
+      (document.getElementById('camera-view') as HTMLSelectElement).value as WeatherSceneView
     );
     status.textContent = '';
     retry.hidden = true;
@@ -205,6 +236,9 @@ document.getElementById('motion-toggle')!.addEventListener('click', event => {
   syncPause();
 });
 retry.addEventListener('click', boot);
+document.getElementById('camera-view')!.addEventListener('change', event => {
+  renderer?.setCameraView((event.target as HTMLSelectElement).value as WeatherSceneView);
+});
 document.getElementById('camera-reset')!.addEventListener('click', () => renderer?.resetCamera());
 document.getElementById('camera-copy')!.addEventListener('click', async () => {
   try {

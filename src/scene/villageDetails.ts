@@ -4,6 +4,9 @@ import * as THREE from 'three';
 export function addVillageDetails(scene: THREE.Scene): () => void {
   const details = new THREE.Group();
   scene.add(details);
+  const cafeFrontage = new THREE.Group();
+  details.add(cafeFrontage);
+  let detailParent = cafeFrontage;
   const geometries: THREE.BufferGeometry[] = [];
   const materials: THREE.Material[] = [];
   const textures: THREE.Texture[] = [];
@@ -37,7 +40,7 @@ export function addVillageDetails(scene: THREE.Scene): () => void {
     sx: number,
     sy: number,
     sz: number,
-    parent: THREE.Object3D = details
+    parent: THREE.Object3D = detailParent
   ): THREE.Mesh {
     const result = new THREE.Mesh(geometry, surface);
     result.position.set(x, y, z);
@@ -130,6 +133,12 @@ export function addVillageDetails(scene: THREE.Scene): () => void {
       );
     }
   }
+
+  // Cafe facade details follow the building's quarter-turn about its own center.
+  cafeFrontage.position.set(-5, 0, -1.2);
+  for (const child of cafeFrontage.children) child.position.sub(cafeFrontage.position);
+  cafeFrontage.rotation.y = Math.PI / 2;
+  detailParent = details;
 
   const chalkboard = paintedSurface(384, 512, context => {
     context.fillStyle = '#354b41';
@@ -231,14 +240,10 @@ export function addVillageDetails(scene: THREE.Scene): () => void {
     context.stroke();
     context.restore();
   });
-  box('#45554e', 2.094, 4.537, -0.4, 1.157, 0.059, 0.072);
-  box('#b77757', 2.289, 3.835, -0.387, 0.689, 1.209, 0.046);
-  const banner = mesh(planeGeometry, bannerSurface, 2.289, 3.835, -0.357, 0.663, 1.183, 1);
+  box('#45554e', 2.16, 3.03, -0.4, 1.157, 0.059, 0.072);
+  box('#b77757', 2.355, 2.33, -0.387, 0.689, 1.209, 0.046);
+  const banner = mesh(planeGeometry, bannerSurface, 2.355, 2.33, -0.357, 0.663, 1.183, 1);
   banner.castShadow = false;
-
-  for (const x of [-2.89, 2.09]) {
-    box('#c7b69c', x, 0.1, -1.05, 0.18, 0.18, 18.9);
-  }
 
   let disposed = false;
   return () => {

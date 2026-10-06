@@ -1,3 +1,5 @@
+export type WeatherSceneView = 'original' | 'layout' | 'reference';
+
 export interface WeatherSceneState {
   temperature: number;
   feelsLike: number;
@@ -19,6 +21,7 @@ export interface WeatherSceneState {
 
 export interface WeatherSceneRenderer {
   resetCamera(): void;
+  setCameraView(view: WeatherSceneView): void;
   getCamera(): {
     position: number[];
     target: number[];

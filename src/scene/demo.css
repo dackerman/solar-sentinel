@@ -326,3 +326,12 @@ h2 {
     gap: 14px 20px;
   }
 }
+
+.camera-actions select {
+  color: #34524a;
+  background: #f4f0e6;
+  border: 1px solid #cbd3be;
+  border-radius: 8px;
+  padding: 0.6rem;
+  font: inherit;
+}

@@ -41,6 +41,8 @@
         </div>
         <div class="preset-bar" role="group" aria-label="Weather presets">
           <button data-preset="autumn" aria-pressed="true"><span>🍂</span> Autumn breeze</button>
+          <button data-preset="lightSnow" aria-pressed="false"><span>❅</span> Light snow</button>
+          <button data-preset="blizzard" aria-pressed="false"><span>❄</span> Blizzard</button>
           <button data-preset="snow" aria-pressed="false"><span>❄</span> Snow day</button>
           <button data-preset="summer" aria-pressed="false"><span>☀</span> Summer heat</button>
           <button data-preset="rain" aria-pressed="false"><span>☂</span> Rainy evening</button>
@@ -51,6 +53,12 @@
         <div class="tweak-heading">
           <h2>Frame the scene</h2>
           <div class="camera-actions">
+            <label for="camera-view">View</label>
+            <select id="camera-view">
+              <option value="layout">Layout view</option>
+              <option value="original" selected>Original view</option>
+              <option value="reference">Reference candidate</option>
+            </select>
             <button id="camera-reset" type="button">Reset camera</button>
             <button id="camera-copy" type="button">Copy camera settings</button>
           </div>
@@ -85,6 +93,10 @@
           <label
             >Precipitation <output id="precip-output">None</output
             ><input id="precip" type="range" min="0" max="100" value="0"
+          /></label>
+          <label
+            >Snow accumulation <output id="snowCover-output">0.0 in</output
+            ><input id="snowCover" type="range" min="0" max="12" step="0.1" value="0"
           /></label>
           <label
             >Cloud cover <output id="cloud-output">18%</output
