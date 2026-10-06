@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f4f0e6" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f4f0e6'/%3E%3Cpath d='M8 24C5 8 19 6 26 6C25 22 17 29 8 24Z' fill='%2367866a'/%3E%3C/svg%3E"
+    />
+    <title>Weather scene studio · Solar Sentinel</title>
+    <link rel="stylesheet" href="/scene/demo.css" />
+    <script type="module" src="/scene/demo.ts"></script>
+  </head>
+  <body>
+    <main class="studio">
+      <header class="studio-header">
+        <div>
+          <span class="eyebrow">Solar Sentinel / scene study 01</span>
+          <h1>A little world. Every kind of day.</h1>
+        </div>
+        <span class="prototype">Visual prototype</span>
+      </header>
+      <p class="intro">
+        One village, every kind of weather. Try a different day to explore the look and feel.
+      </p>
+      <section class="scene-card" aria-label="3D weather scene preview">
+        <div class="scene-picture">
+          <div id="scene" role="img" aria-label="A low-poly village in changing weather"></div>
+          <div class="outlook">
+            <span id="forecast-label">Autumn breeze</span>
+            <div class="temperature"><span id="temperature">52°</span><small>F</small></div>
+            <div id="description">Sunny &amp; windy</div>
+            <div class="readings">
+              <span id="wind-value">18 mph wind</span><span id="humidity-value">39% humidity</span>
+            </div>
+          </div>
+          <span class="scene-signature">Maple &amp; Moss</span>
+          <div id="scene-status" role="status">Preparing your little world…</div>
+          <button id="retry" type="button" hidden>Try again</button>
+        </div>
+        <div class="preset-bar" role="group" aria-label="Weather presets">
+          <button data-preset="autumn" aria-pressed="true"><span>🍂</span> Autumn breeze</button>
+          <button data-preset="snow" aria-pressed="false"><span>❄</span> Snow day</button>
+          <button data-preset="summer" aria-pressed="false"><span>☀</span> Summer heat</button>
+          <button data-preset="rain" aria-pressed="false"><span>☂</span> Rainy evening</button>
+          <button data-preset="night" aria-pressed="false"><span>☾</span> Clear night</button>
+        </div>
+      </section>
+      <section class="camera-panel" aria-label="Camera controls">
+        <div class="tweak-heading">
+          <h2>Frame the scene</h2>
+          <div class="camera-actions">
+            <button id="camera-reset" type="button">Reset camera</button>
+            <button id="camera-copy" type="button">Copy camera settings</button>
+          </div>
+        </div>
+        <p>
+          Drag to orbit · Right-drag or Shift-drag to pan · Scroll to zoom. On touch, drag to orbit
+          and use two fingers to pan or zoom.
+        </p>
+        <textarea
+          id="camera-settings"
+          readonly
+          aria-label="Exact camera settings"
+          spellcheck="false"
+          rows="8"
+        ></textarea>
+        <span id="camera-copy-status" role="status"></span>
+      </section>
+      <section class="tweaks" aria-label="Scene controls">
+        <div class="tweak-heading">
+          <h2>Play with the atmosphere</h2>
+          <button id="motion-toggle" type="button" aria-pressed="false">Pause motion</button>
+        </div>
+        <div class="sliders">
+          <label
+            >Temperature <output id="temp-output">52°F</output
+            ><input id="temp" type="range" min="5" max="105" value="52"
+          /></label>
+          <label
+            >Wind <output id="wind-output">18 mph</output
+            ><input id="wind" type="range" min="0" max="45" value="18"
+          /></label>
+          <label
+            >Precipitation <output id="precip-output">None</output
+            ><input id="precip" type="range" min="0" max="100" value="0"
+          /></label>
+          <label
+            >Cloud cover <output id="cloud-output">18%</output
+            ><input id="cloud" type="range" min="0" max="100" value="18"
+          /></label>
+          <label
+            >Humidity <output id="humidity-output">39%</output
+            ><input id="humidity" type="range" min="0" max="100" value="39"
+          /></label>
+          <label
+            >Time of day <output id="hour-output">2:00 PM</output
+            ><input id="hour" type="range" min="0" max="23.9" step="0.1" value="14"
+          /></label>
+        </div>
+      </section>
+      <p class="footnote">
+        A mockup with illustrative weather, independent of your forecast. Atmosphere blends over
+        about a second. This appearance study currently focuses on the environment.
+      </p>
+    </main>
+  </body>
+</html>

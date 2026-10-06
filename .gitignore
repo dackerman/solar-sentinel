@@ -5,6 +5,7 @@ npm-debug.log*
 .vite/
 coverage/
 dist/
+dist-scene/
 /data/
 *.sqlite
 *.sqlite-shm
