@@ -1,6 +1,8 @@
 export interface WeatherData {
   labels: string[];
   timestamps?: string[];
+  timezone?: string;
+  utcOffsetSeconds?: number;
   uv: number[];
   uvClearSky: number[];
   precipitation: number[];

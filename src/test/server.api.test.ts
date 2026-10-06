@@ -664,6 +664,28 @@ describe('Server API Endpoints', () => {
   });
 
   describe('per-location timezone handling', () => {
+    it('preserves timezone metadata in weather responses and history samples', async () => {
+      const date = getTestDate();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ...getMockCombinedData(date), utc_offset_seconds: -14400 }),
+      });
+      const query = { lat: 13.35, lon: 57.79, date };
+      const response = await request(app).get('/api/weather').query(query);
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        timezone: 'America/New_York',
+        utcOffsetSeconds: -14400,
+      });
+      const history = await request(app)
+        .get('/api/history')
+        .query({ ...query, route: '/api/weather' });
+      expect(history.body.entries[0].data).toMatchObject({
+        timezone: 'America/New_York',
+        utcOffsetSeconds: -14400,
+      });
+    });
+
     it('requests timezone=auto upstream', async () => {
       const testDate = getTestDate();
 

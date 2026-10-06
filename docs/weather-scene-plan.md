@@ -2,6 +2,138 @@
 
 Updated October 6, 2026, after reference comparison and David's zoomed-out camera suggestion. Repository: `/home/david/code/solar-sentinel`.
 
+## October 6 automatic phone tilt
+
+David confirmed physical phone tilt worked after tapping the phone icon. Preview
+client logs confirm both permissions returned granted, orientation readings arrived,
+and a camera movement was requested. He then requested automatic tilt without tapping.
+
+`SceneParallax` now defaults to listening on active, secure touch devices even when
+`requestPermission()` exists. The presence of that API no longer disables tilt. It
+attempts both permission APIs once to reuse an existing grant without a user gesture;
+rejections that require activation leave the tap fallback available. Existing sensor
+readings can also activate tilt before the permission promise completes. No permission
+attempt is made for desktop, reduced motion, insecure contexts, or an inactive scene.
+Explicitly disabling working tilt stays off through pause/resume within that page.
+
+First-time permission prompting can still require a tap; the application cannot remove
+that browser requirement. Reference: the permission-state/activation steps in
+<https://w3c.github.io/deviceorientation/#dom-deviceorientationevent-requestpermission>.
+The updated preview is
+<https://davids-macbook-pro-1.tail663e6.ts.net/?preview=auto-tilt>.
+Automatic startup is regression-tested with previously granted permission, live events,
+activation rejection, denial/retry, both API grants, and desktop exclusion. All 289 tests,
+typecheck, and the build pass. David tested the updated preview on his phone and reported that tilt started automatically
+without tapping the icon. Phone logs independently confirm automatic permission grants,
+orientation readings, and camera movement requests on startup.
+
+## October 6 phone tilt diagnosis and frosted metrics
+
+The HTTP Tailscale preview disabled phone sensors. David approved a private HTTPS
+Tailscale Serve proxy at <https://davids-macbook-pro-1.tail663e6.ts.net/> forwarding
+to this Mac's port 49878. The production Linux hosts are without power; production
+deployment remains canceled. The latest diagnostic preview is
+<https://davids-macbook-pro-1.tail663e6.ts.net/?preview=tilt-glass>.
+
+Phone tilt is still awaiting physical-device confirmation after the HTTPS switch.
+The preview's Android Chrome logs confirm the scene loaded, but the earlier build
+had no sensor diagnostics. `SceneParallax` now logs capabilities, listening, missing
+readings, permission results, first valid source, and the first movement request.
+It never logs raw angles or acceleration. The existing client-log endpoint ships
+these state transitions so debugging does not require copying phone logs.
+
+Touch detection also considers `navigator.maxTouchPoints`. Both orientation and
+motion permissions are requested directly from the same tap; a granted motion API
+can supply the gravity fallback even when orientation is denied. Touch pointer exit
+no longer resets calibrated sensor tilt. If four seconds pass without valid readings,
+the phone icon becomes a retry action and a visible note explains motion sensor site
+settings. Reduced motion and insecure contexts show their reasons instead of silently
+hiding the phone control. These changes are regression-tested; actual phone readings
+remain unverified until the device visits the updated preview.
+
+The green metrics panel uses a translucent tint, 18px backdrop blur, saturation,
+a soft inset highlight, and its existing separators. Put `-webkit-backdrop-filter`
+before `backdrop-filter` in source: reversing that order caused the CSS build to
+retain only the prefixed alias, disabling blur in Chrome. Compiled CSS and computed
+browser styles now confirm both aliases and the blur; desktop and 390px portrait
+layouts are visually checked. All 287 tests, typecheck, and the production build pass.
+
+## October 6 pointer and device-tilt parallax
+
+David requested a small perspective change when moving the mouse or tilting a phone.
+The main forecast renderer now exposes `setParallax(x, y)`, with normalized input,
+clamped camera travel, and an exponential ease at the existing capped frame rate.
+The original camera position/target remain the immutable base; near objects shift more
+than the distant town. Desktop travel is at most 0.38 m sideways / 0.18 m vertically;
+portrait framing permits 0.55 m / 0.30 m. The standalone orbit-controlled demo is unchanged.
+
+`src/components/sceneParallax.ts` maps pointer positions across the hero, recenters on
+exit, and ignores touch drags. On phones, the first valid sensor sample defines a neutral
+holding position. Relative pitch/roll saturate at 14 degrees and rotate with the screen;
+changing screen orientation or resuming recalibrates. Device orientation is preferred,
+with gravity-based accelerometer fallback if orientation readings are absent. Shakes,
+invalid readings, and tiny sensor jitter are ignored. No sensor readings are stored or sent.
+
+Secure-context mobile browsers without a permission gate start tilt automatically. Where
+`requestPermission()` is required, the phone icon requests it directly from a tap; denial
+leaves the camera still and the control can retry. The icon also disables tilt. Reduced
+motion disables pointer/sensor parallax; pause, minimize, backgrounding, and leaving the
+viewport stop sensor listeners and recenter. The scene and text use explicit stacking
+layers to keep forecast controls above the moving WebGL backdrop.
+
+Tests cover pointer/touch behavior, relative calibration, bounded travel, angle wrap,
+landscape axes, accelerometer fallback, denial/retry, lifecycle, and reduced motion.
+Desktop perspective is verified visually in the built browser preview. Actual phone
+sensor hardware still needs a physical-device check; browser sensor behavior here is
+covered using simulated readings. Sensor API reference:
+<https://developer.mozilla.org/en-US/docs/Web/API/DeviceOrientationEvent/requestPermission_static>.
+
+## October 6 main-app integration
+
+David explicitly requested integrating the existing village into Solar Sentinel. This
+supersedes the earlier instructions to keep forecast integration deferred; the remaining
+appearance-study work and its limitations still apply.
+
+- `src/components/weatherHero.ts` mounts the lazy renderer above the hourly chart. The
+  desktop hero is wide; portrait mobile fills the first screen with a broader street
+  camera, while the standalone demo retains its original camera controls.
+- Default is the selected location's current forecast hour. The hour slider samples all
+  conditions together, supports backwards scrubbing, and preserves a manually selected
+  hour across data refreshes/history snapshots. Date/location changes reset to now for
+  today, or midday for another day. Back to now and Day overview are explicit controls.
+- The daily overview uses daily high temperature/maxima/code plus mean hourly cloud cover
+  at noon; it is labeled as a summary. Hourly temperature, apparent temperature, humidity,
+  cloud, precipitation chance, wind, gusts, and meteorological wind direction use the
+  selected sample. Text keeps missing measurements as dashes.
+- `src/utils/forecastScene.ts` is the pure adapter. WMO weather codes provide artistic
+  rain/snow intensity independently from probability; humidity alone never creates fog.
+  No ground accumulation is claimed because the current API has no measured snow depth.
+  Geometry remains deterministic when scrubbing. Transitions use the short path through
+  midnight and wraparound wind angles.
+- Weather responses/snapshots now include Open-Meteo's `timezone` and `utcOffsetSeconds`.
+  Current hour and date use that IANA timezone. Daylight uses forecast date, latitude,
+  longitude, and the date's UTC offset. Old snapshots without timezone metadata use a
+  longitude-based standard-time approximation until refreshed.
+- `solar_sentinel_weather_scene_minimized` stores compact mode. A minimized startup skips
+  loading Three.js/assets; existing scenes pause while minimized, offscreen, hidden, or
+  without an available history sample. Reduced motion renders still scenes; the pause
+  button stops environmental motion while keeping forecast transitions usable.
+- Text and controls paint before a double animation-frame deferral of the dynamic scene
+  import. WebGL failures leave the full text forecast and chart accessible. Orbit controls
+  are disabled in the forecast backdrop so touch scrolling/day swipes stay usable.
+- The unused traveller GLB import is removed from the renderer (assets remain in source),
+  preventing an 11 MB unused model from being emitted and service-worker precached.
+
+Browser review covered desktop, portrait mobile, night/backward scrubbing, daily summary,
+next-day navigation, pause, compact persistence after reload, and horizontal overflow.
+Automated adapter coverage includes location-midnight/timezone/DST, weather-code intensity,
+missing wind/old snapshots, polar night, deterministic reverse sampling, and circular
+transitions. All 278 tests, typecheck, and the main production build pass. Captures:
+[desktop](../../screenshots/weather-hero-desktop.jpg) and
+[mobile](../../screenshots/weather-hero-mobile.jpg). The separate built-app preview is
+<http://localhost:49878/?preview=weather-hero>. This local integration is not a deployment
+or a real-phone GPU benchmark.
+
 ## October 6 continuation checkpoint
 
 Implementation resumed from commit `9b8ae2b` in the macOS checkout

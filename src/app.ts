@@ -1,3 +1,4 @@
+import { WeatherHero } from './components/weatherHero.js';
 import { WeatherAPI, AuthExpiredError, NoSnapshotError } from './services/api.js';
 import { LocationService } from './services/location.js';
 import { SavedLocationsService } from './services/savedLocations.js';
@@ -64,6 +65,7 @@ export class SolarSentinelApp {
   private readonly savedLocationsService = new SavedLocationsService();
   private readonly geocodingService = new GeocodingService();
   private locationPicker: LocationPicker | null = null;
+  private weatherHero: WeatherHero | null = null;
   private debugPanel!: DebugPanel;
   private serviceWorkerBuild = '';
 
@@ -160,6 +162,11 @@ export class SolarSentinelApp {
 
   async initialize(): Promise<void> {
     this.debugPanel = new DebugPanel();
+    const hero = document.getElementById('weather-scene');
+    if (hero)
+      this.weatherHero = new WeatherHero(hero, (message, data) =>
+        this.debugPanel.log(message, data)
+      );
     this.setupEventListeners();
     await this.loadData();
     void this.logServiceWorkerBuild();
@@ -772,6 +779,10 @@ export class SolarSentinelApp {
   }
 
   private updateCurrentConditions(data: WeatherData): void {
+    if (this.weatherHero) {
+      this.weatherHero.update(data, this.currentLocation);
+      return;
+    }
     const today = new Date().toLocaleDateString('en-CA');
     const isToday = this.currentDate === today;
 
@@ -1609,6 +1620,7 @@ export class SolarSentinelApp {
     const notice = document.getElementById('history-unavailable');
     if (!notice) return;
     notice.classList.toggle('hidden', !unavailable);
+    this.weatherHero?.setUnavailable(unavailable);
     if (!unavailable) return;
 
     const dayLabel = this.parseLocalDate(this.currentDate).toLocaleDateString('en-US', {

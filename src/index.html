@@ -7,7 +7,7 @@
 
     <!-- PWA Meta Tags -->
     <meta name="description" content="Real-time UV index monitoring with location detection" />
-    <meta name="theme-color" content="#3b82f6" />
+    <meta name="theme-color" content="#f3f4ef" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -17,7 +17,7 @@
     <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
     <link rel="manifest" href="/manifest.json" />
   </head>
-  <body class="bg-gray-100 min-h-screen">
+  <body class="sentinel-page min-h-screen">
     <div
       id="auth-banner"
       class="hidden sticky top-0 z-50 cursor-pointer bg-amber-100 border-b border-amber-400 px-4 py-2 text-center text-sm font-medium text-amber-800 hover:bg-amber-200"
@@ -26,8 +26,8 @@
     >
       Session expired — tap to sign in
     </div>
-    <div class="container mx-auto max-w-4xl">
-      <header class="flex items-center justify-between">
+    <div class="sentinel-shell">
+      <header class="sentinel-header flex items-center justify-between">
         <img
           src="/logo.webp"
           alt="Solar Sentinel"
@@ -77,45 +77,144 @@
         </div>
       </header>
 
-      <div class="max-w-4xl mx-auto" id="swipe-surface">
+      <div id="swipe-surface">
         <div id="day-view">
-          <!-- Current Conditions -->
-          <div
+          <section
             id="current-conditions"
-            class="hidden bg-white rounded-lg border border-gray-200 p-4 mb-6"
+            class="weather-hero hidden"
+            aria-label="Weather overview"
           >
-            <div class="flex justify-between items-center mb-3">
-              <div class="flex items-center gap-2">
-                <h3 class="text-lg font-semibold">Current Conditions</h3>
+            <div
+              id="weather-scene"
+              class="weather-scene"
+              role="img"
+              aria-label="Weather village"
+            ></div>
+            <div class="hero-shade" aria-hidden="true"></div>
+            <div class="hero-topline">
+              <span class="hero-eyebrow"
+                ><span class="hero-live-dot"></span
+                ><span id="scene-period">Your day, outside</span></span
+              >
+              <div class="hero-actions">
+                <button
+                  id="scene-tilt"
+                  class="hero-icon-button"
+                  type="button"
+                  aria-label="Enable device tilt"
+                  aria-pressed="false"
+                  title="Enable device tilt"
+                  hidden
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    aria-hidden="true"
+                  >
+                    <rect x="7" y="4" width="10" height="16" rx="2" transform="rotate(15 12 12)" />
+                    <path
+                      d="M3 6 1 9l2 3m18 0 2 3-2 3"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+                <button
+                  id="scene-motion"
+                  class="hero-icon-button"
+                  type="button"
+                  aria-label="Pause scene animation"
+                  aria-pressed="false"
+                  title="Pause animation"
+                >
+                  Ⅱ
+                </button>
                 <button
                   id="history-toggle"
-                  class="hidden flex h-7 w-7 items-center justify-center rounded-full border border-gray-200 bg-gray-50 text-sm font-semibold text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                  class="hero-icon-button hidden"
                   type="button"
                   aria-label="Show condition history"
                   aria-pressed="false"
                   title="Show condition history"
                 >
-                  <svg
-                    class="h-4 w-4"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path d="M3 12a9 9 0 1 0 3-6.7" />
-                    <path d="M3 4v6h6" />
-                    <path d="M12 7v5l3 2" />
-                  </svg>
+                  ↶
+                </button>
+                <button
+                  id="scene-toggle"
+                  class="hero-button"
+                  type="button"
+                  aria-expanded="true"
+                  aria-controls="weather-scene"
+                >
+                  Minimize <span aria-hidden="true">↗</span>
                 </button>
               </div>
-              <div class="text-sm text-gray-600">
-                <span id="current-time">--:-- --</span>
+            </div>
+            <p id="scene-tilt-status" class="hero-tilt-status" role="status" hidden></p>
+            <div class="hero-weather">
+              <p id="scene-location" class="hero-location">Windham, NH</p>
+              <div class="hero-temperature">
+                <span id="scene-temperature">--</span><span class="hero-unit">°F</span>
+              </div>
+              <h1 id="scene-condition" class="hero-condition">A little closer to outside.</h1>
+              <p class="hero-feels">
+                Feels like <span id="scene-feels">--°</span
+                ><span class="hero-range" id="scene-range"></span>
+              </p>
+            </div>
+            <div class="hero-bottom">
+              <div class="hero-metrics" aria-label="Selected hour conditions">
+                <div>
+                  <span class="hero-metric-label">Wind</span><strong id="scene-wind">--</strong
+                  ><small id="scene-gust"></small>
+                </div>
+                <div>
+                  <span class="hero-metric-label">Rain chance</span
+                  ><strong id="scene-precip">--</strong><small id="scene-cloud"></small>
+                </div>
+                <div>
+                  <span class="hero-metric-label">Humidity</span
+                  ><strong id="scene-humidity">--</strong><small id="scene-humidity-feel"></small>
+                </div>
+                <div>
+                  <span class="hero-metric-label">UV index</span><strong id="scene-uv">--</strong
+                  ><small id="scene-uv-label"></small>
+                </div>
+              </div>
+              <div class="hero-timeline">
+                <div class="hero-timeline-heading">
+                  <label for="scene-hour"
+                    >Explore the day <span id="scene-hour-label">--</span></label
+                  ><button id="scene-overview" type="button" class="hero-now" aria-pressed="false">
+                    Day overview</button
+                  ><button id="scene-now" type="button" class="hero-now">Back to now</button>
+                </div>
+                <input
+                  id="scene-hour"
+                  type="range"
+                  min="0"
+                  max="23"
+                  step="1"
+                  value="12"
+                  aria-label="Forecast hour"
+                />
+                <div class="hero-timeline-ticks" aria-hidden="true">
+                  <span>12 AM</span><span>6 AM</span><span>Noon</span><span>6 PM</span
+                  ><span>11 PM</span>
+                </div>
+              </div>
+              <div class="hero-footer">
+                <span id="current-time">Forecast loading</span
+                ><a href="#weather-chart-container"
+                  >Hourly forecast <span aria-hidden="true">↓</span></a
+                >
               </div>
             </div>
-
+            <div class="scene-status" id="scene-status" role="status" hidden></div>
             <div
               id="history-panel"
               class="history-floating-panel hidden rounded-lg border border-blue-200 bg-blue-50 p-3 pr-10"
@@ -151,168 +250,7 @@
               id="history-unavailable"
               class="hidden rounded-lg border border-dashed border-blue-300 bg-blue-50/60 p-6 text-center text-sm text-blue-800"
             ></div>
-
-            <!-- Dual Display: Current + Today's Forecast -->
-            <div id="dual-display" class="hidden grid grid-cols-2 gap-0">
-              <!-- Now panel -->
-              <div>
-                <div
-                  class="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 md:text-left"
-                >
-                  Now
-                </div>
-                <div class="flex flex-col items-center gap-3 md:flex-row">
-                  <div
-                    class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
-                  >
-                    <img id="current-weather-art" class="weather-art-image hidden" alt="" />
-                  </div>
-                  <div
-                    class="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-2 text-xs sm:text-sm md:gap-x-3"
-                  >
-                    <div
-                      class="col-span-2 flex items-baseline justify-center gap-1.5 md:justify-start"
-                    >
-                      <span class="text-base">🌡️</span>
-                      <span
-                        id="current-temp-dual"
-                        class="text-3xl font-bold leading-none text-gray-900"
-                        >--°F</span
-                      >
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <span>☀️</span>
-                      <span id="current-uv-dual" class="font-semibold text-gray-800">--</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <span>🌧️</span>
-                      <span id="current-precip-dual" class="font-semibold text-gray-800">--%</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <span>💧</span>
-                      <span id="current-humidity-dual" class="font-semibold text-gray-800"
-                        >--%</span
-                      >
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <span>💨</span>
-                      <span class="flex flex-col leading-tight">
-                        <span
-                          id="current-wind-dual"
-                          class="whitespace-nowrap font-semibold text-gray-800"
-                          >--</span
-                        >
-                        <span class="flex flex-wrap gap-x-1 text-[11px] text-gray-500">
-                          <span
-                            id="current-wind-dir-dual"
-                            class="whitespace-nowrap empty:hidden"
-                          ></span>
-                          <span
-                            id="current-wind-gust-dual"
-                            class="whitespace-nowrap empty:hidden"
-                          ></span>
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Today panel -->
-              <div>
-                <div
-                  class="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-gray-400 md:text-left"
-                >
-                  Today
-                </div>
-                <div class="flex flex-col items-center gap-3 md:flex-row">
-                  <div
-                    class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
-                  >
-                    <img id="today-weather-art" class="weather-art-image hidden" alt="" />
-                  </div>
-                  <div
-                    class="grid w-full min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-2 text-xs sm:text-sm md:gap-x-3"
-                  >
-                    <div
-                      class="col-span-2 flex items-baseline justify-center gap-1.5 md:justify-start"
-                    >
-                      <span class="text-base">🌡️</span>
-                      <span
-                        id="today-temp-dual"
-                        class="text-3xl font-bold leading-none text-gray-900"
-                        >--°/--°F</span
-                      >
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <span>☀️</span>
-                      <span id="today-uv-dual" class="font-semibold text-gray-800">--</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <span>🌧️</span>
-                      <span id="today-precip-dual" class="font-semibold text-gray-800">--%</span>
-                    </div>
-                    <div class="flex items-center gap-1.5">
-                      <span>💨</span>
-                      <span class="flex flex-col leading-tight">
-                        <span
-                          id="today-wind-dual"
-                          class="whitespace-nowrap font-semibold text-gray-800"
-                          >--</span
-                        >
-                        <span class="flex flex-wrap gap-x-1 text-[11px] text-gray-500">
-                          <span
-                            id="today-wind-dir-dual"
-                            class="whitespace-nowrap empty:hidden"
-                          ></span>
-                          <span
-                            id="today-wind-gust-dual"
-                            class="whitespace-nowrap empty:hidden"
-                          ></span>
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Single Display (selected day's forecast) -->
-            <div id="single-display" class="flex flex-col items-center gap-4 md:flex-row">
-              <div
-                class="weather-art-frame h-32 w-32 shrink-0 rounded-xl bg-white shadow-sm ring-1 ring-gray-200 sm:h-40 sm:w-40"
-              >
-                <img id="daily-weather-art" class="weather-art-image hidden" alt="" />
-              </div>
-              <div class="grid w-full flex-1 grid-cols-2 gap-4 text-center md:grid-cols-5">
-                <div class="bg-gray-50 rounded-lg p-3 col-span-2 md:col-span-1">
-                  <div class="text-2xl mb-1">🌡️</div>
-                  <div id="current-temp" class="text-xl font-bold text-gray-800">--°F</div>
-                  <div id="temp-label" class="text-xs text-gray-600">Temperature</div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-3">
-                  <div class="text-2xl mb-1">☀️</div>
-                  <div id="current-uv" class="text-xl font-bold text-gray-800">--</div>
-                  <div id="uv-label" class="text-xs text-gray-600">UV Index</div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-3">
-                  <div class="text-2xl mb-1">🌧️</div>
-                  <div id="current-precip" class="text-xl font-bold text-gray-800">--%</div>
-                  <div id="precip-label" class="text-xs text-gray-600">Precipitation</div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-3">
-                  <div class="text-2xl mb-1">💧</div>
-                  <div id="current-humidity" class="text-xl font-bold text-gray-800">--%</div>
-                  <div id="humidity-label" class="text-xs text-gray-600">Humidity</div>
-                </div>
-                <div class="bg-gray-50 rounded-lg p-3">
-                  <div class="text-2xl mb-1">💨</div>
-                  <div id="current-wind" class="text-xl font-bold text-gray-800">--</div>
-                  <div id="wind-label" class="text-xs text-gray-600">Wind</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          </section>
 
           <!-- Loading state -->
           <div id="loading" class="text-center py-8">
@@ -344,7 +282,7 @@
             id="weather-chart-container"
             class="hidden bg-white rounded-lg border border-gray-200 p-2 sm:p-6 mb-6"
           >
-            <h3 class="text-lg font-semibold mb-2 sm:mb-4">Weather Conditions</h3>
+            <h3 class="text-lg font-semibold mb-2 sm:mb-4">Hourly weather</h3>
             <div class="text-xs text-gray-600 mb-2 sm:hidden flex justify-between">
               <span>🌧️ Precip (%)</span>
               <span>🌡️ Temp (°F)</span>

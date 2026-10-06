@@ -631,7 +631,7 @@ app.use(
 );
 
 // Filter weather data for specified date
-function filterDateData(hourlyData, targetDate) {
+function filterDateData(hourlyData, targetDate, forecastData = {}) {
   const todayIndices = [];
 
   hourlyData.time.forEach((timestamp, index) => {
@@ -665,6 +665,8 @@ function filterDateData(hourlyData, targetDate) {
   return {
     labels,
     timestamps: todayIndices.map(i => hourlyData.time[i]),
+    timezone: forecastData.timezone,
+    utcOffsetSeconds: forecastData.utc_offset_seconds,
     uv: uvValues,
     uvClearSky: uvClearSkyValues,
     precipitation: precipValues,
@@ -1268,7 +1270,7 @@ async function handleForecastRequest(
 
 function buildWeatherData(forecastData, requestedDate) {
   return {
-    ...filterDateData(forecastData.hourly, requestedDate),
+    ...filterDateData(forecastData.hourly, requestedDate, forecastData),
     daily: extractDailyData(forecastData.daily, requestedDate),
   };
 }
@@ -1372,7 +1374,8 @@ app.get('/api/uv-today', async (req, res) => {
     req,
     res,
     ['hourly'],
-    (forecastData, requestedDate) => filterDateData(forecastData.hourly, requestedDate),
+    (forecastData, requestedDate) =>
+      filterDateData(forecastData.hourly, requestedDate, forecastData),
     'UV API',
     'Failed to fetch UV data. Please try again later.'
   );

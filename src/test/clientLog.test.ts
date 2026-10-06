@@ -161,7 +161,9 @@ describe('ClientLogShipper', () => {
     panel.log('Before unload');
 
     const shipper = new ClientLogShipper({ panel, getBuild: () => '' });
-    const flushSpy = vi.spyOn(shipper, 'flush');
+    // This test verifies the event wiring; beacon delivery is covered above.
+    // Happy DOM's native sendBeacon otherwise starts a real network request.
+    const flushSpy = vi.spyOn(shipper, 'flush').mockResolvedValue();
     shipper.start();
 
     window.dispatchEvent(new Event('pagehide'));

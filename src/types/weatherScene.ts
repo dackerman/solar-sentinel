@@ -20,6 +20,7 @@ export interface WeatherSceneState {
 }
 
 export interface WeatherSceneRenderer {
+  setParallax(x: number, y: number): void;
   resetCamera(): void;
   setCameraView(view: WeatherSceneView): void;
   getCamera(): {

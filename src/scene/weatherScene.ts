@@ -15,7 +15,6 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // Weather changes one persistent village and traveller.
@@ -23,7 +22,8 @@ export function createWeatherScene(
   host: HTMLElement,
   initial: WeatherSceneState,
   onUnavailable: (message: string) => void,
-  onCameraChange?: (settings: ReturnType<WeatherSceneRenderer['getCamera']>) => void
+  onCameraChange?: (settings: ReturnType<WeatherSceneRenderer['getCamera']>) => void,
+  interactive = true
 ): WeatherSceneRenderer {
   const renderer = new THREE.WebGLRenderer({
     antialias: true,
@@ -57,48 +57,28 @@ export function createWeatherScene(
   // Retain the character study for later; this demo currently shows only the environment.
   const showCharacter = false;
   referenceCharacter.setVisible(showCharacter);
-  let generatedCharacter: THREE.Group | undefined;
-  let characterMixer: THREE.AnimationMixer | undefined;
-  if (showCharacter && new URLSearchParams(location.search).get('character') !== 'procedural') {
-    new GLTFLoader().load(new URL('./assets/traveller-walking.glb', import.meta.url).href, gltf => {
-      if (disposed) return;
-      generatedCharacter = gltf.scene;
-      const bounds = new THREE.Box3().setFromObject(generatedCharacter);
-      const size = bounds.getSize(new THREE.Vector3());
-      const center = bounds.getCenter(new THREE.Vector3());
-      const scale = 3.9 / size.y;
-      generatedCharacter.scale.setScalar(scale);
-      generatedCharacter.position.set(
-        0.1 - center.x * scale,
-        0.13 - bounds.min.y * scale,
-        2.1 - center.z * scale
-      );
-      generatedCharacter.rotation.y = 0.3;
-      generatedCharacter.traverse(object => {
-        if (object instanceof THREE.Mesh) {
-          object.castShadow = true;
-          object.receiveShadow = true;
-        }
-      });
-      scene.add(generatedCharacter);
-      characterMixer = new THREE.AnimationMixer(generatedCharacter);
-      if (gltf.animations[0]) characterMixer.clipAction(gltf.animations[0]).play();
-      characterMixer.setTime(0.35);
-      referenceCharacter.setVisible(false);
-      wake();
-    });
-  }
+  // The retained traveller GLBs are study assets, not production downloads.
+  // Keep the environment-only renderer free of their asset URL imports.
   scene.fog = new THREE.Fog('#c7def0', 18, 42);
   const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 180);
   let cameraView: WeatherSceneView = 'original';
   camera.position.fromArray(cameraPresets[cameraView].position);
   camera.lookAt(...cameraPresets[cameraView].target);
   const cameraControls = new OrbitControls(camera, canvas);
+  // The main forecast is a backdrop; leave touch scrolling and day swipes to the page.
+  cameraControls.enabled = interactive;
+  if (!interactive) canvas.style.touchAction = 'pan-y';
   cameraControls.target.fromArray(cameraPresets[cameraView].target);
   cameraControls.minDistance = 1;
   cameraControls.maxDistance = 60;
   cameraControls.update();
   let cameraEdited = false;
+  const basePosition = camera.position.clone();
+  const baseTarget = cameraControls.target.clone();
+  const cameraRight = new THREE.Vector3();
+  const cameraUp = new THREE.Vector3();
+  const parallax = new THREE.Vector2();
+  const parallaxTarget = new THREE.Vector2();
   const getCamera = () => ({
     position: camera.position.toArray(),
     target: cameraControls.target.toArray(),
@@ -517,7 +497,6 @@ export function createWeatherScene(
     streetLayout.update(state);
     streetFurniture.update(state);
     referenceCharacter.update(state, time);
-    characterMixer?.setTime(0.35 + time * 0.7);
     const rainCount = Math.round(count * state.rain);
     const snowCount = Math.round(snowCapacity * Math.pow(state.snow, 1.65));
     rainGeometry.setDrawRange(0, rainCount * 2);
@@ -602,6 +581,20 @@ export function createWeatherScene(
         transitioning = t < 1;
       }
       if (!motion.matches && !motionPaused) animationTime += delta;
+      if (!interactive) {
+        if (motion.matches || motionPaused) parallax.set(0, 0);
+        else parallax.lerp(parallaxTarget, 1 - Math.exp(-delta * 8));
+        camera.position.copy(basePosition);
+        camera.lookAt(baseTarget);
+        cameraRight.set(1, 0, 0).applyQuaternion(camera.quaternion);
+        cameraUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+        const portrait = camera.aspect < 0.8;
+        camera.position
+          .addScaledVector(cameraRight, parallax.x * (portrait ? 0.55 : 0.38))
+          .addScaledVector(cameraUp, -parallax.y * (portrait ? 0.3 : 0.18));
+        // Keep the street's focal point anchored as the foreground shifts.
+        camera.lookAt(baseTarget);
+      }
       draw(animationTime);
     }
     if ((!motion.matches && !motionPaused) || transitioning) frame = requestAnimationFrame(tick);
@@ -620,9 +613,20 @@ export function createWeatherScene(
       camera.fov = aspect < 1.3 ? 48 : preset.fov;
       camera.position.fromArray(preset.position);
       cameraControls.target.fromArray(preset.target);
+      if (!interactive && aspect < 0.8) {
+        // A portrait forecast needs the whole street, not a narrow sky crop.
+        camera.fov = 62;
+        camera.position.set(-2, 3, 14);
+        cameraControls.target.set(1.5, 1.8, -7);
+      }
       cameraControls.update();
     }
     camera.updateProjectionMatrix();
+    if (!interactive) {
+      basePosition.copy(camera.position);
+      baseTarget.copy(cameraControls.target);
+      parallax.set(0, 0);
+    }
     onCameraChange?.(getCamera());
     renderer.setSize(width, height, false);
     // Gentle desktop depth of field; preserve the cheaper, sharp mobile view.
@@ -637,6 +641,7 @@ export function createWeatherScene(
     if (motion.matches) {
       current = target;
       transitioning = false;
+      parallaxTarget.set(0, 0);
     }
     wake();
   };
@@ -657,6 +662,14 @@ export function createWeatherScene(
   motion.addEventListener('change', handleMotion);
   resize();
   return {
+    setParallax(x, y) {
+      if (interactive || motion.matches || motionPaused || paused) return;
+      parallaxTarget.set(
+        Number.isFinite(x) ? clamp(x, -1, 1) : 0,
+        Number.isFinite(y) ? clamp(y, -1, 1) : 0
+      );
+      wake();
+    },
     getCamera,
     setCameraView(view) {
       cameraView = view;
@@ -678,6 +691,8 @@ export function createWeatherScene(
     setPaused(value) {
       paused = value;
       if (paused) {
+        parallax.set(0, 0);
+        parallaxTarget.set(0, 0);
         cancelAnimationFrame(frame);
         frame = 0;
       } else {
@@ -687,6 +702,7 @@ export function createWeatherScene(
     },
     setMotionPaused(value) {
       motionPaused = value;
+      if (value) parallaxTarget.set(0, 0);
       wake();
     },
     dispose() {
@@ -707,17 +723,6 @@ export function createWeatherScene(
       streetLayout.dispose();
       streetFurniture.dispose();
       referenceCharacter.dispose();
-      generatedCharacter?.traverse(object => {
-        if (object instanceof THREE.Mesh) {
-          object.geometry.dispose();
-          const mats = Array.isArray(object.material) ? object.material : [object.material];
-          for (const material of mats) {
-            for (const value of Object.values(material))
-              if (value instanceof THREE.Texture) value.dispose();
-            material.dispose();
-          }
-        }
-      });
       depthOfField.dispose();
       outputPass.dispose();
       composer.dispose();
